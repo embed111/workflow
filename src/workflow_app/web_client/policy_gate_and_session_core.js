@@ -847,8 +847,8 @@
     const tcRefreshAgentsBtn = $('tcRefreshAgentsBtn');
     const tcTabOpsBtn = $('tcTabOpsBtn');
     const tcEnterOpsBtn = $('tcEnterOpsBtn');
-    const tcEnqueueManualBtn = $('tcEnqueueManualBtn');
-    const tcEnqueueAutoBtn = $('tcEnqueueAutoBtn');
+    const tcSaveAndStartBtn = $('tcSaveAndStartBtn');
+    const tcSaveDraftBtn = $('tcSaveDraftBtn');
     const tcRefreshQueueBtn = $('tcRefreshQueueBtn');
     const tcDispatchNextBtn = $('tcDispatchNextBtn');
     const tcAgentSearchInput = $('tcAgentSearchInput');
@@ -894,8 +894,8 @@
     if (tcRefreshAgentsBtn) tcRefreshAgentsBtn.disabled = !rootReady;
     if (tcTabOpsBtn) tcTabOpsBtn.disabled = !rootReady || !tcHasSelectedAgent;
     if (tcEnterOpsBtn) tcEnterOpsBtn.disabled = !rootReady || !tcHasSelectedAgent;
-    if (tcEnqueueManualBtn) tcEnqueueManualBtn.disabled = !rootReady || !tcHasTargetAgent || tcAgentFrozen;
-    if (tcEnqueueAutoBtn) tcEnqueueAutoBtn.disabled = !rootReady || !tcHasTargetAgent || tcAgentFrozen;
+    if (tcSaveAndStartBtn) tcSaveAndStartBtn.disabled = !rootReady || !tcHasTargetAgent || tcAgentFrozen;
+    if (tcSaveDraftBtn) tcSaveDraftBtn.disabled = !rootReady || !tcHasTargetAgent || tcAgentFrozen;
     if (tcRefreshQueueBtn) tcRefreshQueueBtn.disabled = !rootReady;
     if (tcDispatchNextBtn) tcDispatchNextBtn.disabled = !rootReady;
     if (tcAgentSearchInput) tcAgentSearchInput.disabled = !rootReady;

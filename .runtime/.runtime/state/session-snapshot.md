@@ -1,6 +1,6 @@
 # Session Snapshot
 
-- last_update: 2026-03-13 09:29:58+0800
+- last_update: 2026-03-13 17:25:40+0800
 - current_track: runtime-baseline
 - current_focus: Phase0: web 对话 + 训练工作流
 

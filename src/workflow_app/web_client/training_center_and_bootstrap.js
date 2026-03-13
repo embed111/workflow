@@ -1722,7 +1722,7 @@
   function updateTrainingCenterOpsGateState() {
     const detail = state.tcSelectedAgentDetail || {};
     const frozen = safe(detail.training_gate_state).toLowerCase() === 'frozen_switched';
-    ['tcEnqueueManualBtn', 'tcEnqueueAutoBtn'].forEach((id) => {
+    ['tcSaveAndStartBtn', 'tcSaveDraftBtn'].forEach((id) => {
       const node = $(id);
       if (node) node.disabled = frozen || !state.agentSearchRootReady;
     });
@@ -2812,7 +2812,7 @@
   }
 
   async function refreshTrainingCenterAgents() {
-    const data = await getJSON('/api/training/agents');
+    const data = await getJSON(withTestDataQuery('/api/training/agents'));
     state.tcAgents = Array.isArray(data.items) ? data.items : [];
     const knownAgentIds = new Set(
       state.tcAgents
@@ -2920,20 +2920,58 @@
     { key: 'judge', index: 4, title: '生成结果判定' },
     { key: 'next', index: 5, title: '进入下一轮 / 完成' },
   ];
+  const TC_LOOP_CREATE_TABS = [
+    { key: 'basic', label: '基础信息' },
+    { key: 'workset', label: '首轮工作集' },
+    { key: 'launch', label: '启动确认' },
+  ];
+  const TC_LOOP_STATUS_TABS = [
+    { key: 'overview', label: '当前概览' },
+    { key: 'workset', label: '工作集变化' },
+    { key: 'eval', label: '三轮评测' },
+    { key: 'history', label: '历史记录' },
+  ];
 
   function normalizeTrainingLoopMode(value) {
     return safe(value).toLowerCase() === 'status' ? 'status' : 'create';
   }
 
-  function setTrainingLoopMode(mode) {
-    state.tcLoopMode = normalizeTrainingLoopMode(mode);
-    renderTrainingLoop();
+  function normalizeTrainingLoopCreateTab(value) {
+    const key = safe(value).toLowerCase();
+    return key === 'workset' || key === 'launch' ? key : 'basic';
   }
 
-  function setTrainingLoopDetailTab(tabKey) {
-    const key = safe(tabKey).toLowerCase();
-    state.tcLoopDetailTab = key === 'workset' || key === 'decision' ? key : 'score';
+  function normalizeTrainingLoopStatusTab(value) {
+    const key = safe(value).toLowerCase();
+    if (key === 'score' || key === 'decision') return 'overview';
+    if (key === 'workset' || key === 'eval' || key === 'history') return key;
+    return 'overview';
+  }
+
+  function scrollTrainingLoopCenterToTop() {
+    const node = $('tcLoopCenterPane');
+    if (node) node.scrollTop = 0;
+  }
+
+  function enterTrainingLoopCreateMode(options) {
+    const opts = options && typeof options === 'object' ? options : {};
+    state.tcLoopMode = 'create';
+    if (!opts.preserveTab) state.tcLoopCreateTab = 'basic';
     renderTrainingLoop();
+    renderTrainingCenterQueue();
+    scrollTrainingLoopCenterToTop();
+  }
+
+  function setTrainingLoopCreateTab(tabKey) {
+    state.tcLoopCreateTab = normalizeTrainingLoopCreateTab(tabKey);
+    renderTrainingLoop();
+    scrollTrainingLoopCenterToTop();
+  }
+
+  function setTrainingLoopStatusTab(tabKey) {
+    state.tcLoopStatusTab = normalizeTrainingLoopStatusTab(tabKey);
+    renderTrainingLoop();
+    scrollTrainingLoopCenterToTop();
   }
 
   function setTrainingLoopSelectedNode(nodeId) {
@@ -2953,11 +2991,15 @@
     renderTrainingLoop();
   }
 
-  function selectTrainingLoopQueueTask(queueTaskId) {
+  function selectTrainingLoopQueueTask(queueTaskId, options) {
+    const opts = options && typeof options === 'object' ? options : {};
     state.tcLoopSelectedQueueTaskId = safe(queueTaskId).trim();
+    state.tcLoopSelectedNodeId = '';
     state.tcLoopMode = 'status';
+    if (!opts.preserveTab) state.tcLoopStatusTab = 'overview';
     renderTrainingLoop();
     renderTrainingCenterQueue();
+    scrollTrainingLoopCenterToTop();
   }
 
   function selectedTrainingLoopQueueRow() {
@@ -2977,6 +3019,7 @@
     const preferred =
       rows.find((row) => safe(row && row.status).toLowerCase() !== 'removed') || rows[0] || null;
     state.tcLoopSelectedQueueTaskId = safe(preferred && preferred.queue_task_id).trim();
+    state.tcLoopSelectedNodeId = '';
   }
 
   function trainingLoopStageIndex(mode, queueRow) {
@@ -3041,6 +3084,7 @@
     state.tcLoopServerLoading = true;
     state.tcLoopServerError = '';
     state.tcLoopServerData = null;
+    state.tcLoopStatusDetailData = null;
     return nextSeq;
   }
 
@@ -3068,10 +3112,15 @@
     const seq = beginTrainingLoopServerFetch(key);
     renderTrainingLoop();
     try {
-      const data = await getJSON('/api/training/queue/' + encodeURIComponent(key) + '/loop');
+      const responses = await Promise.all([
+        getJSON(withTestDataQuery('/api/training/queue/' + encodeURIComponent(key) + '/loop')),
+        getJSON(withTestDataQuery('/api/training/queue/' + encodeURIComponent(key) + '/status-detail')),
+      ]);
       if (!isTrainingLoopServerFetchCurrent(key, seq)) return;
-      const payload = data && typeof data === 'object' ? data : null;
+      const payload = responses[0] && typeof responses[0] === 'object' ? responses[0] : null;
+      const detailPayload = responses[1] && typeof responses[1] === 'object' ? responses[1] : null;
       state.tcLoopServerData = payload;
+      state.tcLoopStatusDetailData = detailPayload;
       state.tcLoopServerError = '';
       if (payload && Array.isArray(payload.nodes)) {
         if (!state.tcLoopRoundIndexByQueueTaskId || typeof state.tcLoopRoundIndexByQueueTaskId !== 'object') {
@@ -3089,6 +3138,7 @@
     } catch (err) {
       if (!isTrainingLoopServerFetchCurrent(key, seq)) return;
       state.tcLoopServerData = null;
+      state.tcLoopStatusDetailData = null;
       state.tcLoopServerError = safe(err && err.message ? err.message : err);
     } finally {
       if (isTrainingLoopServerFetchCurrent(key, seq)) {
@@ -3110,9 +3160,250 @@
     return out;
   }
 
+  function trainingLoopSelectedNodeContext(loopData) {
+    const payload = loopData && typeof loopData === 'object' ? loopData : null;
+    const nodes = Array.isArray(payload && payload.nodes) ? payload.nodes : [];
+    const nodesById = trainingLoopNodesById(payload);
+    const currentNodeId = safe(payload && payload.current_node_id).trim();
+    let selectedNodeId = safe(state.tcLoopSelectedNodeId).trim() || currentNodeId;
+    if (selectedNodeId && nodes.length && !nodesById[selectedNodeId]) {
+      selectedNodeId = currentNodeId;
+    }
+    if (!selectedNodeId && currentNodeId) {
+      selectedNodeId = currentNodeId;
+    }
+    if (selectedNodeId && selectedNodeId !== safe(state.tcLoopSelectedNodeId).trim()) {
+      state.tcLoopSelectedNodeId = selectedNodeId;
+    }
+    return {
+      payload,
+      nodes,
+      nodesById,
+      currentNodeId,
+      selectedNodeId,
+      selectedNode: (selectedNodeId && nodesById[selectedNodeId]) || null,
+      metricsAvailable: !!(payload && payload.metrics_available),
+      metricsReason: safe(payload && payload.metrics_unavailable_reason).trim(),
+      isTestData: !!(payload && payload.is_test_data),
+      loopId: safe(payload && (payload.loop_id || payload.loopId)).trim() || '-',
+    };
+  }
+
+  function trainingLoopStatusDetailContext(detailData) {
+    const payload = detailData && typeof detailData === 'object' ? detailData : null;
+    return {
+      payload: payload,
+      overview:
+        payload && payload.current_overview && typeof payload.current_overview === 'object'
+          ? payload.current_overview
+          : {},
+      workset:
+        payload && payload.workset_changes && typeof payload.workset_changes === 'object'
+          ? payload.workset_changes
+          : {},
+      evaluations:
+        payload && Array.isArray(payload.evaluations)
+          ? payload.evaluations
+          : [],
+      historyRecords:
+        payload && Array.isArray(payload.history_records)
+          ? payload.history_records
+          : [],
+    };
+  }
+
+  function trainingLoopScoreText(value, emptyText) {
+    if (value === null || value === undefined || value === '') return safe(emptyText || '-');
+    const num = Number(value);
+    if (!Number.isFinite(num)) return safe(value);
+    return num.toFixed(2);
+  }
+
+  function renderTrainingLoopWorksetItems(workset) {
+    const items = Array.isArray(workset && workset.items) ? workset.items : [];
+    if (!items.length) return "<div class='tc-loop-empty'>当前没有结构化工作集条目。</div>";
+    return (
+      "<ul class='tc-loop-bullet-list'>" +
+      items
+        .map((item) => {
+          const stateLabel =
+            safe(item && item.state).trim() === 'removed'
+              ? '移除'
+              : safe(item && item.state).trim() === 'carried'
+                ? '沿用'
+                : '新增';
+          return '<li>[' + safe(stateLabel) + '] ' + safe(item && item.label) + '</li>';
+        })
+        .join('') +
+      '</ul>'
+    );
+  }
+
+  function renderTrainingLoopEvaluationCards(evaluations, selectedQueueTaskId) {
+    const rows = Array.isArray(evaluations) ? evaluations.slice() : [];
+    if (!rows.length) return "<div class='tc-loop-empty'>当前还没有后端回写的三轮评测记录。</div>";
+    rows.sort((left, right) => Number(left && left.round_index) - Number(right && right.round_index));
+    const selectedId = safe(selectedQueueTaskId).trim();
+    return (
+      "<div class='tc-loop-history-list'>" +
+      rows
+        .map((round) => {
+          const runResults = Array.isArray(round && round.run_results) ? round.run_results : [];
+          const currentMark = safe(round && round.queue_task_id).trim() === selectedId ? ' · 当前查看' : '';
+          const runLines = runResults.length
+            ? "<div class='tc-loop-summary-list'>" +
+              runResults
+                .map(
+                  (run) =>
+                    "<div class='tc-loop-summary-item'><div class='tc-loop-summary-k'>" +
+                    safe(run && (run.run_label || ('Run' + safe(run.run_index)))) +
+                    "</div><div class='tc-loop-summary-v'>" +
+                    safe(statusText(run && run.status ? run.status : '-')) +
+                    (run && run.score !== null && run.score !== undefined && run.score !== '' ? ' · ' + trainingLoopScoreText(run.score, '-') : '') +
+                    (safe(run && run.summary).trim() ? ' · ' + safe(run.summary) : '') +
+                    '</div></div>'
+                )
+                .join('') +
+              '</div>'
+            : "<div class='tc-loop-empty'>当前轮尚未开始三轮评测。</div>";
+          return (
+            "<div class='tc-loop-history-item'>" +
+            "<div class='tc-loop-history-title'>" +
+            safe(round && (round.title || ('R' + safe(round.round_index)))) +
+            safe(currentMark) +
+            '</div>' +
+            "<div class='tc-loop-history-meta'>阈值 " +
+            safe(trainingLoopScoreText(round && round.threshold, '-')) +
+            ' · Avg ' +
+            safe(trainingLoopScoreText(round && round.avg_score, '待三轮完成')) +
+            ' · 上一轮 ' +
+            safe(trainingLoopScoreText(round && round.previous_avg_score, '无')) +
+            '</div>' +
+            "<div class='tc-loop-history-text'>判定：" +
+            safe(round && round.decision ? round.decision : '待三轮评测完成') +
+            '</div>' +
+            "<div class='tc-loop-history-text'>下一步：" +
+            safe(round && round.next_action ? round.next_action : '等待三轮评测完成') +
+            '</div>' +
+            runLines +
+            '</div>'
+          );
+        })
+        .join('') +
+      '</div>'
+    );
+  }
+
+  function renderTrainingLoopBackendHistoryList(records) {
+    const rows = Array.isArray(records) ? records.slice() : [];
+    if (!rows.length) return "<div class='tc-loop-empty'>当前还没有可追溯的轮次历史。</div>";
+    rows.sort((left, right) => Number(left && left.round_index) - Number(right && right.round_index));
+    return (
+      "<div class='tc-loop-history-list'>" +
+      rows
+        .map((item) => {
+          const auditRefs = Array.isArray(item && item.audit_refs) ? item.audit_refs : [];
+          return (
+            "<div class='tc-loop-history-item'>" +
+            "<div class='tc-loop-history-title'>" +
+            safe(item && (item.title || ('R' + safe(item.round_index)))) +
+            '</div>' +
+            "<div class='tc-loop-history-meta'>Avg " +
+            safe(trainingLoopScoreText(item && item.avg_score, '待三轮完成')) +
+            ' · 阈值 ' +
+            safe(trainingLoopScoreText(item && item.threshold, '-')) +
+            (item && item.rollback_applied ? ' · 已回退' : '') +
+            '</div>' +
+            "<div class='tc-loop-history-text'>判定：" +
+            safe(item && item.decision ? item.decision : '-') +
+            '</div>' +
+            "<div class='tc-loop-history-text'>工作集：" +
+            safe(item && item.workset_delta_summary ? item.workset_delta_summary : '-') +
+            '</div>' +
+            "<div class='tc-loop-history-text'>审计引用：" +
+            safe(auditRefs.map((ref) => safe(ref && ref.audit_id).trim()).filter(Boolean).join(', ') || '暂无') +
+            '</div>' +
+            '</div>'
+          );
+        })
+        .join('') +
+      '</div>'
+    );
+  }
+
+  function trainingLoopPlanSnapshot() {
+    const targetAgentId = safe(trainingCenterSelectedTargetAgent()).trim();
+    const targetDetail =
+      targetAgentId && Array.isArray(state.tcAgents)
+        ? state.tcAgents.find((item) => safe(item && item.agent_id).trim() === targetAgentId) || null
+        : null;
+    const targetName =
+      safe(targetDetail && (targetDetail.agent_name || targetDetail.agent_id)).trim() ||
+      targetAgentId ||
+      '-';
+    return {
+      targetAgentId,
+      targetName,
+      capabilityGoal: safe($('tcPlanGoalInput') ? $('tcPlanGoalInput').value : '').trim(),
+      trainingTasks: parseTrainingTasksInput(),
+      acceptanceCriteria: safe($('tcPlanAcceptanceInput') ? $('tcPlanAcceptanceInput').value : '').trim(),
+      priority: safe($('tcPlanPrioritySelect') ? $('tcPlanPrioritySelect').value : '').trim(),
+      executionEngine: 'workflow_native',
+      executionLabel: trainingExecutionEngineLabel('workflow_native'),
+      frozen: safe(targetDetail && targetDetail.training_gate_state).toLowerCase() === 'frozen_switched',
+      targetDetail: targetDetail || {},
+    };
+  }
+
+  function trainingLoopValidationItems(snapshot) {
+    const data = snapshot && typeof snapshot === 'object' ? snapshot : trainingLoopPlanSnapshot();
+    return [
+      { label: '目标角色', ok: !!data.targetAgentId, value: data.targetName || '未选择' },
+      { label: '能力目标', ok: !!data.capabilityGoal, value: data.capabilityGoal || '未填写' },
+      {
+        label: '首轮工作集',
+        ok: Array.isArray(data.trainingTasks) && data.trainingTasks.length > 0,
+        value: Array.isArray(data.trainingTasks) && data.trainingTasks.length ? data.trainingTasks.length + ' 项' : '未填写',
+      },
+      { label: '验收标准', ok: !!data.acceptanceCriteria, value: data.acceptanceCriteria || '未填写' },
+      { label: '优先级', ok: !!data.priority, value: data.priority || '未选择' },
+    ];
+  }
+
+  function trainingLoopFormCacheNode() {
+    const root = $('tcModuleOps');
+    return root ? root.querySelector('.tc-loop-form-cache') : null;
+  }
+
+  function restoreTrainingLoopFormCache() {
+    const cache = trainingLoopFormCacheNode();
+    if (!cache) return;
+    ['tcPlanTargetAgentSelect', 'tcPlanGoalInput', 'tcPlanTasksInput', 'tcPlanAcceptanceInput', 'tcPlanPrioritySelect'].forEach((id) => {
+      const field = $(id);
+      if (field && field.parentElement !== cache) {
+        cache.appendChild(field);
+      }
+    });
+  }
+
+  function mountTrainingLoopField(fieldId, mountId, options) {
+    const field = $(fieldId);
+    const mount = $(mountId);
+    if (!field || !mount) return;
+    const opts = options && typeof options === 'object' ? options : {};
+    if (Object.prototype.hasOwnProperty.call(opts, 'placeholder')) {
+      field.setAttribute('placeholder', safe(opts.placeholder));
+    }
+    if (Object.prototype.hasOwnProperty.call(opts, 'rows') && field.tagName === 'TEXTAREA') {
+      field.setAttribute('rows', String(opts.rows || 4));
+    }
+    mount.innerHTML = '';
+    mount.appendChild(field);
+  }
+
   function renderTrainingLoopPreviewSvg() {
     return (
-      "<svg class='tc-loop-evolution-svg' viewBox='0 0 620 126' preserveAspectRatio='none' aria-label='训练路径预览'>" +
+      "<svg class='tc-loop-evolution-svg' viewBox='0 0 620 132' preserveAspectRatio='xMinYMid meet' aria-label='训练路径预览'>" +
       "<path class='tc-loop-graph-line base' d='M72 64 H220' />" +
       "<path class='tc-loop-graph-line fail' d='M220 64 C260 64 280 44 320 34 C340 30 350 30 360 34' />" +
       "<path class='tc-loop-graph-line rollback' d='M360 34 H440' />" +
@@ -3126,15 +3417,13 @@
       "<circle class='tc-loop-graph-node keep' cx='520' cy='96' r='8'></circle>" +
       "<circle class='tc-loop-graph-node future' cx='600' cy='96' r='7'></circle>" +
       "<text class='tc-loop-graph-label' x='28' y='86'>基线</text>" +
-      "<text class='tc-loop-graph-muted' x='28' y='100'>对照起点</text>" +
-      "<text class='tc-loop-graph-label' x='330' y='16'>评分劣化</text>" +
-      "<text class='tc-loop-graph-muted' x='314' y='28'>回退本轮新增</text>" +
+      "<text class='tc-loop-graph-muted' x='28' y='102'>对照起点</text>" +
+      "<text class='tc-loop-graph-label' x='328' y='18'>评分劣化</text>" +
+      "<text class='tc-loop-graph-muted' x='312' y='30'>撤销本轮新增</text>" +
       "<text class='tc-loop-graph-label' x='330' y='114'>提升但不足</text>" +
-      "<text class='tc-loop-graph-muted' x='316' y='126'>进入下一轮</text>" +
+      "<text class='tc-loop-graph-muted' x='312' y='128'>进入下一轮</text>" +
       "<text class='tc-loop-graph-label' x='494' y='114'>继续主线</text>" +
-      "<text class='tc-loop-graph-muted' x='474' y='126'>补强工作集再评测</text>" +
-      "<text class='tc-loop-graph-label' x='568' y='84'>收敛完成</text>" +
-      "<text class='tc-loop-graph-muted' x='552' y='98'>达到阈值后结束</text>" +
+      "<text class='tc-loop-graph-muted' x='468' y='128'>补强工作集再评测</text>" +
       '</svg>'
     );
   }
@@ -3146,7 +3435,7 @@
     const selected = safe(selectedNodeId).trim();
     if (!nodes.length) {
       return (
-        "<svg class='tc-loop-evolution-svg' viewBox='0 0 640 140' preserveAspectRatio='none' aria-label='训练演进图'>" +
+        "<svg class='tc-loop-evolution-svg' viewBox='0 0 640 148' preserveAspectRatio='xMinYMid meet' aria-label='训练演进图'>" +
         "<text class='tc-loop-graph-muted' x='24' y='76'>暂无历史</text>" +
         '</svg>'
       );
@@ -3158,8 +3447,8 @@
       const ridx = Number(node && node.round_index ? node.round_index : 0);
       if (Number.isFinite(ridx)) maxRound = Math.max(maxRound, ridx);
     }
-    const w = Math.max(640, 160 + (maxRound + 1) * 120);
-    const h = 140;
+    const w = Math.max(720, 180 + (maxRound + 1) * 128);
+    const h = 148;
 
     const pos = {};
     for (const node of nodes) {
@@ -3169,8 +3458,8 @@
       const type = safe(node.node_type).toLowerCase();
       const ridx = Number(node.round_index ? node.round_index : 0);
       const col = type === 'baseline' ? 0 : Number.isFinite(ridx) ? Math.max(0, ridx) : 0;
-      const x = 72 + col * 120;
-      const y = type === 'baseline' ? 64 : type === 'rollback' ? 34 : 96;
+      const x = 76 + col * 128;
+      const y = type === 'baseline' ? 72 : type === 'rollback' ? 38 : 108;
       pos[nid] = { x, y };
     }
 
@@ -3248,8 +3537,8 @@
         const title = safe(node.title).trim() || nid;
         const type = safe(node.node_type).toLowerCase();
         const x = pos[nid].x - 28;
-        const y = type === 'rollback' ? pos[nid].y - 12 : pos[nid].y + 22;
-        const mutedY = type === 'rollback' ? pos[nid].y + 4 : pos[nid].y + 36;
+        const y = type === 'rollback' ? pos[nid].y - 12 : pos[nid].y + 24;
+        const mutedY = type === 'rollback' ? pos[nid].y + 6 : pos[nid].y + 40;
         const decision = safe(node.decision).trim();
         return (
           "<text class='tc-loop-graph-label' x='" +
@@ -3271,7 +3560,7 @@
       w +
       ' ' +
       h +
-      "' preserveAspectRatio='none' aria-label='训练演进图'>" +
+      "' preserveAspectRatio='xMinYMid meet' aria-label='训练演进图'>" +
       edgeLines +
       circles +
       labels +
@@ -3279,35 +3568,114 @@
     );
   }
 
+  function renderTrainingLoopSection(title, desc, bodyHtml, extraClass) {
+    return (
+      "<section class='tc-loop-section-card" +
+      (extraClass ? ' ' + safe(extraClass) : '') +
+      "'>" +
+      "<div class='tc-loop-section-head'>" +
+      "<div class='tc-loop-section-title'>" +
+      safe(title) +
+      '</div>' +
+      (desc ? "<div class='tc-loop-section-desc'>" + safe(desc) + '</div>' : '') +
+      '</div>' +
+      bodyHtml +
+      '</section>'
+    );
+  }
+
+  function renderTrainingLoopSummaryRows(rows) {
+    return (
+      "<div class='tc-loop-summary-list'>" +
+      rows
+        .map(
+          (pair) =>
+            "<div class='tc-loop-summary-item'><div class='tc-loop-summary-k'>" +
+            safe(pair[0]) +
+            "</div><div class='tc-loop-summary-v'>" +
+            safe(pair[1]) +
+            '</div></div>'
+        )
+        .join('') +
+      '</div>'
+    );
+  }
+
+  function renderTrainingLoopBulletList(items) {
+    const rows = Array.isArray(items) ? items.filter(Boolean) : [];
+    if (!rows.length) return "<div class='tc-loop-empty'>暂无数据</div>";
+    return "<ul class='tc-loop-bullet-list'>" + rows.map((item) => '<li>' + safe(item) + '</li>').join('') + '</ul>';
+  }
+
+  function renderTrainingLoopHistoryList(loopCtx) {
+    const ctx = loopCtx && typeof loopCtx === 'object' ? loopCtx : {};
+    const nodes = Array.isArray(ctx.nodes) ? ctx.nodes.slice() : [];
+    if (!nodes.length) return "<div class='tc-loop-empty'>暂无历史节点</div>";
+    nodes.sort((left, right) => {
+      const a = Number(left && left.round_index ? left.round_index : 0);
+      const b = Number(right && right.round_index ? right.round_index : 0);
+      if (a !== b) return a - b;
+      return safe(left && left.node_id).localeCompare(safe(right && right.node_id));
+    });
+    return (
+      "<div class='tc-loop-history-list'>" +
+      nodes
+        .map((node) => {
+          const title = safe(node && node.title).trim() || safe(node && node.node_id).trim() || '-';
+          const roundText =
+            Object.prototype.hasOwnProperty.call(node || {}, 'round_index')
+              ? '第 ' + safe(node.round_index) + ' 轮'
+              : '-';
+          return (
+            "<div class='tc-loop-history-item'>" +
+            "<div class='tc-loop-history-title'>" +
+            safe(title) +
+            '</div>' +
+            "<div class='tc-loop-history-meta'>" +
+            safe(roundText) +
+            ' · ' +
+            safe(statusText(node && node.status ? node.status : '-')) +
+            '</div>' +
+            "<div class='tc-loop-history-text'>判定：" +
+            safe(node && node.decision ? node.decision : '-') +
+            '</div>' +
+            "<div class='tc-loop-history-text'>下一步：" +
+            safe(node && node.next_action ? node.next_action : '-') +
+            '</div>' +
+            '</div>'
+          );
+        })
+        .join('') +
+      '</div>'
+    );
+  }
+
   function renderTrainingLoopProcessCard(mode, queueRow, loopData) {
     const box = $('tcLoopProcessCard');
     if (!box) return;
     const view = normalizeTrainingLoopMode(mode);
+    const snapshot = trainingLoopPlanSnapshot();
+    const loopCtx = trainingLoopSelectedNodeContext(loopData);
     const stageIndex = trainingLoopStageIndex(view, queueRow);
-    const agentName = safe(queueRow && (queueRow.agent_name || queueRow.target_agent_id)).trim();
-    const goal = safe(queueRow && queueRow.capability_goal).trim();
+    const agentName =
+      safe(queueRow && (queueRow.agent_name || queueRow.target_agent_id)).trim() ||
+      snapshot.targetName ||
+      '-';
+    const goal = safe(queueRow && queueRow.capability_goal).trim() || snapshot.capabilityGoal || '-';
     const stageTitle = safe(TC_LOOP_STAGES[stageIndex - 1] && TC_LOOP_STAGES[stageIndex - 1].title).trim();
-
-    const loopPayload = view === 'status' && loopData && typeof loopData === 'object' ? loopData : null;
-    const serverNodes = Array.isArray(loopPayload && loopPayload.nodes) ? loopPayload.nodes : [];
-    const serverCurrent = safe(loopPayload && loopPayload.current_node_id).trim();
-    const serverById = trainingLoopNodesById(loopPayload);
-    const currentNode = (serverCurrent && serverById[serverCurrent]) || null;
-    const currentRoundIndex = currentNode ? Number(currentNode.round_index || 0) : 0;
+    const currentRoundIndex = Number(loopCtx.selectedNode && loopCtx.selectedNode.round_index ? loopCtx.selectedNode.round_index : 0);
 
     const taskTitle = view === 'create' ? '创建训练任务' : goal || agentName || '训练任务';
     const subLine =
       view === 'create'
-        ? '当前位于训练闭环的 `创建任务` 阶段，完成本页配置后可直接启动首轮评测。'
+        ? '当前正在准备首轮训练目标、工作集与启动条件。'
         : (goal ? '目标能力：' + goal + ' · ' : '') +
-          (Number.isFinite(currentRoundIndex) && currentRoundIndex > 0
-            ? '当前位于第 ' + safe(currentRoundIndex) + ' 轮 `' + stageTitle + '` 阶段'
-            : '当前位于 `' + stageTitle + '` 阶段');
+          (currentRoundIndex > 0 ? '当前位于第 ' + safe(currentRoundIndex) + ' 轮' : '当前位于任务状态页');
     const chipRow =
       view === 'create'
-        ? "<span class='tc-loop-chip blue'>创建任务模式</span><span class='tc-loop-chip green'>首轮可直接启动</span>"
+        ? "<span class='tc-loop-chip blue'>创建态</span><span class='tc-loop-chip green'>可直接启动首轮</span>"
         : "<span class='tc-loop-chip blue'>任务状态</span>" +
-          (Number.isFinite(currentRoundIndex) && currentRoundIndex > 0
+          (currentRoundIndex > 0
             ? "<span class='tc-loop-chip orange'>第 " + safe(currentRoundIndex) + ' 轮</span>'
             : '') +
           "<span class='tc-loop-chip orange'>阶段 " +
@@ -3315,53 +3683,34 @@
           '/5</span>';
 
     const metaCards = [
-      ['目标角色', safe(trainingCenterSelectedTargetAgent() || agentName || '-').trim() || '-'],
-      [
-        '能力目标',
-        safe(goal || safe($('tcPlanGoalInput') ? $('tcPlanGoalInput').value : '')).trim() || '-',
-      ],
+      ['目标角色', agentName || '-'],
+      ['能力目标', goal || '-'],
       [
         '优先级',
         safe(queueRow && queueRow.priority).trim() ||
           safe($('tcPlanPrioritySelect') ? $('tcPlanPrioritySelect').value : '').trim() ||
           '-',
       ],
-      ['下一步', view === 'create' ? '启动首轮评测' : stageIndex >= 4 ? '进入下一轮 / 回退本轮新增' : '等待进入下一阶段'],
+      ['下一步', view === 'create' ? '保存草稿或启动首轮' : stageIndex >= 4 ? '查看判定并决定下一步' : '继续推进当前轮'],
     ];
 
     const evolutionTitle = view === 'create' ? '训练路径预览' : '训练演进图';
-    let selectedNodeId = safe(state.tcLoopSelectedNodeId).trim();
-    if (view === 'status') {
-      if (!selectedNodeId || (serverNodes.length && !serverById[selectedNodeId])) {
-        selectedNodeId = serverCurrent || safe(queueRow && queueRow.queue_task_id).trim() || '';
-        state.tcLoopSelectedNodeId = selectedNodeId;
-      }
-    }
     const evolutionDesc =
       view === 'create'
-        ? '创建阶段先把训练可能如何分叉、何时回退、何时进入下一轮说清楚。'
+        ? '先确认训练主线、回退分支与进入下一轮的收敛路径。'
         : state.tcLoopServerLoading
-          ? '演进图加载中...'
+          ? '正在回读训练演进图。'
           : state.tcLoopServerError
-            ? '演进图加载失败（请刷新重试）'
-            : serverNodes.length
-              ? '由后端训练闭环状态生成，可点击节点切换右侧详情。'
-              : '暂无历史：将以最小结构展示当前状态。';
+            ? '演进图加载失败，请刷新重试。'
+            : loopCtx.nodes.length
+              ? '演进图来自后端闭环状态；点击节点可联动右侧节点判定。'
+              : '当前暂无历史节点。';
     const evolutionCaption =
       view === 'create'
-        ? '首轮若能力劣化将回退本轮新增；首轮若提升但不足阈值，将保留主线进入下一轮。'
-        : state.tcLoopServerLoading
-          ? '正在加载演进图...'
-          : state.tcLoopServerError
-            ? '演进图加载失败：' + safe(state.tcLoopServerError)
-            : !serverNodes.length
-              ? '暂无历史/暂无指标'
-              : loopPayload && loopPayload.metrics_available
-                ? '指标已就绪'
-                : '指标不可用：暂无评分/暂无阈值' +
-                  (safe(loopPayload && loopPayload.metrics_unavailable_reason).trim()
-                    ? '（' + safe(loopPayload && loopPayload.metrics_unavailable_reason).trim() + '）'
-                    : '');
+        ? '首轮若能力劣化将撤销本轮新增；首轮若提升但不足阈值，将保留主线进入下一轮。'
+        : loopCtx.metricsAvailable
+          ? '当前节点指标已回写，可结合右侧节点判定继续推进。'
+          : '当前暂无评分或阈值：' + (loopCtx.metricsReason || '后端尚未回写评分');
 
     box.innerHTML =
       "<div class='tc-loop-process-card'>" +
@@ -3385,12 +3734,12 @@
       '</div>' +
       "<div class='tc-loop-stage-desc'>" +
       (view === 'create'
-        ? '当前正在定义训练目标与首轮工作集；保存后可立即发起首轮三次评测。'
+        ? '提交后会生成对应任务，并根据动作选择进入待评测或直接启动首轮。'
         : stageIndex === 2
-          ? '任务已创建并进入队列，正在等待锁定本轮工作集并进入评测。'
-          : stageIndex === 3
-            ? '评测进行中：正在执行三次独立评测并持续回写运行状态。'
-            : '评测已完成：正在汇总得分、判定原因与下一步动作，决定是否进入下一轮。') +
+          ? '任务已经进入待评测队列，可从右侧或列表继续执行。'
+        : stageIndex === 3
+            ? 'workflow 正在执行训练链路并回写最近运行状态。'
+            : '当前任务已生成阶段结论，可在右侧继续进入下一轮或撤销本轮新增。') +
       '</div>' +
       '</div>' +
       "<div class='tc-loop-meta-grid'>" +
@@ -3423,9 +3772,11 @@
       "<span><span class='tc-loop-evolution-dot rollback'></span>回退动作</span>" +
       '</div>' +
       '</div>' +
+      "<div class='tc-loop-evolution-canvas'>" +
       (view === 'create'
         ? renderTrainingLoopPreviewSvg()
-        : renderTrainingLoopEvolutionSvg(loopPayload, selectedNodeId)) +
+        : renderTrainingLoopEvolutionSvg(loopCtx.payload, loopCtx.selectedNodeId)) +
+      '</div>' +
       "<div class='tc-loop-evolution-caption'>" +
       safe(evolutionCaption) +
       '</div>' +
@@ -3447,202 +3798,395 @@
     }
   }
 
-  function renderTrainingLoopStatusDetail(queueRow, loopData) {
-    const box = $('tcLoopStatusDetailBody');
+  function renderTrainingLoopCreateBody() {
+    const box = $('tcLoopDetailBody');
     if (!box) return;
-    const tab = safe(state.tcLoopDetailTab).toLowerCase();
-    const agentName = safe(queueRow && (queueRow.agent_name || queueRow.target_agent_id)).trim() || '-';
-    const goal = safe(queueRow && queueRow.capability_goal).trim() || '-';
-    const status = safe(queueRow && queueRow.status).trim() || '-';
-    const priority = safe(queueRow && queueRow.priority).trim() || '-';
-    const latestRunId = safe(queueRow && queueRow.latest_run_id).trim();
-    const latestRunStatus = safe(queueRow && queueRow.latest_run_status).trim();
-    const latestRunAt = safe(queueRow && queueRow.latest_run_updated_at).trim();
-    const latestRunRef = safe(queueRow && queueRow.latest_run_ref).trim();
-    const latestResultSummary = safe(queueRow && queueRow.latest_result_summary).trim();
+    const activeTab = normalizeTrainingLoopCreateTab(state.tcLoopCreateTab);
+    const snapshot = trainingLoopPlanSnapshot();
+    const validationItems = trainingLoopValidationItems(snapshot);
+    restoreTrainingLoopFormCache();
 
-    const loopPayload = loopData && typeof loopData === 'object' ? loopData : null;
-    const loopNodes = Array.isArray(loopPayload && loopPayload.nodes) ? loopPayload.nodes : [];
-    const nodesById = trainingLoopNodesById(loopPayload);
-    const loopCurrentNodeId = safe(loopPayload && loopPayload.current_node_id).trim();
-    const selectedNodeId = safe(state.tcLoopSelectedNodeId).trim() || loopCurrentNodeId;
-    const selectedNode = (selectedNodeId && nodesById[selectedNodeId]) || null;
-    const metricsAvailable = !!(loopPayload && loopPayload.metrics_available);
-    const metricsReason = safe(loopPayload && loopPayload.metrics_unavailable_reason).trim();
-
-    const head =
-      "<div class='tc-loop-stage'>" +
-      '<div>' +
-      "<div class='tc-loop-stage-title'>" +
-      (tab === 'workset' ? '本轮工作集变化' : tab === 'decision' ? '当前判定原因' : '本轮评分摘要') +
-      '</div>' +
-      "<div class='tc-loop-stage-desc'>" +
-      (tab === 'workset'
-        ? '聚焦本轮新增与回退的资料/Skill 变化（对接中）。'
-        : tab === 'decision'
-          ? '聚焦当前节点判定与下一步动作（由演进图节点详情驱动）。'
-          : metricsAvailable
-            ? '聚焦评分摘要与关键指标。'
-            : '指标不可用时以空态表达，避免伪数据。') +
-      '</div>' +
-      '</div>' +
-      "<div class='tc-loop-meta-grid'>" +
-      [
-        ['任务', agentName],
-        ['能力目标', goal],
-        ['状态 / 优先级', safe(statusText(status)) + ' / ' + priority],
-        ['最近运行', latestRunId ? safe(latestRunStatus || '-') + ' · ' + safe(latestRunAt || '-') : '暂无'],
-      ]
-        .map(
-          (pair) =>
-            "<div class='tc-loop-meta-card'><div class='tc-loop-meta-k'>" +
-            safe(pair[0]) +
-            "</div><div class='tc-loop-meta-v'>" +
-            safe(pair[1]) +
-            '</div></div>'
-        )
-        .join('') +
-      '</div>' +
-      '</div>';
-
-    let body = '';
-    if (tab === 'workset') {
-      body =
-        "<div class='tc-kv' style='margin-top:10px'>" +
-        '<div>暂无工作集变更记录</div>' +
-        '<div>提示：待后端接入本轮工作集差异与回退影响。</div>' +
-        '</div>';
-    } else if (tab === 'decision') {
-      const decisionText = safe(selectedNode && selectedNode.decision).trim() || '暂无判定';
-      const nextText = safe(selectedNode && selectedNode.next_action).trim() || '暂无下一步动作';
-      const impactText = safe(selectedNode && selectedNode.impact).trim() || '暂无回退/保留说明';
-      body =
-        "<div class='tc-kv' style='margin-top:10px'>" +
-        '<div>节点判定：' +
-        safe(decisionText) +
-        '</div>' +
-        '<div>下一步动作：' +
-        safe(nextText) +
-        '</div>' +
-        '<div>回退/保留说明：' +
-        safe(impactText) +
-        '</div>' +
-        '</div>';
-    } else {
-      const metricsText =
-        metricsAvailable && selectedNode && selectedNode.metrics
-          ? JSON.stringify(selectedNode.metrics, null, 2)
-          : '暂无评分/暂无阈值' + (metricsReason ? '（' + metricsReason + '）' : '');
-      body =
-        "<div class='tc-kv' style='margin-top:10px'>" +
-        '<div>' +
-        safe(metricsText) +
-        '</div>' +
-        (!loopNodes.length ? '<div>暂无历史</div>' : '') +
-        '</div>';
+    if (activeTab === 'workset') {
+      box.innerHTML =
+        renderTrainingLoopSection(
+          '首轮工作集',
+          '定义首轮要补强的任务项；保存后这些条目会成为当前任务的首轮工作集。',
+          "<div class='tc-form-grid'>" +
+            "<div class='full'><label class='hint' for='tcPlanTasksInput'>训练任务（每行一项）</label><div id='tcLoopFieldMountTasks'></div></div>" +
+            '</div>' +
+            renderTrainingLoopSection(
+              '工作集预览',
+              '',
+              "<div class='tc-loop-summary-inline'>" +
+                "<div class='tc-loop-inline-stat'><span>任务数</span><strong>" +
+                safe(snapshot.trainingTasks.length || 0) +
+                '</strong></div>' +
+                "<div class='tc-loop-inline-stat'><span>执行主体</span><strong>" +
+                safe(snapshot.executionLabel) +
+                '</strong></div>' +
+                '</div>' +
+                renderTrainingLoopBulletList(snapshot.trainingTasks.slice(0, 6)),
+              'tone-soft'
+            ),
+          ''
+        );
+      mountTrainingLoopField('tcPlanTasksInput', 'tcLoopFieldMountTasks', {
+        rows: 8,
+        placeholder: '- 补齐评分维度说明',
+      });
+      return;
     }
 
-    const folds =
-      "<details class='tc-git-commit-details' style='margin-top:10px'>" +
-      "<summary class='tc-git-commit-summary'>" +
-      '<span>Run 完整明细</span>' +
-      "<span class='tc-badge warn'>三级</span>" +
-      '</summary>' +
-      (latestRunId
-        ? "<pre class='pre' style='margin-top:8px'>run_id=" +
-          safe(latestRunId) +
-          '\nstatus=' +
-          safe(latestRunStatus || '-') +
-          '\nupdated_at=' +
-          safe(latestRunAt || '-') +
-          (latestRunRef ? '\nrun_ref=' + safe(latestRunRef) : '') +
-          (latestResultSummary ? '\nsummary=' + safe(latestResultSummary) : '') +
-          '</pre>'
-        : "<div class='tc-kv' style='margin-top:8px'>暂无 run 明细</div>") +
-      '</details>' +
-      "<details class='tc-git-commit-details' style='margin-top:10px'>" +
-      "<summary class='tc-git-commit-summary'>" +
-      '<span>完整迭代记录</span>' +
-      "<span class='tc-badge'>三级</span>" +
-      '</summary>' +
-      "<div class='tc-kv' style='margin-top:8px'>暂无迭代记录（对接中）。</div>" +
-      '</details>';
+    if (activeTab === 'launch') {
+      const allReady =
+        validationItems.every((item) => !!item.ok) &&
+        state.agentSearchRootReady &&
+        !snapshot.frozen;
+      const statusLine = !state.agentSearchRootReady
+        ? '当前工作区未就绪，暂不能提交训练任务。'
+        : snapshot.frozen
+          ? '当前角色已禁训，请切回可训练版本后再提交。'
+          : allReady
+            ? '已满足提交条件，可保存草稿或直接启动首轮。'
+            : '仍有必填项未补齐，请先返回基础信息或首轮工作集。';
+      box.innerHTML =
+        renderTrainingLoopSection(
+          '启动确认',
+          '保存草稿会将任务写入待评测队列；保存并启动首轮会在保存后立即触发 workflow 内部训练链路。',
+          renderTrainingLoopSummaryRows([
+            ['目标角色', snapshot.targetName || '-'],
+            ['能力目标', snapshot.capabilityGoal || '-'],
+            ['首轮工作集', (snapshot.trainingTasks.length ? snapshot.trainingTasks.length : 0) + ' 项'],
+            ['验收标准', snapshot.acceptanceCriteria || '-'],
+            ['优先级', snapshot.priority || '-'],
+            ['执行主体', snapshot.executionLabel || '-'],
+          ]) +
+            "<div class='tc-loop-check-grid'>" +
+            validationItems
+              .map(
+                (item) =>
+                  "<div class='tc-loop-check-item" +
+                  (item.ok ? ' ok' : '') +
+                  "'><div class='tc-loop-check-k'>" +
+                  safe(item.label) +
+                  "</div><div class='tc-loop-check-v'>" +
+                  safe(item.value) +
+                  '</div></div>'
+              )
+              .join('') +
+            '</div>' +
+            "<div class='tc-loop-launch-hint'>" +
+            safe(statusLine) +
+            '</div>' +
+            "<div class='tc-loop-action-row tc-loop-launch-actions'>" +
+            "<button id='tcSaveAndStartBtn' type='button' " +
+            (allReady ? '' : 'disabled') +
+            '>保存并启动首轮</button>' +
+            "<button id='tcSaveDraftBtn' class='alt' type='button' " +
+            (allReady ? '' : 'disabled') +
+            '>保存草稿</button>' +
+            '</div>' +
+            "<div class='hint'>提交成功后将自动切换到对应任务状态页。</div>",
+          ''
+        );
+      const startBtn = $('tcSaveAndStartBtn');
+      if (startBtn) {
+        startBtn.onclick = async () => {
+          try {
+            await withButtonLock('tcSaveAndStartBtn', async () => {
+              await submitTrainingCenterPlanFromLoop('start');
+            });
+          } catch (err) {
+            setTrainingCenterError(err.message || String(err));
+          }
+        };
+      }
+      const draftBtn = $('tcSaveDraftBtn');
+      if (draftBtn) {
+        draftBtn.onclick = async () => {
+          try {
+            await withButtonLock('tcSaveDraftBtn', async () => {
+              await submitTrainingCenterPlanFromLoop('draft');
+            });
+          } catch (err) {
+            setTrainingCenterError(err.message || String(err));
+          }
+        };
+      }
+      updateTrainingCenterOpsGateState();
+      return;
+    }
 
-    box.innerHTML = head + body + folds;
+    box.innerHTML =
+      renderTrainingLoopSection(
+        '基础信息',
+        '先确认训练目标、验收口径和优先级，再切到首轮工作集与启动确认。',
+        "<div class='tc-form-grid'>" +
+          "<div class='full'><label class='hint' for='tcPlanTargetAgentSelect'>目标角色</label><div id='tcLoopFieldMountTarget'></div></div>" +
+          "<div class='full'><label class='hint' for='tcPlanGoalInput'>能力目标</label><div id='tcLoopFieldMountGoal'></div></div>" +
+          "<div class='full'><label class='hint' for='tcPlanAcceptanceInput'>验收标准</label><div id='tcLoopFieldMountAcceptance'></div></div>" +
+          "<div><label class='hint' for='tcPlanPrioritySelect'>优先级（必填）</label><div id='tcLoopFieldMountPriority'></div></div>" +
+          "<div><label class='hint'>执行主体</label><div class='tc-loop-static-field'>" + safe(snapshot.executionLabel) + '</div></div>' +
+          '</div>' +
+          renderTrainingLoopSection(
+            '当前填写摘要',
+            '',
+            renderTrainingLoopSummaryRows([
+              ['目标角色', snapshot.targetName || '-'],
+              ['能力目标', snapshot.capabilityGoal || '-'],
+              ['优先级', snapshot.priority || '-'],
+              ['首轮工作集', snapshot.trainingTasks.length ? snapshot.trainingTasks.length + ' 项' : '待填写'],
+            ]),
+            'tone-soft'
+          ),
+        ''
+      );
+    mountTrainingLoopField('tcPlanTargetAgentSelect', 'tcLoopFieldMountTarget');
+    mountTrainingLoopField('tcPlanGoalInput', 'tcLoopFieldMountGoal', {
+      placeholder: '例如：提升角色策略评分解释性',
+    });
+    mountTrainingLoopField('tcPlanAcceptanceInput', 'tcLoopFieldMountAcceptance', {
+      rows: 5,
+      placeholder: '例如：评分卡输出含维度分/扣分证据/修复建议',
+    });
+    mountTrainingLoopField('tcPlanPrioritySelect', 'tcLoopFieldMountPriority');
   }
 
-  function renderTrainingLoopRightPane(mode, queueRow, loopData) {
+  function renderTrainingLoopStatusBody(queueRow, loopData, statusDetail) {
+    const box = $('tcLoopDetailBody');
+    if (!box) return;
+    restoreTrainingLoopFormCache();
+    const tab = normalizeTrainingLoopStatusTab(state.tcLoopStatusTab);
+    if (!queueRow) {
+      box.innerHTML = renderTrainingLoopSection(
+        '任务状态',
+        '请先从左侧任务列表中选择一个已有任务。',
+        "<div class='tc-loop-empty'>当前没有可展示的任务状态。</div>",
+        ''
+      );
+      return;
+    }
+
+    const loopCtx = trainingLoopSelectedNodeContext(loopData);
+    const detailCtx = trainingLoopStatusDetailContext(statusDetail);
+    const overview = detailCtx.overview || {};
+    const workset = detailCtx.workset || {};
+    const evaluations = detailCtx.evaluations || [];
+    const historyRecords = detailCtx.historyRecords || [];
+    const agentName =
+      safe(overview.agent_name || queueRow.agent_name || queueRow.target_agent_id).trim() || '-';
+    const goal = safe(overview.capability_goal || queueRow.capability_goal).trim() || '-';
+    const latestRunId = safe(overview.latest_run_id || queueRow.latest_run_id).trim();
+    const latestRunStatus = safe(overview.latest_run_status || queueRow.latest_run_status).trim();
+    const latestRunAt = safe(overview.updated_at || queueRow.latest_run_updated_at).trim();
+    const latestRunRef = safe(overview.latest_run_ref || queueRow.latest_run_ref).trim();
+    const latestResultSummary = safe(overview.latest_result_summary || queueRow.latest_result_summary).trim();
+    const selectedNode = loopCtx.selectedNode || null;
+    const avgText = trainingLoopScoreText(overview.avg_score, '待三轮评测完成');
+    const thresholdText = trainingLoopScoreText(overview.threshold, '-');
+    const previousAvgText = trainingLoopScoreText(overview.previous_avg_score, '无上一轮');
+    const metricsText =
+      overview && overview.metrics_available
+        ? 'Avg=' +
+          safe(avgText) +
+          '\nThreshold=' +
+          safe(thresholdText) +
+          '\nPrevious Avg=' +
+          safe(previousAvgText) +
+          '\nDecision=' +
+          safe(overview.decision || '-') +
+          '\nNext Action=' +
+          safe(overview.next_action || '-')
+        : '暂无最终评分指标' +
+          (safe(overview.metrics_unavailable_reason).trim()
+            ? '（' + safe(overview.metrics_unavailable_reason) + '）'
+            : '');
+
+    if (tab === 'workset') {
+      box.innerHTML =
+        renderTrainingLoopSection(
+          '工作集变化',
+          '本页展示后端回写的当前轮工作集摘要、结构化变化和回退状态。',
+          renderTrainingLoopSummaryRows([
+            ['当前任务', goal],
+            ['目标角色', agentName],
+            ['验收标准', safe(overview.acceptance_criteria || queueRow.acceptance_criteria).trim() || '-'],
+            ['变化摘要', safe(workset.delta_summary).trim() || '当前没有结构化变化摘要'],
+            ['回退状态', workset && workset.rollback_applied ? '已回退本轮新增' : '主线保留'],
+          ]) +
+            renderTrainingLoopSection(
+              '结构化工作集',
+              '',
+              renderTrainingLoopWorksetItems(workset),
+              'tone-soft'
+            ),
+          ''
+        );
+      return;
+    }
+
+    if (tab === 'eval') {
+      box.innerHTML =
+        renderTrainingLoopSection(
+          '三轮评测',
+          '每一轮评测均由后端真实落库的 Run1 / Run2 / Run3 构成，Avg 也由后端计算。',
+          renderTrainingLoopSummaryRows([
+            ['最近运行', latestRunId || '暂无'],
+            ['运行状态', latestRunStatus ? statusText(latestRunStatus) : '暂无'],
+            ['更新时间', latestRunAt || '-'],
+            ['执行主体', trainingExecutionEngineLabel(overview.execution_engine || queueRow.execution_engine) || 'workflow 内建训练能力'],
+          ]) +
+            renderTrainingLoopSection(
+              '最近回执',
+              '',
+              latestRunId
+                ? "<pre class='pre tc-loop-inline-pre'>run_id=" +
+                  safe(latestRunId) +
+                  '\nstatus=' +
+                  safe(latestRunStatus || '-') +
+                  '\nupdated_at=' +
+                  safe(latestRunAt || '-') +
+                  (latestRunRef ? '\nrun_ref=' + safe(latestRunRef) : '') +
+                  (latestResultSummary ? '\nsummary=' + safe(latestResultSummary) : '') +
+                  '</pre>'
+                : "<div class='tc-loop-empty'>当前还没有训练运行回执。</div>",
+              'tone-soft'
+            ) +
+            renderTrainingLoopSection(
+              '三轮明细',
+              '',
+              renderTrainingLoopEvaluationCards(evaluations, queueRow.queue_task_id),
+              'tone-soft'
+            ),
+          ''
+        );
+      return;
+    }
+
+    if (tab === 'history') {
+      box.innerHTML =
+        renderTrainingLoopSection(
+          '历史记录',
+          '这里回看每一轮后端回写的真实摘要、分数与审计引用。',
+          renderTrainingLoopSummaryRows([
+            ['loop_id', loopCtx.loopId],
+            ['当前节点', safe(selectedNode && selectedNode.title).trim() || safe(loopCtx.currentNodeId).trim() || '-'],
+            ['轮次数量', safe(historyRecords.length || 0)],
+            ['测试数据', loopCtx.isTestData ? '是' : '否'],
+          ]) + renderTrainingLoopBackendHistoryList(historyRecords),
+          ''
+        );
+      return;
+    }
+
+    box.innerHTML =
+      renderTrainingLoopSection(
+        '当前概览',
+        '先看当前任务摘要、最近运行状态和当前节点结论。',
+        renderTrainingLoopSummaryRows([
+          ['任务状态', statusText(overview.queue_status || queueRow.status || '-') + ' / ' + safe(overview.priority || queueRow.priority || '-')],
+          ['目标角色', agentName],
+          ['能力目标', goal],
+          ['当前轮次', safe(overview.round_index || (selectedNode && selectedNode.round_index) || '-')],
+          ['节点判定', safe(overview.decision || (selectedNode && selectedNode.decision)).trim() || '暂无判定'],
+          ['下一步动作', safe(overview.next_action || (selectedNode && selectedNode.next_action)).trim() || '暂无下一步动作'],
+        ]) +
+          renderTrainingLoopSection(
+            '评分与运行摘要',
+            '',
+            "<pre class='pre tc-loop-inline-pre'>" +
+            safe(metricsText) +
+            '</pre>' +
+            "<div class='tc-loop-inline-meta'>最近运行：" +
+            safe(latestRunId || '暂无') +
+            (latestRunStatus ? ' · ' + safe(statusText(latestRunStatus)) : '') +
+            (latestRunAt ? ' · ' + safe(latestRunAt) : '') +
+            '</div>',
+            'tone-soft'
+          ),
+        ''
+      );
+  }
+
+  function renderTrainingLoopDetailFrame(mode, queueRow, loopData, statusDetail) {
+    const head = $('tcLoopDetailHead');
+    const body = $('tcLoopDetailBody');
+    if (!head || !body) return;
+    const view = normalizeTrainingLoopMode(mode);
+    const isCreate = view === 'create';
+    const tabs = isCreate ? TC_LOOP_CREATE_TABS : TC_LOOP_STATUS_TABS;
+    const activeTab = isCreate
+      ? normalizeTrainingLoopCreateTab(state.tcLoopCreateTab)
+      : normalizeTrainingLoopStatusTab(state.tcLoopStatusTab);
+    head.innerHTML =
+      "<div class='tc-loop-detail-head'>" +
+      '<div>' +
+      "<div class='tc-loop-detail-title'>" +
+      (isCreate ? '创建任务' : '任务状态详情') +
+      '</div>' +
+      "<div class='tc-loop-detail-desc'>" +
+      (isCreate
+        ? '按基础信息、首轮工作集、启动确认三步补齐创建内容。'
+        : '按当前概览、工作集变化、三轮评测、历史记录切换查看当前任务。') +
+      '</div>' +
+      '</div>' +
+      '</div>' +
+      "<div class='tc-loop-detail-tabs' role='tablist' aria-label='" +
+      (isCreate ? '创建任务页签' : '任务状态页签') +
+      "'>" +
+      tabs
+        .map((tabItem) => {
+          const active = tabItem.key === activeTab;
+          return (
+            "<button class='tc-loop-tab" +
+            (active ? ' active' : '') +
+            "' type='button' role='tab' aria-selected='" +
+            (active ? 'true' : 'false') +
+            "' data-" +
+            (isCreate ? 'create' : 'status') +
+            "-tab='" +
+            safe(tabItem.key) +
+            "'>" +
+            safe(tabItem.label) +
+            '</button>'
+          );
+        })
+        .join('') +
+      '</div>';
+    head.onclick = (event) => {
+      const target = event && event.target ? event.target : null;
+      if (!(target instanceof Element)) return;
+      const btn = target.closest('button[data-create-tab],button[data-status-tab]');
+      if (!btn) return;
+      const createTab = safe(btn.getAttribute('data-create-tab')).trim();
+      const statusTab = safe(btn.getAttribute('data-status-tab')).trim();
+      if (createTab) {
+        setTrainingLoopCreateTab(createTab);
+      } else if (statusTab) {
+        setTrainingLoopStatusTab(statusTab);
+      }
+    };
+    if (isCreate) {
+      renderTrainingLoopCreateBody();
+    } else {
+      renderTrainingLoopStatusBody(queueRow, loopData, statusDetail);
+    }
+  }
+
+  function renderTrainingLoopRightPane(mode, queueRow, loopData, statusDetail) {
     const box = $('tcLoopRightPane');
     if (!box) return;
     const view = normalizeTrainingLoopMode(mode);
     if (view === 'create') {
-      const targetAgent = safe(trainingCenterSelectedTargetAgent()).trim() || '-';
-      const goal = safe($('tcPlanGoalInput') ? $('tcPlanGoalInput').value : '').trim() || '-';
-      const tasks = parseTrainingTasksInput();
-      const acceptance = safe($('tcPlanAcceptanceInput') ? $('tcPlanAcceptanceInput').value : '').trim();
-      const priority = safe($('tcPlanPrioritySelect') ? $('tcPlanPrioritySelect').value : '').trim();
-      const ok = !!(targetAgent && targetAgent !== '-' && goal && goal !== '-' && tasks.length && acceptance && priority);
-      box.innerHTML =
-        "<div class='card-title'>创建结果与校验</div>" +
-        "<div class='tc-loop-side-card primary'>" +
-        "<div class='card-title'>创建后将生成</div>" +
-        "<div class='tc-loop-summary-list'>" +
-        [
-          ['目标角色', targetAgent],
-          ['能力目标', goal],
-          ['首轮训练用例', (tasks.length ? String(tasks.length) : '0') + ' 项'],
-          ['优先级', priority || '-'],
-        ]
-          .map(
-            (pair) =>
-              "<div class='tc-loop-summary-item'><div class='tc-loop-summary-k'>" +
-              safe(pair[0]) +
-              "</div><div class='tc-loop-summary-v'>" +
-              safe(pair[1]) +
-              '</div></div>'
-          )
-          .join('') +
-        '</div>' +
-        '</div>' +
-        "<div class='tc-loop-side-card'>" +
-        "<div class='card-title'>必填校验</div>" +
-        "<div class='tc-loop-side-text'>目标角色、能力目标、训练用例、验收口径与优先级为必填项。</div>" +
-        "<div class='tc-loop-summary-list'>" +
-        "<div class='tc-loop-summary-item'><div class='tc-loop-summary-k'>当前状态</div><div class='tc-loop-summary-v'>" +
-        (ok ? '已满足创建条件' : '待补齐必填') +
-        '</div></div>' +
-        '</div>' +
-        '</div>' +
-        "<div class='tc-loop-side-card'>" +
-        "<div class='card-title'>创建后去哪看</div>" +
-        "<div class='tc-loop-side-text'>创建完成后自动切到 `任务状态`，默认先看流程总览与当前判定。</div>" +
-        "<div class='tc-loop-action-row'>" +
-        "<button class='alt' type='button' disabled>创建并启动首轮（对接中）</button>" +
-        "<button class='alt' type='button' disabled>仅创建草稿（对接中）</button>" +
-        '</div>' +
-        '</div>';
+      box.innerHTML = '';
+      box.onclick = null;
       return;
     }
 
-    const loopPayload = loopData && typeof loopData === 'object' ? loopData : null;
-    const nodes = Array.isArray(loopPayload && loopPayload.nodes) ? loopPayload.nodes : [];
-    const nodesById = trainingLoopNodesById(loopPayload);
-    const currentNodeId = safe(loopPayload && loopPayload.current_node_id).trim();
-    let selectedId = safe(state.tcLoopSelectedNodeId).trim() || currentNodeId;
-    if (selectedId && nodes.length && !nodesById[selectedId]) {
-      selectedId = currentNodeId;
-      state.tcLoopSelectedNodeId = selectedId;
-    }
-    if (!selectedId && currentNodeId) {
-      selectedId = currentNodeId;
-      state.tcLoopSelectedNodeId = selectedId;
-    }
-    const node = (selectedId && nodesById[selectedId]) || null;
-    const isCurrent = !!(selectedId && currentNodeId && selectedId === currentNodeId);
-    const metricsAvailable = !!(loopPayload && loopPayload.metrics_available);
-    const metricsReason = safe(loopPayload && loopPayload.metrics_unavailable_reason).trim();
-    const isTestData = !!(loopPayload && loopPayload.is_test_data);
-    const loopId = safe(loopPayload && (loopPayload.loop_id || loopPayload.loopId)).trim() || '-';
+    const loopCtx = trainingLoopSelectedNodeContext(loopData);
+    const detailCtx = trainingLoopStatusDetailContext(statusDetail);
+    const node = loopCtx.selectedNode || null;
+    const isCurrent = !!(loopCtx.selectedNodeId && loopCtx.currentNodeId && loopCtx.selectedNodeId === loopCtx.currentNodeId);
 
     if (state.tcLoopServerLoading) {
       box.innerHTML =
@@ -3660,54 +4204,63 @@
         '</div>';
       return;
     }
-    if (!nodes.length) {
+    if (!queueRow) {
+      box.innerHTML =
+        "<div class='tc-loop-right-title'>当前选中节点</div>" +
+        "<div class='tc-loop-right-big'>未选择任务</div>" +
+        "<div class='tc-loop-right-sub'>请先从左侧列表选择一个任务。</div>";
+      return;
+    }
+    if (!loopCtx.nodes.length || !node) {
       box.innerHTML =
         "<div class='tc-loop-right-title'>当前选中节点</div>" +
         "<div class='tc-loop-right-big'>暂无历史</div>" +
-        "<div class='tc-loop-right-sub'>暂无指标</div>" +
-        "<div class='tc-loop-summary-list'>" +
-        [
-          ['loop_id', loopId],
-          ['metrics', '暂无评分/暂无阈值' + (metricsReason ? '（' + metricsReason + '）' : '')],
-          ['is_test_data', isTestData ? 'true' : 'false'],
-        ]
-          .map(
-            (pair) =>
-              "<div class='tc-loop-summary-item'><div class='tc-loop-summary-k'>" +
-              safe(pair[0]) +
-              "</div><div class='tc-loop-summary-v'>" +
-              safe(pair[1]) +
-              '</div></div>'
-          )
-          .join('') +
-        '</div>';
+        "<div class='tc-loop-right-sub'>当前闭环还没有可联动的节点详情。</div>";
       return;
     }
 
-    const nodeTitle = safe(node && node.title).trim() || safe(selectedId).trim() || '-';
+    const nodeTitle = safe(node && node.title).trim() || safe(loopCtx.selectedNodeId).trim() || '-';
     const roundText =
       node && Object.prototype.hasOwnProperty.call(node, 'round_index')
         ? '第 ' + safe(node.round_index) + ' 轮'
         : '-';
     const decisionText = safe(node && node.decision).trim() || '暂无判定';
     const nextActionText = safe(node && node.next_action).trim() || '暂无下一步动作';
-    const impactText = safe(node && node.impact).trim() || '暂无回退/保留说明';
+    const impactText = safe(node && node.impact).trim() || '暂无本轮处理说明';
+    const metrics = node && node.metrics && typeof node.metrics === 'object' ? node.metrics : {};
     const metricsText =
-      metricsAvailable && node && node.metrics
-        ? JSON.stringify(node.metrics, null, 2)
-        : '暂无评分/暂无阈值' + (metricsReason ? '（' + metricsReason + '）' : '');
+      node && node.metrics_available
+        ? 'Avg=' +
+          safe(trainingLoopScoreText(metrics.avg_score, '-')) +
+          ' / Threshold=' +
+          safe(trainingLoopScoreText(metrics.threshold, '-')) +
+          ' / Previous=' +
+          safe(trainingLoopScoreText(metrics.previous_avg_score, '无'))
+        : '暂无评分或阈值' +
+          (safe(node && node.metrics_unavailable_reason).trim()
+            ? '（' + safe(node.metrics_unavailable_reason) + '）'
+            : loopCtx.metricsReason
+              ? '（' + safe(loopCtx.metricsReason) + '）'
+              : '');
     const actionQueueTaskId =
       safe(node && node.queue_task_id).trim() || safe(queueRow && queueRow.queue_task_id).trim();
-    const actionEnabled = !!(isCurrent && actionQueueTaskId);
+    const availableActions = Array.isArray(node && node.available_actions)
+      ? node.available_actions.map((item) => safe(item).trim())
+      : [];
+    const canEnterNextRound = !!(isCurrent && actionQueueTaskId && availableActions.includes('enter-next-round'));
+    const canRollbackRound = !!(isCurrent && actionQueueTaskId && availableActions.includes('rollback-round-increment'));
+    const actionEnabled = canEnterNextRound || canRollbackRound;
 
-    const execLabel = trainingExecutionEngineLabel(queueRow && queueRow.execution_engine);
+    const execLabel = trainingExecutionEngineLabel(
+      (detailCtx.overview && detailCtx.overview.execution_engine) || (queueRow && queueRow.execution_engine)
+    );
     const nodeTypeKey = safe(node && node.node_type).toLowerCase();
     const nodeStatusKey = safe(node && node.status).toLowerCase();
     const kindText =
       nodeTypeKey === 'rollback' ? '回退动作' : nodeStatusKey === 'rolled_back' ? '回退分支' : '主线节点';
-    let deltaText = '保留主线';
-    if (nodeTypeKey === 'rollback') deltaText = '回退本轮新增';
-    else if (nodeStatusKey === 'rolled_back') deltaText = '已回退';
+    let deltaText = '保留主线继续';
+    if (nodeTypeKey === 'rollback') deltaText = '本轮新增已撤销';
+    else if (nodeStatusKey === 'rolled_back') deltaText = '当前轮已回退';
     else if (!isCurrent) deltaText = '历史节点';
 
     const stageIndex = trainingLoopStageIndex('status', queueRow);
@@ -3718,13 +4271,15 @@
       roundText +
       (stageTitle ? ' · ' + stageTitle : '') +
       (isCurrent ? ' · 当前活动' : '') +
-      (isTestData ? ' · 测试数据' : '');
+      (loopCtx.isTestData ? ' · 测试数据' : '');
     const decisionLabel = statusText(decisionText);
-    const whyKey = nodeTypeKey === 'rollback' || nodeStatusKey === 'rolled_back' ? '为什么回退' : '为什么继续';
-    const whyText =
+    const actionMeaning =
       nodeTypeKey === 'rollback' || nodeStatusKey === 'rolled_back'
-        ? '本轮出现劣化或风险，回退本轮新增以恢复主线。'
-        : '当前仍在闭环中，先保留主线进入下一轮继续补强。';
+        ? '该动作会在演进图追加一个回退节点，并把当前轮标记为已回退；不会删除已有主线历史。'
+        : '当前轮仍保留在主线中，可继续进入下一轮补强工作集。';
+    const actionHelp = actionEnabled
+      ? '动作开关由后端判定结果控制；当前只允许执行后端返回的可用动作。'
+      : '仅当前活动节点可执行动作。';
 
     box.innerHTML =
       "<div class='tc-loop-decision-card'>" +
@@ -3758,31 +4313,23 @@
       '</div>' +
       "<div class='tc-loop-next-card'>" +
       "<div class='tc-loop-next-title'>节点判定与下一步</div>" +
-      "<div class='tc-loop-summary-list'>" +
-      [
-        ['判定动作', nextActionText],
-        ['回退/保留说明', impactText],
-        [whyKey, whyText],
-      ]
-        .map(
-          (pair) =>
-            "<div class='tc-loop-summary-item'><div class='tc-loop-summary-k'>" +
-            safe(pair[0]) +
-            "</div><div class='tc-loop-summary-v'>" +
-            safe(pair[1]) +
-            '</div></div>'
-        )
-        .join('') +
-      '</div>' +
+      renderTrainingLoopSummaryRows([
+        ['下一步动作', nextActionText],
+        ['本轮处理说明', impactText],
+        ['动作含义', actionMeaning],
+        ['loop_id', loopCtx.loopId],
+      ]) +
       "<div class='tc-loop-action-row'>" +
       "<button id='tcLoopEnterNextRoundBtn' class='alt' type='button' " +
-      (actionEnabled ? '' : 'disabled') +
+      (canEnterNextRound ? '' : 'disabled') +
       '>进入下一轮</button>' +
       "<button id='tcLoopRollbackRoundBtn' class='alt' type='button' " +
-      (actionEnabled ? '' : 'disabled') +
-      '>回退本轮新增</button>' +
+      (canRollbackRound ? '' : 'disabled') +
+      '>撤销本轮新增</button>' +
       '</div>' +
-      (actionEnabled ? '' : "<div class='hint' style='margin-top:8px'>仅当前活动节点可执行动作</div>") +
+      "<div class='tc-loop-action-help'>" +
+      safe(actionHelp) +
+      '</div>' +
       '</div>';
 
     const enterBtn = $('tcLoopEnterNextRoundBtn');
@@ -3802,6 +4349,7 @@
               state.tcLoopSelectedQueueTaskId = nextQueueTaskId;
               state.tcLoopSelectedNodeId = nextNodeId || nextQueueTaskId;
               state.tcLoopMode = 'status';
+              state.tcLoopStatusTab = 'overview';
               await refreshTrainingCenterQueue(true);
               await refreshTrainingLoopServerData(nextQueueTaskId, { force: true });
             } else {
@@ -3845,35 +4393,60 @@
   function renderTrainingLoopModeFrames(mode) {
     const view = normalizeTrainingLoopMode(mode);
     const moduleOps = $('tcModuleOps');
-    if (moduleOps) {
-      moduleOps.setAttribute('data-loop-mode', view);
+    if (moduleOps) moduleOps.setAttribute('data-loop-mode', view);
+    const rightColumn = $('tcLoopRightColumn');
+    if (rightColumn) {
+      rightColumn.classList.toggle('active', view === 'status');
+      rightColumn.setAttribute('aria-hidden', view === 'status' ? 'false' : 'true');
     }
-    const createBtn = $('tcLoopModeCreateBtn');
-    const statusBtn = $('tcLoopModeStatusBtn');
-    if (createBtn) createBtn.classList.toggle('active', view === 'create');
-    if (statusBtn) statusBtn.classList.toggle('active', view === 'status');
-    const createView = $('tcLoopCreateView');
-    const statusView = $('tcLoopStatusView');
-    if (createView) createView.classList.toggle('active', view === 'create');
-    if (statusView) statusView.classList.toggle('active', view === 'status');
+    ensureTrainingLoopRightWheelBinding();
+  }
 
-    const scoreBtn = $('tcLoopDetailTabScoreBtn');
-    const worksetBtn = $('tcLoopDetailTabWorksetBtn');
-    const decisionBtn = $('tcLoopDetailTabDecisionBtn');
-    const tab = safe(state.tcLoopDetailTab).toLowerCase();
-    const active = tab === 'workset' || tab === 'decision' ? tab : 'score';
-    if (scoreBtn) {
-      scoreBtn.classList.toggle('active', active === 'score');
-      scoreBtn.setAttribute('aria-selected', active === 'score' ? 'true' : 'false');
-    }
-    if (worksetBtn) {
-      worksetBtn.classList.toggle('active', active === 'workset');
-      worksetBtn.setAttribute('aria-selected', active === 'workset' ? 'true' : 'false');
-    }
-    if (decisionBtn) {
-      decisionBtn.classList.toggle('active', active === 'decision');
-      decisionBtn.setAttribute('aria-selected', active === 'decision' ? 'true' : 'false');
-    }
+  function applyTrainingLoopQueryScrollPosition() {
+    const target = safe(queryParam('tc_loop_scroll')).trim().toLowerCase();
+    if (!target) return;
+    const node = $('tcLoopCenterPane');
+    if (!node) return;
+    window.requestAnimationFrame(() => {
+      if (target === 'bottom') {
+        node.scrollTop = node.scrollHeight;
+      } else {
+        node.scrollTop = 0;
+      }
+    });
+  }
+
+  function ensureTrainingLoopRightWheelBinding() {
+    const column = $('tcLoopRightColumn');
+    if (!column || column.dataset.wheelBound === '1') return;
+    column.dataset.wheelBound = '1';
+    column.addEventListener(
+      'wheel',
+      (event) => {
+        if (event.ctrlKey || !(event.target instanceof Element)) return;
+        const deltaY = Number(event.deltaY || 0);
+        if (!Number.isFinite(deltaY) || deltaY === 0) return;
+        const hoverTarget = event.target.closest('#tcRunResult, #tcLoopRightPane');
+        const candidates = [];
+        if (hoverTarget) {
+          candidates.push(hoverTarget);
+        } else {
+          const rightPane = $('tcLoopRightPane');
+          const runResult = $('tcRunResult');
+          if (rightPane) candidates.push(rightPane);
+          if (runResult) candidates.push(runResult);
+        }
+        const scrollTarget = candidates.find((node) => node && node.scrollHeight > node.clientHeight + 1);
+        if (!scrollTarget) return;
+        const maxTop = Math.max(0, scrollTarget.scrollHeight - scrollTarget.clientHeight);
+        const before = scrollTarget.scrollTop;
+        const next = Math.max(0, Math.min(maxTop, before + deltaY));
+        if (next === before) return;
+        scrollTarget.scrollTop = next;
+        event.preventDefault();
+      },
+      { passive: false }
+    );
   }
 
   function renderTrainingLoop() {
@@ -3886,10 +4459,6 @@
       if (forcedSearch && $('tcLoopTaskSearchInput')) {
         $('tcLoopTaskSearchInput').value = forcedSearch;
       }
-      const forcedTab = safe(queryParam('tc_loop_tab')).toLowerCase();
-      if (forcedTab === 'score' || forcedTab === 'workset' || forcedTab === 'decision') {
-        state.tcLoopDetailTab = forcedTab;
-      }
       const forcedNode = safe(queryParam('tc_loop_node')).trim();
       if (forcedNode) {
         state.tcLoopSelectedNodeId = forcedNode;
@@ -3897,6 +4466,15 @@
       const forcedTask = safe(queryParam('tc_loop_task')).trim();
       if (forcedTask) {
         state.tcLoopSelectedQueueTaskId = forcedTask;
+        if (forcedMode !== 'create') {
+          state.tcLoopMode = 'status';
+        }
+      }
+      const forcedTab = safe(queryParam('tc_loop_tab')).toLowerCase();
+      if (normalizeTrainingLoopMode(state.tcLoopMode) === 'create') {
+        state.tcLoopCreateTab = normalizeTrainingLoopCreateTab(forcedTab);
+      } else {
+        state.tcLoopStatusTab = normalizeTrainingLoopStatusTab(forcedTab);
       }
       state.tcLoopQueryApplied = true;
     }
@@ -3906,24 +4484,32 @@
     renderTrainingLoopModeFrames(mode);
     const row = mode === 'status' ? selectedTrainingLoopQueueRow() : null;
     let loopPayload = null;
+    let statusDetailPayload = null;
     if (mode === 'status') {
       const qid = safe(row && row.queue_task_id).trim() || safe(state.tcLoopSelectedQueueTaskId).trim();
       if (qid) {
         const same = safe(state.tcLoopServerQueueTaskId).trim() === qid;
-        if (!same || (!state.tcLoopServerData && !state.tcLoopServerLoading && !state.tcLoopServerError)) {
+        if (
+          !same ||
+          ((!state.tcLoopServerData || !state.tcLoopStatusDetailData) &&
+            !state.tcLoopServerLoading &&
+            !state.tcLoopServerError)
+        ) {
           refreshTrainingLoopServerData(qid).catch((err) => {
             state.tcLoopServerLoading = false;
             state.tcLoopServerError = safe(err && err.message ? err.message : err);
+            renderTrainingLoop();
           });
         }
         loopPayload = same ? state.tcLoopServerData : null;
+        statusDetailPayload = same ? state.tcLoopStatusDetailData : null;
       }
     }
     renderTrainingLoopProcessCard(mode, row, loopPayload);
-    if (mode === 'status') {
-      renderTrainingLoopStatusDetail(row, loopPayload);
-    }
-    renderTrainingLoopRightPane(mode, row, loopPayload);
+    renderTrainingLoopDetailFrame(mode, row, loopPayload, statusDetailPayload);
+    renderTrainingLoopRightPane(mode, row, loopPayload, statusDetailPayload);
+    updateTrainingCenterOpsGateState();
+    applyTrainingLoopQueryScrollPosition();
   }
 
   function tcLoopTimeAgo(isoText) {
@@ -3948,6 +4534,62 @@
     if (key === 'done') return "<span class='tc-loop-chip green'>已通过</span>";
     if (key === 'removed') return "<span class='tc-loop-chip red'>已移除</span>";
     return "<span class='tc-loop-chip'>" + safe(status || '-') + '</span>';
+  }
+
+  function trainingLoopQueueFilterLabel(filterKey) {
+    const key = normalizeTrainingLoopQueueFilter(filterKey);
+    if (key === 'running') return '进行中';
+    if (key === 'queued') return '待评测';
+    if (key === 'done') return '已通过';
+    if (key === 'removed') return '已移除';
+    return '全部';
+  }
+
+  function trainingLoopQueueCounts(rows) {
+    const counts = { all: 0, running: 0, queued: 0, done: 0, removed: 0 };
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+      counts.all += 1;
+      const key = normalizeTrainingLoopQueueFilter(row && row.status);
+      if (Object.prototype.hasOwnProperty.call(counts, key)) {
+        counts[key] += 1;
+      }
+    });
+    return counts;
+  }
+
+  function trainingLoopQueueTitle(row) {
+    return safe(row && (row.capability_goal || row.agent_name || row.target_agent_id || row.queue_task_id)).trim() || '-';
+  }
+
+  function updateTrainingLoopQueueSummary(rows, filtered, filterKey, keyword) {
+    const counts = trainingLoopQueueCounts(rows);
+    const summaryNode = $('tcLoopQueueSummary');
+    if (summaryNode) {
+      const parts = ['共 ' + safe(counts.all) + ' 个任务'];
+      if (filterKey !== 'all') {
+        parts.push(trainingLoopQueueFilterLabel(filterKey) + ' ' + safe(filtered.length) + ' 个');
+      } else if (keyword) {
+        parts.push('匹配 ' + safe(filtered.length) + ' 个');
+      } else {
+        parts.push('支持重命名与二次确认移除');
+      }
+      summaryNode.textContent = parts.join(' · ');
+    }
+    const filterRow = $('tcLoopQueueFilterRow');
+    if (!filterRow) return;
+    filterRow.querySelectorAll('button[data-filter]').forEach((btn) => {
+      const btnKey = normalizeTrainingLoopQueueFilter(btn.getAttribute('data-filter'));
+      btn.classList.toggle('active', btnKey === filterKey);
+      const label = trainingLoopQueueFilterLabel(btnKey);
+      const count = Object.prototype.hasOwnProperty.call(counts, btnKey) ? counts[btnKey] : 0;
+      btn.innerHTML =
+        "<span class='tc-loop-filter-text'>" +
+        safe(label) +
+        "</span><span class='tc-loop-filter-count'>" +
+        safe(count) +
+        '</span>';
+      btn.setAttribute('aria-label', label + ' ' + safe(count) + ' 个');
+    });
   }
 
   function renderTrainingCenterQueue() {
@@ -3987,18 +4629,24 @@
       });
     }
 
+    updateTrainingLoopQueueSummary(rows, filtered, filterKey, keyword);
+
     const createItem = document.createElement('div');
-    createItem.className = 'tc-queue-item' + (normalizeTrainingLoopMode(state.tcLoopMode) === 'create' ? ' active' : '');
+    createItem.className =
+      'tc-queue-item tc-loop-create-item' +
+      (normalizeTrainingLoopMode(state.tcLoopMode) === 'create' ? ' active' : '');
     createItem.innerHTML =
       "<div class='tc-loop-task-top'>" +
-      "<div class='tc-loop-task-name'>+ 新建训练任务</div>" +
+      "<div class='tc-loop-task-head'>" +
+      "<div class='tc-loop-task-target'>训练闭环入口</div>" +
+      "<div class='tc-loop-task-name'>新建训练任务</div>" +
+      "<div class='tc-loop-task-id'>按基础信息、首轮工作集、启动确认三步创建</div>" +
+      '</div>' +
       "<div class='tc-loop-task-ops'><span class='tc-loop-chip green'>创建</span></div>" +
       '</div>' +
-      "<div class='tc-loop-task-sub'>当前处于创建模式，可先定义目标与首轮工作集。</div>";
+      "<div class='tc-loop-task-caption'>先定义训练目标、首轮工作集和启动确认，再决定保存草稿或直接启动首轮。</div>";
     createItem.onclick = () => {
-      state.tcLoopMode = 'create';
-      renderTrainingLoop();
-      renderTrainingCenterQueue();
+      enterTrainingLoopCreateMode();
     };
     box.appendChild(createItem);
 
@@ -4012,8 +4660,25 @@
     for (const row of filtered) {
       const queueTaskId = safe(row && row.queue_task_id).trim();
       if (!queueTaskId) continue;
+      const rowTitle = trainingLoopQueueTitle(row);
+      const targetText = safe(row.agent_name || row.target_agent_id || '-').trim() || '-';
+      const acceptanceText = safe(row.acceptance_criteria).trim();
+      const taskCount = Array.isArray(row.training_tasks) ? row.training_tasks.length : 0;
+      const latestRunLabel = safe(row.latest_run_status).trim()
+        ? statusText(row.latest_run_status)
+        : statusText(row.status || '-');
+      const latestUpdateText = tcLoopTimeAgo(row.latest_run_updated_at || row.enqueued_at || '');
+      const captionText =
+        acceptanceText ||
+        (taskCount ? '首轮工作集共 ' + safe(taskCount) + ' 项' : '') ||
+        '当前未填写验收标准或工作集摘要';
       const node = document.createElement('div');
-      node.className = 'tc-queue-item' + (safe(state.tcLoopSelectedQueueTaskId).trim() === queueTaskId ? ' active' : '');
+      node.className =
+        'tc-queue-item' +
+        (normalizeTrainingLoopMode(state.tcLoopMode) === 'status' &&
+        safe(state.tcLoopSelectedQueueTaskId).trim() === queueTaskId
+          ? ' active'
+          : '');
       const rowStatus = safe(row.status).toLowerCase();
       node.onclick = () => {
         selectTrainingLoopQueueTask(queueTaskId);
@@ -4021,21 +4686,54 @@
 
       const top = document.createElement('div');
       top.className = 'tc-loop-task-top';
+      const head = document.createElement('div');
+      head.className = 'tc-loop-task-head';
+      const target = document.createElement('div');
+      target.className = 'tc-loop-task-target';
+      target.textContent = '目标角色：' + targetText;
       const name = document.createElement('div');
       name.className = 'tc-loop-task-name';
-      name.textContent = safe(row.capability_goal || row.agent_name || row.target_agent_id || queueTaskId);
-      top.appendChild(name);
+      name.textContent = rowTitle;
+      name.title = rowTitle;
+      const queueId = document.createElement('div');
+      queueId.className = 'tc-loop-task-id';
+      queueId.textContent = queueTaskId;
+      head.appendChild(target);
+      head.appendChild(name);
+      head.appendChild(queueId);
+      top.appendChild(head);
 
       const ops = document.createElement('div');
       ops.className = 'tc-loop-task-ops';
+      const renameBtn = document.createElement('button');
+      renameBtn.className = 'alt';
+      renameBtn.type = 'button';
+      renameBtn.textContent = '重命名';
+      renameBtn.disabled = rowStatus === 'removed';
+      renameBtn.onclick = (event) => {
+        if (event) event.stopPropagation();
+        const currentTitle = trainingLoopQueueTitle(row);
+        const nextTitle = window.prompt('请输入新的任务名称', currentTitle);
+        if (nextTitle === null) return;
+        renameTrainingCenterQueueTask(queueTaskId, nextTitle).catch((err) => {
+          setTrainingCenterError(err.message || String(err));
+        });
+      };
+      ops.appendChild(renameBtn);
+
       const removeBtn = document.createElement('button');
       removeBtn.className = 'bad';
       removeBtn.type = 'button';
       removeBtn.textContent = '移除';
-      removeBtn.title = '风险提示：移除后不可自动恢复';
       removeBtn.disabled = rowStatus === 'removed';
       removeBtn.onclick = (event) => {
         if (event) event.stopPropagation();
+        const confirmed = window.confirm(
+          ['确认移除该训练任务？', '任务：' + rowTitle, '目标角色：' + targetText, '移除后如需恢复，请重新创建或重新入队。'].join(
+            '\n'
+          )
+        );
+        if (!confirmed) return;
         removeTrainingCenterQueueTask(queueTaskId).catch((err) => {
           setTrainingCenterError(err.message || String(err));
         });
@@ -4057,10 +4755,10 @@
       top.appendChild(ops);
       node.appendChild(top);
 
-      const line1 = document.createElement('div');
-      line1.className = 'tc-loop-task-sub';
-      line1.textContent = '目标角色：' + safe(row.agent_name || row.target_agent_id || '-');
-      node.appendChild(line1);
+      const caption = document.createElement('div');
+      caption.className = 'tc-loop-task-caption';
+      caption.textContent = captionText;
+      node.appendChild(caption);
 
       const chipRow = document.createElement('div');
       chipRow.className = 'tc-loop-chip-row';
@@ -4073,19 +4771,28 @@
         (Number.isFinite(roundIndex) && roundIndex > 0
           ? "<span class='tc-loop-chip orange'>第 " + safe(roundIndex) + ' 轮</span>'
           : "<span class='tc-loop-chip'>第 ? 轮</span>") +
-        (safe(row.priority).trim() ? "<span class='tc-loop-chip'>" + safe(row.priority) + '</span>' : '');
+        (safe(row.priority).trim() ? "<span class='tc-loop-chip'>" + safe(row.priority) + '</span>' : '') +
+        (row.similar_flag ? "<span class='tc-loop-chip orange'>相似任务</span>" : '') +
+        (row.is_test_data ? "<span class='tc-loop-chip'>测试数据</span>" : '');
       node.appendChild(chipRow);
 
-      const metrics = document.createElement('div');
-      metrics.className = 'tc-loop-task-metrics';
-      metrics.innerHTML =
-        "<div class='tc-loop-metric-box'><div class='tc-loop-metric-k'>当前 Avg</div><div class='tc-loop-metric-v'>-</div></div>" +
-        "<div class='tc-loop-metric-box'><div class='tc-loop-metric-k'>阈值</div><div class='tc-loop-metric-v'>-</div></div>";
-      node.appendChild(metrics);
+      const stats = document.createElement('div');
+      stats.className = 'tc-loop-task-stats';
+      stats.innerHTML =
+        "<div class='tc-loop-task-stat'><span>工作集</span><strong>" +
+        safe(taskCount) +
+        " 项</strong></div>" +
+        "<div class='tc-loop-task-stat'><span>最近回执</span><strong>" +
+        safe(latestRunLabel) +
+        '</strong></div>' +
+        "<div class='tc-loop-task-stat'><span>最近更新</span><strong>" +
+        safe(latestUpdateText) +
+        '</strong></div>';
+      node.appendChild(stats);
 
       const meta = document.createElement('div');
       meta.className = 'tc-loop-task-meta';
-      meta.textContent = '最近更新：' + tcLoopTimeAgo(row.latest_run_updated_at || row.enqueued_at || '');
+      meta.textContent = '当前任务 ID：' + queueTaskId;
       node.appendChild(meta);
       box.appendChild(node);
     }
@@ -4093,9 +4800,10 @@
 
   async function refreshTrainingCenterQueue(includeRemoved) {
     const includeRemovedFlag = includeRemoved === true;
-    const queueUrl = '/api/training/queue?include_removed=' + (includeRemovedFlag ? '1' : '0');
+    const queueUrl = withTestDataQuery('/api/training/queue?include_removed=' + (includeRemovedFlag ? '1' : '0'));
     const data = await getJSON(queueUrl);
-    state.tcQueue = Array.isArray(data.items) ? data.items : [];
+    const items = Array.isArray(data.items) ? data.items : [];
+    state.tcQueue = items.filter((row) => !!state.showTestData || !row || !row.is_test_data);
     renderTrainingCenterQueue();
     renderTrainingLoop();
   }
@@ -4122,6 +4830,42 @@
     setTrainingCenterRunResult(data);
     await refreshTrainingCenterQueue();
     await refreshTrainingCenterAgents();
+    return data;
+  }
+
+  async function submitTrainingCenterPlanFromLoop(action) {
+    const mode = safe(action).toLowerCase() === 'start' ? 'start' : 'draft';
+    const created = await enqueueTrainingCenterPlan('manual');
+    const queueTaskId = safe(created && created.queue_task_id).trim();
+    if (!queueTaskId) {
+      renderTrainingLoop();
+      return created;
+    }
+    state.tcLoopSelectedQueueTaskId = queueTaskId;
+    state.tcLoopSelectedNodeId = queueTaskId;
+    state.tcLoopMode = 'status';
+    state.tcLoopStatusTab = 'overview';
+    if (mode === 'start') {
+      await executeTrainingCenterQueueTask(queueTaskId);
+    }
+    await refreshTrainingLoopServerData(queueTaskId, { force: true });
+    renderTrainingCenterQueue();
+    renderTrainingLoop();
+    return created;
+  }
+
+  async function renameTrainingCenterQueueTask(queueTaskId, nextTitle) {
+    const qid = safe(queueTaskId).trim();
+    if (!qid) throw new Error('请先选择训练任务');
+    const title = safe(nextTitle).trim();
+    if (!title) throw new Error('任务名称不能为空');
+    const data = await postJSON('/api/training/queue/' + encodeURIComponent(qid) + '/rename', {
+      capability_goal: title,
+      operator: 'web-user',
+    });
+    setTrainingCenterError('');
+    setTrainingCenterRunResult(data);
+    await refreshTrainingCenterQueue();
   }
 
   async function removeTrainingCenterQueueTask(queueTaskId) {
@@ -4147,6 +4891,9 @@
     }
     await refreshTrainingCenterQueue(false);
     await refreshTrainingCenterAgents();
+    if (safe(state.tcLoopSelectedQueueTaskId).trim() === safe(queueTaskId).trim()) {
+      await refreshTrainingLoopServerData(queueTaskId, { force: true });
+    }
   }
 
   async function dispatchNextTrainingCenterQueue() {
@@ -4751,7 +5498,7 @@
       output.queue_sources = Array.from(
         new Set(queueItems.map((row) => safe(row.source).toLowerCase()).filter(Boolean))
       );
-      output.risk_tip = safe((output.api_result && output.api_result.risk_tip) || $('tcOpsRisk').textContent);
+      output.risk_tip = safe((output.api_result && output.api_result.risk_tip) || ($('tcOpsRisk') ? $('tcOpsRisk').textContent : ''));
       output.run_status = safe((output.api_result && output.api_result.status) || '');
       output.git_available = !!selectedDetail.git_available;
       output.status_tags = Array.isArray(selectedDetail.status_tags) ? selectedDetail.status_tags : [];

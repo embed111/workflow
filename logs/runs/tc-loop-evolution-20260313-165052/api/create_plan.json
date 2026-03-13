@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "plan_id": "plan-20260313-165055-ab2ffd",
+  "queue_task_id": "tq-20260313-165055-454d93",
+  "source": "manual",
+  "target_agent_id": "Analyst2",
+  "target_agent_name": "Analyst2",
+  "target_agent_lifecycle_state": "released",
+  "target_agent_training_gate_state": "trainable",
+  "capability_goal": "tc-loop-real-backend 20260313-165052",
+  "training_tasks": [
+    "round task 20260313-165052 A",
+    "round task 20260313-165052 B"
+  ],
+  "acceptance_criteria": "acceptance 20260313-165052",
+  "priority": "P0",
+  "is_test_data": false,
+  "similar_flag": true,
+  "similar_plan_ids": [
+    "plan-20260313-164803-9ee399",
+    "plan-20260313-164717-2e8c1b",
+    "plan-20260313-155909-076848",
+    "plan-20260313-155805-c862c5",
+    "plan-20260313-150934-89bc12",
+    "plan-20260313-150831-405c9b",
+    "plan-20260313-150502-734a5d",
+    "plan-20260313-150414-765a0d"
+  ],
+  "execution_engine": "workflow_native",
+  "can_execute": true,
+  "audit_ids": {
+    "enqueue": "taud-20260313-165055-cccecb",
+    "mark_similar": "taud-20260313-165055-ac25a6"
+  }
+}

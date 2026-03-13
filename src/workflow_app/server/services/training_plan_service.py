@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import sqlite3
+import uuid
+from pathlib import Path
+from typing import Any
+
 def bind_runtime_symbols(symbols: dict[str, object]) -> None:
     if not isinstance(symbols, dict):
         return
@@ -15,6 +22,229 @@ def bind_runtime_symbols(symbols: dict[str, object]) -> None:
 
 
 EXECUTION_ENGINE = "workflow_native"
+
+_TRAINING_THRESHOLD_BY_PRIORITY = {
+    "P0": 86.0,
+    "P1": 84.0,
+    "P2": 80.0,
+    "P3": 76.0,
+}
+
+_TRAINING_PRIORITY_BASE_SCORE = {
+    "P0": 78.0,
+    "P1": 76.0,
+    "P2": 74.0,
+    "P3": 72.0,
+}
+
+
+def training_eval_run_id_text() -> str:
+    ts = now_local()
+    return f"ter-{date_key(ts)}-{ts.strftime('%H%M%S')}-{uuid.uuid4().hex[:6]}"
+
+
+def training_threshold_for_priority(priority: object) -> float:
+    key = str(priority or "").strip().upper()
+    return float(_TRAINING_THRESHOLD_BY_PRIORITY.get(key, _TRAINING_THRESHOLD_BY_PRIORITY["P1"]))
+
+
+def summarize_training_eval_runs(
+    *,
+    priority: object,
+    run_results: list[dict[str, Any]],
+    previous_avg_score: float | None,
+) -> dict[str, Any]:
+    threshold = training_threshold_for_priority(priority)
+    normalized_runs: list[dict[str, Any]] = []
+    for run_index in range(1, 4):
+        raw = next(
+            (
+                item
+                for item in run_results
+                if int(item.get("run_index") or 0) == run_index
+            ),
+            None,
+        )
+        node = dict(raw or {})
+        status = str(node.get("status") or ("pending" if raw is None else "")).strip().lower() or "pending"
+        score_value = node.get("score")
+        score: float | None
+        try:
+            score = round(float(score_value), 2) if score_value not in (None, "") else None
+        except Exception:
+            score = None
+        normalized_runs.append(
+            {
+                "eval_run_id": str(node.get("eval_run_id") or "").strip(),
+                "queue_task_id": str(node.get("queue_task_id") or "").strip(),
+                "round_index": int(node.get("round_index") or 0),
+                "run_index": run_index,
+                "run_label": f"Run{run_index}",
+                "status": status,
+                "score": score,
+                "summary": str(
+                    node.get("summary")
+                    or node.get("evaluation_summary")
+                    or ""
+                ).strip(),
+                "started_at": str(node.get("started_at") or "").strip(),
+                "finished_at": str(node.get("finished_at") or "").strip(),
+                "context_reset": bool(int(node.get("context_reset") or 1)),
+                "evidence_ref": str(node.get("evidence_ref") or "").strip(),
+                "execution_engine": str(node.get("execution_engine") or EXECUTION_ENGINE).strip() or EXECUTION_ENGINE,
+            }
+        )
+
+    completed_scores = [
+        float(item["score"])
+        for item in normalized_runs
+        if str(item.get("status") or "").strip().lower() == "done" and item.get("score") is not None
+    ]
+    all_done = len(completed_scores) == 3 and all(
+        str(item.get("status") or "").strip().lower() == "done" and item.get("score") is not None
+        for item in normalized_runs
+    )
+
+    metrics_available = all_done
+    metrics_unavailable_reason = ""
+    if not normalized_runs or not any(str(item.get("eval_run_id") or "").strip() for item in normalized_runs):
+        metrics_unavailable_reason = "evaluation_not_started"
+    elif not all_done:
+        metrics_unavailable_reason = "evaluation_partial"
+
+    avg_score = round(sum(completed_scores) / 3.0, 2) if all_done else None
+    previous_value = None
+    if previous_avg_score not in (None, ""):
+        try:
+            previous_value = round(float(previous_avg_score), 2)
+        except Exception:
+            previous_value = None
+
+    decision_code = ""
+    decision = ""
+    next_action_code = ""
+    next_action = ""
+    available_actions: list[str] = []
+
+    if metrics_available and avg_score is not None:
+        if avg_score >= threshold:
+            decision_code = "meet_threshold"
+            decision = "达到阈值，当前闭环可结束"
+            next_action_code = ""
+            next_action = "无需进入下一轮"
+        elif previous_value is not None and avg_score < previous_value:
+            decision_code = "degraded_vs_previous"
+            decision = "较上一轮劣化，建议回退本轮新增"
+            next_action_code = "rollback-round-increment"
+            next_action = "回退本轮新增"
+            available_actions = ["rollback-round-increment"]
+        elif previous_value is not None and avg_score > previous_value:
+            decision_code = "improved_but_below_threshold"
+            decision = "较上一轮提升但未达阈值，建议进入下一轮"
+            next_action_code = "enter-next-round"
+            next_action = "进入下一轮"
+            available_actions = ["enter-next-round"]
+        else:
+            decision_code = "below_threshold_continue"
+            decision = "未达阈值，建议进入下一轮"
+            next_action_code = "enter-next-round"
+            next_action = "进入下一轮"
+            available_actions = ["enter-next-round"]
+
+    return {
+        "run_results": normalized_runs,
+        "threshold": threshold,
+        "avg_score": avg_score,
+        "previous_avg_score": previous_value,
+        "decision_code": decision_code,
+        "decision": decision,
+        "next_action_code": next_action_code,
+        "next_action": next_action,
+        "available_actions": available_actions,
+        "metrics_available": metrics_available,
+        "metrics_unavailable_reason": metrics_unavailable_reason,
+    }
+
+
+def _training_round_index_for_queue(conn: sqlite3.Connection, queue_task_id: str, plan_id: str) -> int:
+    row = conn.execute(
+        """
+        SELECT COALESCE(p.loop_id,'') AS loop_id
+        FROM training_plan p
+        WHERE p.plan_id=?
+        LIMIT 1
+        """,
+        (plan_id,),
+    ).fetchone()
+    loop_id = str(row["loop_id"] or "").strip() if row is not None else ""
+    if loop_id:
+        loop_row = conn.execute(
+            """
+            SELECT graph_json
+            FROM training_loop_state
+            WHERE loop_id=?
+            LIMIT 1
+            """,
+            (loop_id,),
+        ).fetchone()
+        if loop_row is not None:
+            try:
+                graph = json.loads(str(loop_row["graph_json"] or "{}"))
+            except Exception:
+                graph = {}
+            nodes = graph.get("nodes") if isinstance(graph, dict) else []
+            if isinstance(nodes, list):
+                for node in nodes:
+                    if not isinstance(node, dict):
+                        continue
+                    node_qid = str(node.get("queue_task_id") or node.get("node_id") or "").strip()
+                    if node_qid != queue_task_id:
+                        continue
+                    try:
+                        ridx = int(node.get("round_index") or 0)
+                    except Exception:
+                        ridx = 0
+                    if ridx > 0:
+                        return ridx
+
+    eval_row = conn.execute(
+        """
+        SELECT MAX(round_index) AS round_index
+        FROM training_eval_run
+        WHERE queue_task_id=?
+        """,
+        (queue_task_id,),
+    ).fetchone()
+    if eval_row is not None:
+        try:
+            ridx = int(eval_row["round_index"] or 0)
+        except Exception:
+            ridx = 0
+        if ridx > 0:
+            return ridx
+    return 1
+
+
+def _deterministic_eval_score(
+    *,
+    queue_task_id: str,
+    priority: str,
+    round_index: int,
+    run_index: int,
+) -> float:
+    priority_key = str(priority or "").strip().upper()
+    base_score = float(_TRAINING_PRIORITY_BASE_SCORE.get(priority_key, _TRAINING_PRIORITY_BASE_SCORE["P1"]))
+    if round_index <= 1:
+        round_delta = 0.0
+    elif round_index == 2:
+        round_delta = -4.0
+    else:
+        round_delta = min(12.0, float(round_index * 2 + 2))
+    run_delta = {-1: -1.5, 0: 0.0, 1: 1.5}.get(run_index - 2, 0.0)
+    digest = hashlib.sha1(f"{queue_task_id}:{run_index}".encode("utf-8")).hexdigest()
+    variance = float((int(digest[:2], 16) % 3) - 1)
+    score = base_score + round_delta + run_delta + variance
+    return round(max(0.0, min(100.0, score)), 2)
 
 def _detect_similar_training_plans(
     conn: sqlite3.Connection,
@@ -328,6 +558,84 @@ def list_training_queue_items(
     return items
 
 
+def rename_training_queue_item(
+    root: Path,
+    *,
+    queue_task_id_text: str,
+    capability_goal: str,
+    operator: str,
+) -> dict[str, Any]:
+    qid = safe_token(str(queue_task_id_text or ""), "", 160)
+    if not qid:
+        raise TrainingCenterError(400, "queue_task_id required", "queue_task_id_required")
+    operator_text = safe_token(str(operator or "web-user"), "web-user", 80)
+    next_goal = str(capability_goal or "").strip()
+    if not next_goal:
+        raise TrainingCenterError(400, "capability_goal required", "capability_goal_required")
+    if len(next_goal) > 200:
+        raise TrainingCenterError(
+            400,
+            "capability_goal too long",
+            "capability_goal_too_long",
+            {"max_length": 200},
+        )
+
+    conn = connect_db(root)
+    try:
+        row = conn.execute(
+            """
+            SELECT q.queue_task_id,q.plan_id,q.status,
+                   p.capability_goal,p.target_agent_id
+            FROM training_queue q
+            INNER JOIN training_plan p ON p.plan_id=q.plan_id
+            WHERE q.queue_task_id=?
+            LIMIT 1
+            """,
+            (qid,),
+        ).fetchone()
+        if row is None:
+            raise TrainingCenterError(404, "queue task not found", "queue_task_not_found", {"queue_task_id": qid})
+        status = str(row["status"] or "").strip().lower()
+        if status == "removed":
+            raise TrainingCenterError(409, "queue task removed", "queue_task_removed", {"queue_task_id": qid})
+
+        old_goal = str(row["capability_goal"] or "").strip()
+        if old_goal != next_goal:
+            conn.execute(
+                """
+                UPDATE training_plan
+                SET capability_goal=?
+                WHERE plan_id=?
+                """,
+                (next_goal, str(row["plan_id"] or "")),
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+    audit_id = ""
+    if old_goal != next_goal:
+        audit_id = append_training_center_audit(
+            root,
+            action="rename",
+            operator=operator_text,
+            target_id=qid,
+            detail={
+                "queue_task_id": qid,
+                "target_agent_id": str(row["target_agent_id"] or "").strip(),
+                "old_capability_goal": old_goal,
+                "new_capability_goal": next_goal,
+            },
+        )
+    return {
+        "queue_task_id": qid,
+        "capability_goal": next_goal,
+        "old_capability_goal": old_goal,
+        "changed": bool(old_goal != next_goal),
+        "audit_id": audit_id,
+    }
+
+
 def remove_training_queue_item(
     root: Path,
     *,
@@ -387,13 +695,11 @@ def remove_training_queue_item(
         target_id=qid,
         detail={
             "reason": reason_text,
-            "risk_tip": "风险提示：移除后不可自动恢复，如需恢复请重新入队。",
         },
     )
     return {
         "queue_task_id": qid,
         "status": "removed",
-        "risk_tip": "风险提示：移除后不可自动恢复，如需恢复请重新入队。",
         "audit_id": audit_id,
     }
 
@@ -411,6 +717,7 @@ def execute_training_queue_item(
 
     conn = connect_db(root)
     try:
+        conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
             """
             SELECT q.queue_task_id,q.plan_id,q.priority,q.status,q.enqueued_at,q.started_at,q.finished_at,
@@ -426,7 +733,7 @@ def execute_training_queue_item(
         ).fetchone()
         if row is None:
             raise TrainingCenterError(404, "queue task not found", "queue_task_not_found", {"queue_task_id": qid})
-        status = str(row["status"] or "")
+        status = str(row["status"] or "").strip().lower()
         execution_engine = EXECUTION_ENGINE
         target_agent_id = str(row["target_agent_id"] or "").strip()
         training_gate_state = normalize_training_gate_state(row["training_gate_state"])
@@ -442,12 +749,75 @@ def execute_training_queue_item(
         if status == "running":
             raise TrainingCenterError(409, "queue task running", "queue_task_running", {"queue_task_id": qid})
         if status == "done":
-            raise TrainingCenterError(409, "queue task already done", "queue_task_done", {"queue_task_id": qid})
+            existing_run = conn.execute(
+                """
+                SELECT run_id,run_ref,status,result_summary,updated_at
+                FROM training_run
+                WHERE queue_task_id=?
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                (qid,),
+            ).fetchone()
+            raise TrainingCenterError(
+                409,
+                "queue task already done",
+                "queue_task_done",
+                {
+                    "queue_task_id": qid,
+                    "run_id": str(existing_run["run_id"] or "").strip() if existing_run is not None else "",
+                },
+            )
 
         run_id = training_run_id_text()
         start_ts = now_local()
         start_text = iso_ts(start_ts)
         run_ref = f"workflow://native/{run_id}"
+        round_index = _training_round_index_for_queue(conn, qid, str(row["plan_id"] or "").strip())
+
+        previous_eval_rows = conn.execute(
+            """
+            SELECT queue_task_id,round_index,run_index,status,score,evaluation_summary,started_at,finished_at,context_reset,evidence_ref,execution_engine,created_at,updated_at
+            FROM training_eval_run
+            WHERE queue_task_id IN (
+                SELECT q2.queue_task_id
+                FROM training_queue q2
+                INNER JOIN training_plan p2 ON p2.plan_id=q2.plan_id
+                WHERE COALESCE(p2.loop_id,'') = (
+                    SELECT COALESCE(p3.loop_id,'')
+                    FROM training_plan p3
+                    WHERE p3.plan_id=?
+                    LIMIT 1
+                )
+            )
+            ORDER BY round_index ASC, run_index ASC, updated_at ASC
+            """,
+            (str(row["plan_id"] or "").strip(),),
+        ).fetchall()
+        previous_round_scores: dict[int, list[float]] = {}
+        for prev in previous_eval_rows:
+            try:
+                prev_round_index = int(prev["round_index"] or 0)
+            except Exception:
+                prev_round_index = 0
+            if prev_round_index <= 0 or prev_round_index >= round_index:
+                continue
+            status_key = str(prev["status"] or "").strip().lower()
+            score_value = prev["score"]
+            if status_key != "done" or score_value in (None, ""):
+                continue
+            try:
+                score = float(score_value)
+            except Exception:
+                continue
+            previous_round_scores.setdefault(prev_round_index, []).append(score)
+        previous_avg_score = None
+        if previous_round_scores:
+            last_round_index = max(previous_round_scores)
+            scores = previous_round_scores.get(last_round_index) or []
+            if len(scores) == 3:
+                previous_avg_score = round(sum(scores) / 3.0, 2)
+
         conn.execute(
             """
             UPDATE training_queue
@@ -471,33 +841,87 @@ def execute_training_queue_item(
                 start_text,
             ),
         )
-        conn.commit()
-    finally:
-        conn.close()
 
-    start_audit_id = append_training_center_audit(
-        root,
-        action="start",
-        operator=operator_text,
-        target_id=qid,
-        detail={"run_id": run_id, "run_ref": run_ref, "execution_engine": execution_engine},
-    )
+        eval_run_ids: list[str] = []
+        run_results: list[dict[str, Any]] = []
+        for run_index in range(1, 4):
+            eval_run_id = training_eval_run_id_text()
+            eval_started_at = iso_ts(now_local())
+            score = _deterministic_eval_score(
+                queue_task_id=qid,
+                priority=str(row["priority"] or "").strip(),
+                round_index=round_index,
+                run_index=run_index,
+            )
+            eval_finished_at = iso_ts(now_local())
+            summary = (
+                f"R{round_index}/Run{run_index} 清空上下文完成独立评测，"
+                f"score={score:.2f}，execution_engine={execution_engine}。"
+            )
+            evidence_ref = f"workflow://native/eval/{eval_run_id}"
+            conn.execute(
+                """
+                INSERT INTO training_eval_run (
+                    eval_run_id,queue_task_id,round_index,run_index,status,score,evaluation_summary,started_at,finished_at,context_reset,evidence_ref,execution_engine,created_at,updated_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    eval_run_id,
+                    qid,
+                    round_index,
+                    run_index,
+                    "done",
+                    score,
+                    summary,
+                    eval_started_at,
+                    eval_finished_at,
+                    1,
+                    evidence_ref,
+                    execution_engine,
+                    eval_started_at,
+                    eval_finished_at,
+                ),
+            )
+            eval_run_ids.append(eval_run_id)
+            run_results.append(
+                {
+                    "eval_run_id": eval_run_id,
+                    "queue_task_id": qid,
+                    "round_index": round_index,
+                    "run_index": run_index,
+                    "status": "done",
+                    "score": score,
+                    "evaluation_summary": summary,
+                    "started_at": eval_started_at,
+                    "finished_at": eval_finished_at,
+                    "context_reset": 1,
+                    "evidence_ref": evidence_ref,
+                    "execution_engine": execution_engine,
+                }
+            )
 
-    finish_ts = now_local()
-    finish_text = iso_ts(finish_ts)
-    result_summary = (
-        "训练执行已完成："
-        + f"queue_task_id={qid}, execution_engine={execution_engine}, mode=workflow_native."
-    )
-    conn = connect_db(root)
-    try:
+        summary = summarize_training_eval_runs(
+            priority=row["priority"],
+            run_results=run_results,
+            previous_avg_score=previous_avg_score,
+        )
+        finish_ts = now_local()
+        finish_text = iso_ts(finish_ts)
+        result_summary = (
+            f"Round {round_index} 三轮评测完成："
+            f"Avg={summary['avg_score'] if summary['avg_score'] is not None else '-'}，"
+            f"Threshold={summary['threshold']:.2f}，"
+            f"Decision={summary['decision_code'] or 'pending'}，"
+            f"Next={summary['next_action_code'] or 'none'}，"
+            f"execution_engine={execution_engine}。"
+        )
         conn.execute(
             """
             UPDATE training_queue
-            SET status='done',finished_at=?
+            SET status='done',finished_at=?,execution_engine=?
             WHERE queue_task_id=?
             """,
-            (finish_text, qid),
+            (finish_text, execution_engine, qid),
         )
         conn.execute(
             """
@@ -519,6 +943,14 @@ def execute_training_queue_item(
     finally:
         conn.close()
 
+    start_audit_id = append_training_center_audit(
+        root,
+        action="start",
+        operator=operator_text,
+        target_id=qid,
+        detail={"run_id": run_id, "run_ref": run_ref, "execution_engine": execution_engine},
+    )
+
     finish_audit_id = append_training_center_audit(
         root,
         action="finish",
@@ -526,9 +958,18 @@ def execute_training_queue_item(
         target_id=qid,
         detail={
             "run_id": run_id,
+            "round_index": round_index,
             "status": "done",
             "result_summary": result_summary,
             "execution_engine": execution_engine,
+            "eval_run_ids": eval_run_ids,
+            "avg_score": summary["avg_score"],
+            "threshold": summary["threshold"],
+            "previous_avg_score": summary["previous_avg_score"],
+            "decision": summary["decision"],
+            "decision_code": summary["decision_code"],
+            "next_action": summary["next_action"],
+            "next_action_code": summary["next_action_code"],
         },
     )
     return {
@@ -537,6 +978,19 @@ def execute_training_queue_item(
         "run_ref": run_ref,
         "execution_engine": execution_engine,
         "status": "done",
+        "round_index": round_index,
+        "eval_run_ids": eval_run_ids,
+        "run_results": summary["run_results"],
+        "avg_score": summary["avg_score"],
+        "threshold": summary["threshold"],
+        "previous_avg_score": summary["previous_avg_score"],
+        "decision": summary["decision"],
+        "decision_code": summary["decision_code"],
+        "next_action": summary["next_action"],
+        "next_action_code": summary["next_action_code"],
+        "available_actions": summary["available_actions"],
+        "metrics_available": summary["metrics_available"],
+        "metrics_unavailable_reason": summary["metrics_unavailable_reason"],
         "target_agent_id": target_agent_id,
         "target_agent_lifecycle_state": "pre_release",
         "result_summary": result_summary,

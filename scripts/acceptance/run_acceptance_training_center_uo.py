@@ -432,7 +432,7 @@ def main() -> int:
         path09 = f"/api/training/queue/{qid05}/remove"
         st09, body09 = call(base_url, "POST", path09, payload09)
         api09 = api_file("ac_uo_09_remove", "POST", path09, payload09, st09, body09)
-        ac["AC-UO-09"] = {"pass": bool(st09 == 200 and body09.get("status") == "removed" and str(body09.get("risk_tip") or "").strip()), "api": [api09]}
+        ac["AC-UO-09"] = {"pass": bool(st09 == 200 and body09.get("status") == "removed"), "api": [api09]}
         dump_sql(db_path, "SELECT queue_task_id,status,finished_at FROM training_queue WHERE queue_task_id=?", (qid05,), db_dir / "ac_uo_09_queue_removed.db.json")
         dump_sql(db_path, "SELECT audit_id,action,target_id,detail_json,created_at FROM training_audit_log WHERE action='remove' AND target_id=? ORDER BY created_at DESC LIMIT 5", (qid05,), db_dir / "ac_uo_09_remove_audit.db.json")
 

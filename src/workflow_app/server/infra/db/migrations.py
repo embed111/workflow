@@ -176,6 +176,18 @@ def ensure_tables(
             "CREATE INDEX IF NOT EXISTS idx_tr_queue_updated ON training_run(queue_task_id,updated_at DESC)"
         )
         conn.execute(
+            "CREATE TABLE IF NOT EXISTS training_eval_run (eval_run_id TEXT PRIMARY KEY,queue_task_id TEXT NOT NULL,round_index INTEGER NOT NULL DEFAULT 0,run_index INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'pending',score REAL,evaluation_summary TEXT NOT NULL DEFAULT '',started_at TEXT NOT NULL DEFAULT '',finished_at TEXT NOT NULL DEFAULT '',context_reset INTEGER NOT NULL DEFAULT 1,evidence_ref TEXT NOT NULL DEFAULT '',execution_engine TEXT NOT NULL DEFAULT 'workflow_native',created_at TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL DEFAULT '')"
+        )
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_ter_queue_run ON training_eval_run(queue_task_id,run_index)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ter_queue_updated ON training_eval_run(queue_task_id,updated_at DESC)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ter_round_updated ON training_eval_run(round_index,updated_at DESC)"
+        )
+        conn.execute(
             "CREATE TABLE IF NOT EXISTS training_audit_log (audit_id TEXT PRIMARY KEY,action TEXT NOT NULL,operator TEXT NOT NULL,target_id TEXT NOT NULL,detail_json TEXT NOT NULL DEFAULT '{}',created_at TEXT NOT NULL)"
         )
         conn.execute(

@@ -150,6 +150,52 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
             handler.send_json(exc.status_code, payload)
         return True
 
+    mtstatus = re.fullmatch(r"/api/training/queue/([0-9A-Za-z._:-]+)/status-detail", path)
+    if mtstatus:
+        if not root_ready:
+            handler.send_json(
+                200,
+                {
+                    "ok": True,
+                    "queue_task_id": ws.safe_token(mtstatus.group(1), "", 160),
+                    "loop_id": "",
+                    "current_node_id": "",
+                    "execution_engine": "workflow_native",
+                    "current_overview": {},
+                    "workset_changes": {},
+                    "evaluations": [],
+                    "history_records": [],
+                    "is_test_data": False,
+                    "show_test_data": bool(ws.current_show_test_data(cfg, state)),
+                    "include_test_data": bool(ws.current_show_test_data(cfg, state)),
+                    "agent_search_root": root_text,
+                    "agent_search_root_ready": False,
+                    "features_locked": True,
+                },
+            )
+            return True
+        include_test_data = ws.resolve_include_test_data(query, cfg, state)
+        try:
+            data = ws.get_training_queue_status_detail(
+                cfg.root,
+                ws.safe_token(mtstatus.group(1), "", 160),
+                include_test_data=include_test_data,
+            )
+            handler.send_json(
+                200,
+                {
+                    "ok": True,
+                    **data,
+                    "include_test_data": include_test_data,
+                    "show_test_data": bool(ws.current_show_test_data(cfg, state)),
+                },
+            )
+        except ws.TrainingCenterError as exc:
+            payload = {"ok": False, "error": str(exc), "code": exc.code}
+            payload.update(exc.extra)
+            handler.send_json(exc.status_code, payload)
+        return True
+
     mrun = re.fullmatch(r"/api/training/runs/([0-9A-Za-z._:-]+)", path)
     if mrun:
         data = ws.get_training_run_detail(cfg.root, ws.safe_token(mrun.group(1), "", 160))
@@ -402,6 +448,27 @@ def try_handle_post(handler, cfg, state, ctx: dict) -> bool:
                 queue_task_id_text=ws.safe_token(mtrm.group(1), "", 160),
                 operator=str(body.get("operator") or "web-user"),
                 reason=str(body.get("reason") or ""),
+            )
+            handler.send_json(200, {"ok": True, **data})
+        except ws.TrainingCenterError as exc:
+            payload = {"ok": False, "error": str(exc), "code": exc.code}
+            payload.update(exc.extra)
+            handler.send_json(exc.status_code, payload)
+        return True
+
+    mtrn = re.fullmatch(r"/api/training/queue/([0-9A-Za-z._:-]+)/rename", path)
+    if mtrn:
+        try:
+            data = ws.rename_training_queue_item(
+                cfg.root,
+                queue_task_id_text=ws.safe_token(mtrn.group(1), "", 160),
+                capability_goal=str(
+                    body.get("capability_goal")
+                    or body.get("title")
+                    or body.get("name")
+                    or ""
+                ).strip(),
+                operator=str(body.get("operator") or "web-user"),
             )
             handler.send_json(200, {"ok": True, **data})
         except ws.TrainingCenterError as exc:

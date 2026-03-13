@@ -205,7 +205,15 @@
 
     .module-tabs,
     .mode-tabs,
-    .detail-tabs,
+    .detail-tabs {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--line);
+    }
+
     .chip-row,
     .action-row {
       display: flex;
@@ -217,20 +225,58 @@
     .module-tab,
     .mode-tab,
     .detail-tab {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
-      color: var(--text);
-      padding: 6px 12px;
-      font-weight: 600;
+      position: relative;
+      border: none;
+      border-radius: 7px 7px 0 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 4px 8px 5px;
+      font-weight: 700;
+      line-height: 1.2;
+      min-width: 0;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: background-color 120ms ease, color 120ms ease;
+    }
+
+    .module-tab::after,
+    .mode-tab::after,
+    .detail-tab::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -7px;
+      height: 2px;
+      border-radius: 999px;
+      background: transparent;
     }
 
     .module-tab.active,
     .mode-tab.active,
     .detail-tab.active {
-      border-color: var(--accent);
+      color: #245bdb;
+      background: #f5f8ff;
+    }
+
+    .module-tab.active::after,
+    .mode-tab.active::after,
+    .detail-tab.active::after {
       background: var(--accent);
-      color: #fff;
+    }
+
+    .detail-tab:focus-visible {
+      box-shadow: inset 0 0 0 1px rgba(36, 91, 219, 0.18);
+      outline: none;
+    }
+
+    .detail-tab {
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      font: inherit;
     }
 
     .risk-line {
@@ -323,6 +369,36 @@
       overflow: hidden;
     }
 
+    .middle-pane-scroll {
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-right: 4px;
+      padding-bottom: 8px;
+      scrollbar-width: thin;
+      scrollbar-color: #c9cfda #f5f6f8;
+      scrollbar-gutter: stable;
+    }
+
+    .middle-pane-scroll > * {
+      flex-shrink: 0;
+    }
+
+    .middle-pane-scroll::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+
+    .middle-pane-scroll::-webkit-scrollbar-track {
+      background: #f5f6f8;
+      border-radius: 999px;
+    }
+
+    .middle-pane-scroll::-webkit-scrollbar-thumb {
+      background: #c9cfda;
+      border-radius: 999px;
+      border: 2px solid #f5f6f8;
+    }
+
     .column-shell {
       display: flex;
       flex-direction: column;
@@ -413,6 +489,11 @@
     }
 
     .task-card.active {
+      border-color: #c8d9ff;
+      background: #f5f8ff;
+    }
+
+    .task-card.create {
       border-color: #c8d9ff;
       background: #f5f8ff;
     }
@@ -807,20 +888,27 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
-      flex: 1 1 auto;
-      min-height: 0;
-      overflow: hidden;
+      flex: 0 0 auto;
+      min-height: auto;
+      overflow: visible;
+    }
+
+    .detail-view-head {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 0 0 auto;
+      padding-bottom: 2px;
     }
 
     .detail-scroll {
       display: flex;
       flex-direction: column;
       gap: 8px;
-      flex: 1 1 auto;
-      min-height: 0;
-      overflow-y: scroll;
-      overflow-x: hidden;
-      padding-right: 4px;
+      flex: 0 0 auto;
+      min-height: auto;
+      overflow: visible;
+      padding-right: 0;
       scrollbar-width: thin;
       scrollbar-color: #c9cfda #f5f6f8;
       scrollbar-gutter: stable;
@@ -840,6 +928,17 @@
       background: #c9cfda;
       border-radius: 999px;
       border: 2px solid #f5f6f8;
+    }
+
+    .detail-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 0;
+    }
+
+    .detail-panel[hidden] {
+      display: none !important;
     }
 
     .fold-stack {
@@ -1021,6 +1120,43 @@
       color: var(--text);
     }
 
+    .detail-helper {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .tab-preview-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .tab-preview-card {
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 8px 9px;
+    }
+
+    .tab-preview-card.active {
+      border-color: #c8d9ff;
+      background: #f5f8ff;
+    }
+
+    .tab-preview-k {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .tab-preview-v {
+      margin-top: 4px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.45;
+    }
+
     .mini-table {
       margin-top: 8px;
       border: 1px solid var(--line);
@@ -1114,9 +1250,49 @@
         grid-template-columns: 196px minmax(0, 1fr) 202px;
       }
 
+      .process-steps {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 6px;
+      }
+
+      .process-step {
+        padding: 6px;
+        gap: 6px;
+        min-height: 0;
+        align-items: center;
+      }
+
+      .process-step-index {
+        width: 18px;
+        height: 18px;
+        font-size: 11px;
+      }
+
+      .process-step-title {
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .process-step-desc {
+        display: none;
+      }
+
+      .detail-tabs {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+        align-items: stretch;
+      }
+
+      .detail-tab {
+        padding: 4px 6px 4px;
+        font-size: 12px;
+      }
+
       .reading-line,
       .process-status,
-      .process-steps,
       .process-meta-grid,
       .hero-grid,
       .summary-grid,
@@ -1193,10 +1369,6 @@
             <div class="module-tab">角色资产与版本</div>
             <div class="module-tab active">训练闭环</div>
           </div>
-          <div class="mode-tabs">
-            <div class="mode-tab">创建任务</div>
-            <div class="mode-tab active">任务状态</div>
-          </div>
         </div>
 
         <div class="workbench">
@@ -1206,7 +1378,6 @@
                 <div>
                   <div class="panel-title">训练任务</div>
                 </div>
-                <button>新建任务</button>
               </div>
 
               <div class="task-toolbar">
@@ -1222,6 +1393,11 @@
               </div>
 
               <div class="task-list" style="margin-top: 8px;">
+                <div class="task-card create">
+                  <div class="task-name">+ 新建训练任务</div>
+                  <div class="task-meta">从这里进入创建态；已有任务仍在同一列表内切换查看。</div>
+                </div>
+
                 <div class="task-card active">
                   <div class="task-name">开发者训练计划1</div>
                   <div class="task-goal">目标能力：代码重构能力</div>
@@ -1306,7 +1482,7 @@
           </aside>
 
           <section class="center-pane">
-            <section class="panel column-shell">
+            <section class="panel column-shell middle-pane-scroll" data-tab-scroll-root="status-main">
               <div class="process-card">
                 <div class="process-head">
                   <div>
@@ -1438,156 +1614,302 @@
               <div class="panel-head detail-head">
                 <div>
                   <div class="panel-title">任务状态详情</div>
-                  <div class="panel-desc">当前展示第 2 轮结果判定所需的评分摘要、工作集变化与判定依据。</div>
+                  <div class="panel-desc">查看当前阶段摘要、工作集变化、三轮评测与历史记录。</div>
                 </div>
               </div>
 
               <div class="detail-shell">
-                <div class="detail-scroll">
-                  <div class="detail-tabs">
-                    <div class="detail-tab active">本轮评分摘要</div>
-                    <div class="detail-tab">本轮工作集变化</div>
-                    <div class="detail-tab">当前判定原因</div>
+                <div class="detail-view-head">
+                  <div class="detail-tabs" role="tablist" aria-label="任务状态详情切换">
+                    <button type="button" class="detail-tab active" id="status-tab-overview" role="tab" aria-selected="true" aria-controls="status-panel-overview" data-tab-group="status-main" data-tab-target="status-panel-overview">当前概览</button>
+                    <button type="button" class="detail-tab" id="status-tab-workset" role="tab" aria-selected="false" aria-controls="status-panel-workset" data-tab-group="status-main" data-tab-target="status-panel-workset" tabindex="-1">工作集变化</button>
+                    <button type="button" class="detail-tab" id="status-tab-eval" role="tab" aria-selected="false" aria-controls="status-panel-eval" data-tab-group="status-main" data-tab-target="status-panel-eval" tabindex="-1">三轮评测</button>
+                    <button type="button" class="detail-tab" id="status-tab-history" role="tab" aria-selected="false" aria-controls="status-panel-history" data-tab-group="status-main" data-tab-target="status-panel-history" tabindex="-1">历史记录</button>
                   </div>
-
-                  <div class="summary-card">
-                    <div class="summary-title">本轮评分摘要</div>
-                    <div class="summary-body">第 2 轮三次独立评测已完成，Avg 为 78.3，较上一轮提升 7.1，但仍未达到阈值 85。</div>
-                    <div class="kv-grid" style="margin-top: 8px;">
-                      <div class="kv-card">
-                        <div class="kv-k">本轮 Avg</div>
-                        <div class="kv-v">78.3</div>
+                </div>
+                <div class="detail-scroll" data-tab-scroll-root="status-main">
+                  <div class="detail-panel" id="status-panel-overview" role="tabpanel" aria-labelledby="status-tab-overview" data-tab-panel="status-main">
+                    <div class="summary-card">
+                      <div class="summary-title">当前概览</div>
+                      <div class="summary-body">第 2 轮三次独立评测已完成，当前只保留本轮判断所需的核心信息：Avg 为 78.3，较上一轮提升 7.1，但仍未达到阈值 85，因此建议继续下一轮。</div>
+                      <div class="kv-grid" style="margin-top: 8px;">
+                        <div class="kv-card">
+                          <div class="kv-k">本轮 Avg</div>
+                          <div class="kv-v">78.3</div>
+                        </div>
+                        <div class="kv-card">
+                          <div class="kv-k">阈值</div>
+                          <div class="kv-v">85</div>
+                        </div>
+                        <div class="kv-card">
+                          <div class="kv-k">较上一轮</div>
+                          <div class="kv-v">+7.1</div>
+                        </div>
+                        <div class="kv-card">
+                          <div class="kv-k">当前建议</div>
+                          <div class="kv-v">保留工作集进入第 3 轮</div>
+                        </div>
                       </div>
-                      <div class="kv-card">
-                        <div class="kv-k">阈值</div>
-                        <div class="kv-v">85</div>
-                      </div>
-                      <div class="kv-card">
-                        <div class="kv-k">较上一轮</div>
-                        <div class="kv-v">+7.1</div>
-                      </div>
-                      <div class="kv-card">
-                        <div class="kv-k">当前建议</div>
-                        <div class="kv-v">保留工作集进入第 3 轮</div>
+                      <div class="compact-list" style="margin-top: 10px;">
+                        <div class="compact-item">
+                          <div class="k">当前观察</div>
+                          <div class="v">本轮平均分较上一轮提升明显，但仍未达到阈值，建议保留有效工作集后继续下一轮。</div>
+                        </div>
                       </div>
                     </div>
-                    <div class="compact-list" style="margin-top: 10px;">
+
+                    <div class="fold-stack">
+                      <details class="fold-card">
+                        <summary>
+                          <span class="fold-title-wrap">
+                            <span class="fold-title">当前概览下的原始证据</span>
+                            <span class="fold-desc">展开查看当前概览对应的原始证据与引用明细。</span>
+                          </span>
+                          <span class="fold-state low">三级</span>
+                        </summary>
+                        <div class="fold-body">
+                          <div class="mini-table">
+                            <div class="mini-row head">
+                              <div>用例</div>
+                              <div>R1</div>
+                              <div>R2</div>
+                              <div>R3</div>
+                              <div>Avg</div>
+                            </div>
+                            <div class="mini-row">
+                              <div>重构重复逻辑</div>
+                              <div>76</div>
+                              <div>80</div>
+                              <div>79</div>
+                              <div class="score-avg">78.3</div>
+                            </div>
+                            <div class="mini-row">
+                              <div>提炼公共函数</div>
+                              <div>82</div>
+                              <div>81</div>
+                              <div>84</div>
+                              <div class="score-avg">82.3</div>
+                            </div>
+                            <div class="mini-row">
+                              <div>删除坏味道</div>
+                              <div>74</div>
+                              <div>75</div>
+                              <div>77</div>
+                              <div class="score-avg">75.3</div>
+                            </div>
+                          </div>
+                        </div>
+                      </details>
+                    </div>
+                  </div>
+
+                  <div class="detail-panel" id="status-panel-workset" role="tabpanel" aria-labelledby="status-tab-workset" data-tab-panel="status-main" hidden>
+                    <div class="summary-card">
+                      <div class="summary-title">工作集变化</div>
+                      <div class="summary-body">这一页专门看当前主线保留了什么、新增了什么、哪些内容因为劣化而被回退，不和评分信息混读。</div>
+                      <div class="kv-grid" style="margin-top: 8px;">
+                        <div class="kv-card">
+                          <div class="kv-k">新增资料</div>
+                          <div class="kv-v">2 份</div>
+                        </div>
+                        <div class="kv-card">
+                          <div class="kv-k">新增 Skill</div>
+                          <div class="kv-v">1 个</div>
+                        </div>
+                        <div class="kv-card">
+                          <div class="kv-k">已回退分支</div>
+                          <div class="kv-v">R1-A</div>
+                        </div>
+                        <div class="kv-card">
+                          <div class="kv-k">当前装载</div>
+                          <div class="kv-v">R1-B 主线工作集</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="compact-list">
                       <div class="compact-item">
-                        <div class="k">当前观察</div>
-                        <div class="v">提升最明显的是“提炼公共函数”，最不稳定的是“删除坏味道”；完整 `Run1/Run2/Run3` 表继续放在下方三级折叠区。</div>
+                        <div class="k">本轮新增资料</div>
+                        <div class="v">`高密度状态页拆层案例.md`、`训练闭环分叉回退说明.md`</div>
                       </div>
+                      <div class="compact-item">
+                        <div class="k">本轮新增 Skill</div>
+                        <div class="v">`training-loop-evidence-prioritizer`，用于优先提取当前轮核心证据。</div>
+                      </div>
+                      <div class="compact-item">
+                        <div class="k">回退影响</div>
+                        <div class="v">`R1-A` 的低质量补充资料已剔除，不再继续进入后续轮次。</div>
+                      </div>
+                    </div>
+
+                    <div class="fold-stack">
+                      <details class="fold-card">
+                        <summary>
+                          <span class="fold-title-wrap">
+                            <span class="fold-title">工作集明细</span>
+                            <span class="fold-desc">展开查看当前主线保留项与回退项。</span>
+                          </span>
+                          <span class="fold-state low">三级</span>
+                        </summary>
+                        <div class="fold-body">
+                          <div class="summary-list" style="margin-top: 0;">
+                            <div class="summary-item">
+                              <div class="k">保留</div>
+                              <div class="v">首轮参考资料 2 份 + `training-loop-evidence-prioritizer` Skill</div>
+                            </div>
+                            <div class="summary-item">
+                              <div class="k">新增</div>
+                              <div class="v">针对信息密度压缩与中部滚动 fallback 的补充规则</div>
+                            </div>
+                            <div class="summary-item">
+                              <div class="k">回退</div>
+                              <div class="v">`R1-A` 中导致能力劣化的冗余案例与错误示例</div>
+                            </div>
+                          </div>
+                        </div>
+                      </details>
                     </div>
                   </div>
 
-                  <div class="fold-stack">
+                  <div class="detail-panel" id="status-panel-eval" role="tabpanel" aria-labelledby="status-tab-eval" data-tab-panel="status-main" hidden>
+                    <div class="summary-card">
+                      <div class="summary-title">三轮评测</div>
+                      <div class="summary-body">把当前轮三次独立运行结果集中看，不和工作集变化、历史回退挤在一个阅读面里。</div>
+                      <div class="kv-grid" style="margin-top: 8px;">
+                        <div class="kv-card">
+                          <div class="kv-k">Run1</div>
+                          <div class="kv-v">76.8</div>
+                        </div>
+                        <div class="kv-card">
+                          <div class="kv-k">Run2</div>
+                          <div class="kv-v">79.5</div>
+                        </div>
+                        <div class="kv-card">
+                          <div class="kv-k">Run3</div>
+                          <div class="kv-v">78.6</div>
+                        </div>
+                        <div class="kv-card">
+                          <div class="kv-k">Avg</div>
+                          <div class="kv-v">78.3</div>
+                        </div>
+                        <div class="kv-card">
+                          <div class="kv-k">波动范围</div>
+                          <div class="kv-v">2.7</div>
+                        </div>
+                        <div class="kv-card">
+                          <div class="kv-k">判定</div>
+                          <div class="kv-v">提升但仍不足阈值</div>
+                        </div>
+                      </div>
+                    </div>
 
-                <details class="fold-card">
-                  <summary>
-                    <span class="fold-title-wrap">
-                      <span class="fold-title">Run1 / Run2 / Run3 完整明细</span>
-                      <span class="fold-desc">完整评分明细保留在同页，但默认折叠，避免首屏像日志页。</span>
-                    </span>
-                    <span class="fold-state low">三级</span>
-                  </summary>
-                  <div class="fold-body">
                     <div class="mini-table">
                       <div class="mini-row head">
                         <div>用例</div>
-                        <div>R1</div>
-                        <div>R2</div>
-                        <div>R3</div>
+                        <div>Run1</div>
+                        <div>Run2</div>
+                        <div>Run3</div>
                         <div>Avg</div>
                       </div>
                       <div class="mini-row">
-                        <div>重构重复逻辑</div>
-                        <div>76</div>
-                        <div>80</div>
+                        <div>高密度看板收敛</div>
+                        <div>74</div>
                         <div>79</div>
-                        <div class="score-avg">78.3</div>
+                        <div>78</div>
+                        <div class="score-avg">77.0</div>
                       </div>
                       <div class="mini-row">
-                        <div>提炼公共函数</div>
-                        <div>82</div>
+                        <div>滚动分层约束</div>
                         <div>81</div>
+                        <div>82</div>
                         <div>84</div>
                         <div class="score-avg">82.3</div>
                       </div>
                       <div class="mini-row">
-                        <div>删除坏味道</div>
-                        <div>74</div>
+                        <div>页签导航可发现性</div>
                         <div>75</div>
-                        <div>77</div>
-                        <div class="score-avg">75.3</div>
+                        <div>78</div>
+                        <div>76</div>
+                        <div class="score-avg">76.3</div>
                       </div>
                     </div>
-                  </div>
-                </details>
 
-                <details class="fold-card">
-                  <summary>
-                    <span class="fold-title-wrap">
-                      <span class="fold-title">候选资料与未采纳原因</span>
-                      <span class="fold-desc">候选资料继续保留，但降级为按需查看，避免和生效工作集并列争抢注意力。</span>
-                    </span>
-                    <span class="fold-state low">三级</span>
-                  </summary>
-                  <div class="fold-body">
-                    <div class="compact-list">
-                      <div class="compact-item">
-                        <div class="k">候选资料 A</div>
-                        <div class="v">`large-refactor-case.md`，未采纳：案例跨度过大，和当前任务不够贴合。</div>
-                      </div>
-                      <div class="compact-item">
-                        <div class="k">候选资料 B</div>
-                        <div class="v">`cleanup-smells.md`，未采纳：与现有 Skill 重复度高，当前轮收益有限。</div>
-                      </div>
+                    <div class="fold-stack">
+                      <details class="fold-card">
+                        <summary>
+                          <span class="fold-title-wrap">
+                            <span class="fold-title">不稳定项说明</span>
+                            <span class="fold-desc">展开查看当前轮的波动来源。</span>
+                          </span>
+                          <span class="fold-state low">三级</span>
+                        </summary>
+                        <div class="fold-body">
+                          <div class="compact-list">
+                            <div class="compact-item">
+                              <div class="k">最高波动用例</div>
+                              <div class="v">`高密度看板收敛` 在 `Run1 -> Run2` 提升较大，说明信息分层策略已部分生效但仍不稳定。</div>
+                            </div>
+                            <div class="compact-item">
+                              <div class="k">当前风险</div>
+                              <div class="v">页签可切换后，可发现性问题下降，但若继续堆叠更多二级信息仍可能回到高密度状态。</div>
+                            </div>
+                          </div>
+                        </div>
+                      </details>
                     </div>
                   </div>
-                </details>
 
-                <details class="fold-card">
-                  <summary>
-                    <span class="fold-title-wrap">
-                      <span class="fold-title">完整迭代记录</span>
-                      <span class="fold-desc">历史轮次仍可追溯，但不再默认占据总览区主视线。</span>
-                    </span>
-                    <span class="fold-state low">三级</span>
-                  </summary>
-                  <div class="fold-body">
-                    <div class="compact-list">
-                      <div class="compact-item">
-                        <div class="k">第 1 轮</div>
-                        <div class="v">建立基线，Avg 71.2；发现主要问题在重复逻辑拆分不稳定。</div>
-                      </div>
-                      <div class="compact-item">
-                        <div class="k">第 2 轮</div>
-                        <div class="v">新增 2 份资料 + 1 个 Skill，Avg 78.3；保持正向提升但仍未过阈值。</div>
+                  <div class="detail-panel" id="status-panel-history" role="tabpanel" aria-labelledby="status-tab-history" data-tab-panel="status-main" hidden>
+                    <div class="summary-card">
+                      <div class="summary-title">历史记录</div>
+                      <div class="summary-body">这里专门看 `R0 -> R1-A/R1-B -> R2` 的演进，不把历史说明塞回当前概览里。</div>
+                      <div class="summary-list">
+                        <div class="summary-item">
+                          <div class="k">R0 基线</div>
+                          <div class="v">Avg 71.2，确认需要补充训练资料与技能约束。</div>
+                        </div>
+                        <div class="summary-item">
+                          <div class="k">R1-A 劣化</div>
+                          <div class="v">Avg 68.4，能力下降，已回退该分支新增内容。</div>
+                        </div>
+                        <div class="summary-item">
+                          <div class="k">R1-B 提升</div>
+                          <div class="v">Avg 78.3，较基线明显提升，但仍未达到阈值。</div>
+                        </div>
+                        <div class="summary-item">
+                          <div class="k">R2 当前</div>
+                          <div class="v">保留 `R1-B` 主线继续进入下一轮判定。</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </details>
 
-                <details class="fold-card">
-                  <summary>
-                    <span class="fold-title-wrap">
-                      <span class="fold-title">辅助说明</span>
-                      <span class="fold-desc">阅读说明和页面辅助解释保留，但不再与业务判断信息并列常显。</span>
-                    </span>
-                    <span class="fold-state low">三级</span>
-                  </summary>
-                  <div class="fold-body">
-                    <div class="compact-list">
-                      <div class="compact-item">
-                        <div class="k">当前阅读顺序</div>
-                        <div class="v">先确认当前任务，再看右侧判定，最后按需展开二级/三级信息。</div>
-                      </div>
-                      <div class="compact-item">
-                        <div class="k">状态页原则</div>
-                        <div class="v">尽量展示信息，但优先保证“任务身份、当前结论、下一步动作”不被低优先级内容淹没。</div>
-                      </div>
+                    <div class="fold-stack">
+                      <details class="fold-card">
+                        <summary>
+                          <span class="fold-title-wrap">
+                            <span class="fold-title">回退与收敛说明</span>
+                            <span class="fold-desc">展开查看为什么 `R1-A` 被回退、为什么主线仍继续。</span>
+                          </span>
+                          <span class="fold-state low">三级</span>
+                        </summary>
+                        <div class="fold-body">
+                          <div class="compact-list">
+                            <div class="compact-item">
+                              <div class="k">为什么回退 `R1-A`</div>
+                              <div class="v">该分支引入的补充资料增加噪音，导致三次评测平均分低于基线，不满足继续保留的最小条件。</div>
+                            </div>
+                            <div class="compact-item">
+                              <div class="k">为什么继续 `R1-B -> R2`</div>
+                              <div class="v">虽然未达到阈值 85，但已经验证存在正向提升，继续主线的收益高于直接回退到 R0。</div>
+                            </div>
+                            <div class="compact-item">
+                              <div class="k">下一轮目标</div>
+                              <div class="v">继续补强高价值资料，争取在 `R3` 达到阈值并收敛结束。</div>
+                            </div>
+                          </div>
+                        </div>
+                      </details>
                     </div>
-                  </div>
-                </details>
                   </div>
                 </div>
               </div>
@@ -1645,5 +1967,73 @@
       </section>
     </main>
   </div>
+  <script>
+    (function () {
+      function initTabs(groupName) {
+        var tabs = Array.prototype.slice.call(document.querySelectorAll('[data-tab-group="' + groupName + '"][data-tab-target]'));
+        if (!tabs.length) {
+          return;
+        }
+
+        var panels = Array.prototype.slice.call(document.querySelectorAll('[data-tab-panel="' + groupName + '"]'));
+        var scrollRoots = Array.prototype.slice.call(document.querySelectorAll('[data-tab-scroll-root="' + groupName + '"]'));
+
+        function activate(targetId, focusTab) {
+          tabs.forEach(function (tab) {
+            var isActive = tab.getAttribute('data-tab-target') === targetId;
+            tab.classList.toggle('active', isActive);
+            tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            tab.tabIndex = isActive ? 0 : -1;
+            if (isActive && focusTab) {
+              tab.focus();
+            }
+          });
+
+          panels.forEach(function (panel) {
+            panel.hidden = panel.id !== targetId;
+          });
+
+          scrollRoots.forEach(function (root) {
+            root.scrollTop = 0;
+          });
+        }
+
+        tabs.forEach(function (tab, index) {
+          tab.addEventListener('click', function () {
+            activate(tab.getAttribute('data-tab-target'), false);
+          });
+
+          tab.addEventListener('keydown', function (event) {
+            var nextIndex = null;
+
+            if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+              nextIndex = (index + 1) % tabs.length;
+            } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+              nextIndex = (index - 1 + tabs.length) % tabs.length;
+            } else if (event.key === 'Home') {
+              nextIndex = 0;
+            } else if (event.key === 'End') {
+              nextIndex = tabs.length - 1;
+            }
+
+            if (nextIndex === null) {
+              return;
+            }
+
+            event.preventDefault();
+            activate(tabs[nextIndex].getAttribute('data-tab-target'), true);
+          });
+        });
+
+        var defaultTab = tabs.find(function (tab) {
+          return tab.classList.contains('active');
+        }) || tabs[0];
+
+        activate(defaultTab.getAttribute('data-tab-target'), false);
+      }
+
+      initTabs('status-main');
+    })();
+  </script>
 </body>
 </html>

@@ -1,0 +1,18 @@
+[
+  {
+    "run_id": "trun-20260313-165055-3ee854",
+    "queue_task_id": "tq-20260313-165055-454d93",
+    "run_ref": "workflow://native/trun-20260313-165055-3ee854",
+    "status": "done",
+    "result_summary": "Round 1 三轮评测完成：Avg=78.0，Threshold=86.00，Decision=below_threshold_continue，Next=enter-next-round，execution_engine=workflow_native。",
+    "updated_at": "2026-03-13T16:50:55+08:00"
+  },
+  {
+    "run_id": "trun-20260313-165150-75417c",
+    "queue_task_id": "tq-20260313-165141-16e627",
+    "run_ref": "workflow://native/trun-20260313-165150-75417c",
+    "status": "done",
+    "result_summary": "Round 2 三轮评测完成：Avg=74.0，Threshold=86.00，Decision=degraded_vs_previous，Next=rollback-round-increment，execution_engine=workflow_native。",
+    "updated_at": "2026-03-13T16:51:50+08:00"
+  }
+]

@@ -1,0 +1,66 @@
+[
+  {
+    "audit_id": "taud-20260313-165055-6cdd94",
+    "action": "finish",
+    "operator": "acceptance-script",
+    "target_id": "tq-20260313-165055-454d93",
+    "detail_json": "{\"run_id\": \"trun-20260313-165055-3ee854\", \"round_index\": 1, \"status\": \"done\", \"result_summary\": \"Round 1 三轮评测完成：Avg=78.0，Threshold=86.00，Decision=below_threshold_continue，Next=enter-next-round，execution_engine=workflow_native。\", \"execution_engine\": \"workflow_native\", \"eval_run_ids\": [\"ter-20260313-165055-f9475b\", \"ter-20260313-165055-e4f675\", \"ter-20260313-165055-aadcf5\"], \"avg_score\": 78.0, \"threshold\": 86.0, \"previous_avg_score\": null, \"decision\": \"未达阈值，建议进入下一轮\", \"decision_code\": \"below_threshold_continue\", \"next_action\": \"进入下一轮\", \"next_action_code\": \"enter-next-round\"}",
+    "created_at": "2026-03-13T16:50:55+08:00"
+  },
+  {
+    "audit_id": "taud-20260313-165055-ac25a6",
+    "action": "mark_similar",
+    "operator": "acceptance-script",
+    "target_id": "plan-20260313-165055-ab2ffd",
+    "detail_json": "{\"similar_plan_ids\": [\"plan-20260313-164803-9ee399\", \"plan-20260313-164717-2e8c1b\", \"plan-20260313-155909-076848\", \"plan-20260313-155805-c862c5\", \"plan-20260313-150934-89bc12\", \"plan-20260313-150831-405c9b\", \"plan-20260313-150502-734a5d\", \"plan-20260313-150414-765a0d\"]}",
+    "created_at": "2026-03-13T16:50:55+08:00"
+  },
+  {
+    "audit_id": "taud-20260313-165055-cccecb",
+    "action": "enqueue",
+    "operator": "acceptance-script",
+    "target_id": "tq-20260313-165055-454d93",
+    "detail_json": "{\"plan_id\": \"plan-20260313-165055-ab2ffd\", \"source\": \"manual\", \"target_agent_id\": \"Analyst2\", \"target_agent_name\": \"Analyst2\", \"priority\": \"P0\", \"is_test_data\": false, \"similar_flag\": true, \"execution_engine\": \"workflow_native\"}",
+    "created_at": "2026-03-13T16:50:55+08:00"
+  },
+  {
+    "audit_id": "taud-20260313-165055-dedeee",
+    "action": "start",
+    "operator": "acceptance-script",
+    "target_id": "tq-20260313-165055-454d93",
+    "detail_json": "{\"run_id\": \"trun-20260313-165055-3ee854\", \"run_ref\": \"workflow://native/trun-20260313-165055-3ee854\", \"execution_engine\": \"workflow_native\"}",
+    "created_at": "2026-03-13T16:50:55+08:00"
+  },
+  {
+    "audit_id": "taud-20260313-165141-7dd56d",
+    "action": "enter-next-round",
+    "operator": "acceptance-script",
+    "target_id": "plan-20260313-165055-ab2ffd",
+    "detail_json": "{\"queue_task_id\": \"tq-20260313-165055-454d93\", \"loop_id\": \"plan-20260313-165055-ab2ffd\", \"created_queue_task_id\": \"tq-20260313-165141-16e627\", \"created_plan_id\": \"plan-20260313-165141-258b83\", \"reason\": \"acceptance enter next round\", \"execution_engine\": \"workflow_native\"}",
+    "created_at": "2026-03-13T16:51:41+08:00"
+  },
+  {
+    "audit_id": "taud-20260313-165150-31077a",
+    "action": "start",
+    "operator": "acceptance-script",
+    "target_id": "tq-20260313-165141-16e627",
+    "detail_json": "{\"run_id\": \"trun-20260313-165150-75417c\", \"run_ref\": \"workflow://native/trun-20260313-165150-75417c\", \"execution_engine\": \"workflow_native\"}",
+    "created_at": "2026-03-13T16:51:50+08:00"
+  },
+  {
+    "audit_id": "taud-20260313-165150-b4d359",
+    "action": "finish",
+    "operator": "acceptance-script",
+    "target_id": "tq-20260313-165141-16e627",
+    "detail_json": "{\"run_id\": \"trun-20260313-165150-75417c\", \"round_index\": 2, \"status\": \"done\", \"result_summary\": \"Round 2 三轮评测完成：Avg=74.0，Threshold=86.00，Decision=degraded_vs_previous，Next=rollback-round-increment，execution_engine=workflow_native。\", \"execution_engine\": \"workflow_native\", \"eval_run_ids\": [\"ter-20260313-165150-f3d8f2\", \"ter-20260313-165150-17d0c6\", \"ter-20260313-165150-1653ef\"], \"avg_score\": 74.0, \"threshold\": 86.0, \"previous_avg_score\": 78.0, \"decision\": \"较上一轮劣化，建议回退本轮新增\", \"decision_code\": \"degraded_vs_previous\", \"next_action\": \"回退本轮新增\", \"next_action_code\": \"rollback-round-increment\"}",
+    "created_at": "2026-03-13T16:51:50+08:00"
+  },
+  {
+    "audit_id": "taud-20260313-165159-9aebe1",
+    "action": "rollback-round-increment",
+    "operator": "acceptance-script",
+    "target_id": "plan-20260313-165055-ab2ffd",
+    "detail_json": "{\"queue_task_id\": \"tq-20260313-165141-16e627\", \"loop_id\": \"plan-20260313-165055-ab2ffd\", \"rollback_node_id\": \"rb-tq-20260313-165141-16e627\", \"reason\": \"acceptance rollback round increment\", \"execution_engine\": \"workflow_native\"}",
+    "created_at": "2026-03-13T16:51:59+08:00"
+  }
+]

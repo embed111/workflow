@@ -278,15 +278,6 @@
     $('tcEnterOpsBtn').onclick = () => {
       setTrainingCenterModule('ops');
     };
-    $('tcLoopModeCreateBtn').onclick = () => {
-      setTrainingLoopMode('create');
-    };
-    $('tcLoopModeStatusBtn').onclick = () => {
-      setTrainingLoopMode('status');
-    };
-    $('tcLoopCreateQuickBtn').onclick = () => {
-      setTrainingLoopMode('create');
-    };
     $('tcLoopTaskSearchInput').addEventListener('input', () => {
       renderTrainingCenterQueue();
     });
@@ -298,15 +289,6 @@
         };
       });
     }
-    $('tcLoopDetailTabScoreBtn').onclick = () => {
-      setTrainingLoopDetailTab('score');
-    };
-    $('tcLoopDetailTabWorksetBtn').onclick = () => {
-      setTrainingLoopDetailTab('workset');
-    };
-    $('tcLoopDetailTabDecisionBtn').onclick = () => {
-      setTrainingLoopDetailTab('decision');
-    };
     $('tcAgentSearchInput').addEventListener('input', () => {
       renderTrainingCenterAgentList();
     });
@@ -331,16 +313,19 @@
       renderTrainingLoop();
       applyGateState();
     });
-    ['tcPlanGoalInput', 'tcPlanTasksInput', 'tcPlanAcceptanceInput', 'tcPlanPrioritySelect'].forEach(
-      (id) => {
-        const node = $(id);
-        if (!node) return;
-        const eventName = id === 'tcPlanPrioritySelect' ? 'change' : 'input';
-        node.addEventListener(eventName, () => {
-          renderTrainingLoop();
-        });
-      }
-    );
+    ['tcPlanGoalInput', 'tcPlanTasksInput', 'tcPlanAcceptanceInput'].forEach((id) => {
+      const node = $(id);
+      if (!node) return;
+      // Text fields should stay editable; avoid full loop re-render on every keystroke.
+      node.addEventListener('change', () => {
+        renderTrainingLoop();
+      });
+    });
+    if ($('tcPlanPrioritySelect')) {
+      $('tcPlanPrioritySelect').addEventListener('change', () => {
+        renderTrainingLoop();
+      });
+    }
     $('tcRefreshAgentsBtn').onclick = async () => {
       try {
         await withButtonLock('tcRefreshAgentsBtn', async () => {
@@ -351,24 +336,6 @@
         });
       } catch (err) {
         setTrainingCenterDetailError(err.message || String(err));
-      }
-    };
-    $('tcEnqueueManualBtn').onclick = async () => {
-      try {
-        await withButtonLock('tcEnqueueManualBtn', async () => {
-          await enqueueTrainingCenterPlan('manual');
-        });
-      } catch (err) {
-        setTrainingCenterError(err.message || String(err));
-      }
-    };
-    $('tcEnqueueAutoBtn').onclick = async () => {
-      try {
-        await withButtonLock('tcEnqueueAutoBtn', async () => {
-          await enqueueTrainingCenterPlan('auto_analysis');
-        });
-      } catch (err) {
-        setTrainingCenterError(err.message || String(err));
       }
     };
     $('tcRefreshQueueBtn').onclick = async () => {

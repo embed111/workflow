@@ -170,7 +170,7 @@
     <section id='pane-training-center' class='pane'>
       <div class='panel training-center-wrap'>
         <div class='row between'>
-          <div class='card-title'>训练中心</div>
+          <div class='card-title tc-page-title'>训练中心</div>
           <div id='tcRootMeta' class='hint'>训练对象是角色工作区能力，独立于会话流程</div>
         </div>
         <div class='tc-toolbar'>
@@ -324,26 +324,23 @@
 
           <div id='tcModuleOps' class='tc-module'>
             <div class='tc-loop-head'>
-              <div class='tc-loop-mode-tabs'>
-                <button id='tcLoopModeCreateBtn' class='active alt' type='button'>创建任务</button>
-                <button id='tcLoopModeStatusBtn' class='alt' type='button'>任务状态</button>
-              </div>
-              <span id='tcOpsRisk' class='tc-risk'>风险提示：移除任务无二次确认，移除后不可自动恢复。</span>
+              <span id='tcOpsRisk' class='tc-risk' hidden></span>
             </div>
 
             <div class='tc-loop-grid'>
               <aside class='tc-side tc-loop-side'>
                 <div class='tc-loop-side-head'>
-                  <div class='tc-loop-side-title'>训练任务</div>
+                  <div class='tc-loop-side-heading'>
+                    <div class='tc-loop-side-title'>训练任务</div>
+                    <div id='tcLoopQueueSummary' class='tc-loop-side-summary'>按状态筛选并查看当前闭环</div>
+                  </div>
                   <div class='tc-loop-side-actions'>
                     <button id='tcDispatchNextBtn' class='alt' type='button'>调度下一个</button>
-                    <button id='tcLoopCreateQuickBtn' class='alt' type='button'>新建任务</button>
                   </div>
                 </div>
 
                 <div class='tc-loop-task-toolbar'>
                   <input id='tcLoopTaskSearchInput' type='text' placeholder='搜索任务 / 能力目标'/>
-                  <button id='tcLoopTaskFilterBtn' class='alt' type='button' disabled>筛选</button>
                   <button id='tcRefreshQueueBtn' class='alt' type='button'>刷新</button>
                 </div>
 
@@ -357,78 +354,36 @@
                 <div id='tcOpsErr' class='error'></div>
               </aside>
 
-              <section class='tc-loop-center'>
+              <section id='tcLoopCenterPane' class='tc-loop-center'>
                 <section id='tcLoopProcessCard' class='tc-loop-panel tc-loop-process'></section>
 
-                <section class='tc-loop-panel tc-loop-detail'>
-                  <div id='tcLoopCreateView' class='tc-loop-view active'>
-                    <div class='tc-loop-scroll'>
-                      <div class='card-title'>创建任务表单</div>
-                      <div class='tc-form-grid'>
-                        <div class='full'>
-                          <label class='hint' for='tcPlanTargetAgentSelect'>目标角色</label>
-                          <select id='tcPlanTargetAgentSelect'></select>
-                        </div>
-                        <div class='full'>
-                          <label class='hint' for='tcPlanGoalInput'>能力目标</label>
-                          <input id='tcPlanGoalInput' type='text' placeholder='例如：提升角色策略评分解释性'/>
-                        </div>
-                        <div class='full'>
-                          <label class='hint' for='tcPlanTasksInput'>训练任务（每行一项）</label>
-                          <textarea id='tcPlanTasksInput' rows='5' placeholder='- 补齐评分维度说明'></textarea>
-                        </div>
-                        <div class='full'>
-                          <label class='hint' for='tcPlanAcceptanceInput'>验收标准</label>
-                          <textarea id='tcPlanAcceptanceInput' rows='4' placeholder='例如：评分卡输出含维度分/扣分证据/修复建议'></textarea>
-                        </div>
-                        <div>
-                          <label class='hint' for='tcPlanPrioritySelect'>优先级（必填）</label>
-                          <select id='tcPlanPrioritySelect'>
-                            <option value=''>请选择优先级</option>
-                            <option value='P0'>P0</option>
-                            <option value='P1'>P1</option>
-                            <option value='P2'>P2</option>
-                            <option value='P3'>P3</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label class='hint'>执行主体</label>
-                          <div class='tc-kv' style='margin-top:6px'>workflow 内建训练能力</div>
-                        </div>
-                      </div>
-                      <div style='height:8px'></div>
-                      <div class='tc-actions'>
-                        <button id='tcEnqueueManualBtn' type='button'>手动计划入队</button>
-                        <button id='tcEnqueueAutoBtn' class='alt' type='button'>自动来源样例入队</button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div id='tcLoopStatusView' class='tc-loop-view'>
-                    <div class='tc-loop-detail-head'>
-                      <div>
-                        <div class='tc-loop-detail-title'>任务状态详情</div>
-                        <div class='tc-loop-detail-desc'>当前展示本轮评分摘要、工作集变化与判定依据。</div>
-                      </div>
-                    </div>
-                    <div class='tc-loop-detail-tabs' role='tablist' aria-label='任务状态详情'>
-                      <button id='tcLoopDetailTabScoreBtn' class='tc-loop-tab active' type='button' role='tab' aria-selected='true'>本轮评分摘要</button>
-                      <button id='tcLoopDetailTabWorksetBtn' class='tc-loop-tab' type='button' role='tab' aria-selected='false'>本轮工作集变化</button>
-                      <button id='tcLoopDetailTabDecisionBtn' class='tc-loop-tab' type='button' role='tab' aria-selected='false'>当前判定原因</button>
-                    </div>
-                    <div id='tcLoopStatusDetailScroll' class='tc-loop-scroll' role='tabpanel' aria-label='任务状态详情内容'>
-                      <div id='tcLoopStatusDetailBody'></div>
-                    </div>
-                  </div>
+                <section class='tc-loop-panel tc-loop-detail-shell'>
+                  <div id='tcLoopDetailHead' class='tc-loop-view-head'></div>
+                  <div id='tcLoopDetailBody' class='tc-loop-detail-body'></div>
                 </section>
               </section>
 
-              <aside class='tc-loop-right'>
+              <aside id='tcLoopRightColumn' class='tc-loop-right'>
                 <section id='tcLoopRightPane' class='tc-loop-panel tc-loop-right-pane'></section>
-                <div style='height:8px'></div>
-                <div class='card-title'>执行结果</div>
-                <pre id='tcRunResult' class='pre'>等待执行...</pre>
+                <section class='tc-loop-panel tc-loop-run-panel'>
+                  <div class='card-title'>执行结果</div>
+                  <pre id='tcRunResult' class='pre tc-loop-run-result'>等待执行...</pre>
+                </section>
               </aside>
+            </div>
+
+            <div class='tc-loop-form-cache' aria-hidden='true'>
+              <select id='tcPlanTargetAgentSelect'></select>
+              <input id='tcPlanGoalInput' type='text'/>
+              <textarea id='tcPlanTasksInput' rows='5'></textarea>
+              <textarea id='tcPlanAcceptanceInput' rows='4'></textarea>
+              <select id='tcPlanPrioritySelect'>
+                <option value=''>请选择优先级</option>
+                <option value='P0'>P0</option>
+                <option value='P1'>P1</option>
+                <option value='P2'>P2</option>
+                <option value='P3'>P3</option>
+              </select>
             </div>
           </div>
         </div>

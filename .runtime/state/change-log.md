@@ -918,3 +918,30 @@
 ## 2026-03-13 09:29:58+0800 - reconcile run
 - reason=startup, ingress=0, before=0, after=0, gap_after=0
 
+## 2026-03-13 15:04:07+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-13 15:08:26+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-13 15:28:01+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-13 15:58:00+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-13 16:47:12+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-13 16:50:52+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-13 17:22:51+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-13 17:23:15+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-13 17:25:39+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+

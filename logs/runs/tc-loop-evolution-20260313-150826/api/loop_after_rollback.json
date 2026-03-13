@@ -1,0 +1,94 @@
+{
+  "ok": true,
+  "loop_id": "plan-20260313-150831-405c9b",
+  "queue_task_id": "tq-20260313-150934-903d5b",
+  "current_node_id": "rb-tq-20260313-150934-903d5b",
+  "nodes": [
+    {
+      "node_id": "baseline",
+      "title": "基线",
+      "round_index": 0,
+      "node_type": "baseline",
+      "decision": "暂无历史",
+      "next_action": "执行首轮评测",
+      "impact": "",
+      "metrics": null,
+      "metrics_available": false,
+      "queue_task_id": "",
+      "plan_id": "",
+      "status": "active",
+      "created_at": "2026-03-13T15:08:31+08:00",
+      "updated_at": "2026-03-13T15:08:31+08:00"
+    },
+    {
+      "node_id": "tq-20260313-150831-755f67",
+      "title": "R1 当前",
+      "round_index": 1,
+      "node_type": "round",
+      "decision": "queued",
+      "next_action": "enter-next-round / rollback-round-increment",
+      "impact": "",
+      "metrics": null,
+      "metrics_available": false,
+      "queue_task_id": "tq-20260313-150831-755f67",
+      "plan_id": "plan-20260313-150831-405c9b",
+      "status": "active",
+      "created_at": "2026-03-13T15:08:31+08:00",
+      "updated_at": "2026-03-13T15:08:31+08:00"
+    },
+    {
+      "node_id": "tq-20260313-150934-903d5b",
+      "title": "R2 当前",
+      "round_index": 2,
+      "node_type": "round",
+      "decision": "queued",
+      "next_action": "enter-next-round / rollback-round-increment",
+      "impact": "enter-next-round evidence",
+      "metrics": null,
+      "metrics_available": false,
+      "queue_task_id": "tq-20260313-150934-903d5b",
+      "plan_id": "plan-20260313-150934-89bc12",
+      "status": "rolled_back",
+      "created_at": "2026-03-13T15:09:34+08:00",
+      "updated_at": "2026-03-13T15:09:43+08:00"
+    },
+    {
+      "node_id": "rb-tq-20260313-150934-903d5b",
+      "title": "回退本轮新增",
+      "round_index": 2,
+      "node_type": "rollback",
+      "decision": "rollback-round-increment",
+      "next_action": "enter-next-round / execute-eval",
+      "impact": "rollback evidence",
+      "metrics": null,
+      "metrics_available": false,
+      "queue_task_id": "tq-20260313-150934-903d5b",
+      "plan_id": "plan-20260313-150934-89bc12",
+      "status": "active",
+      "created_at": "2026-03-13T15:09:43+08:00",
+      "updated_at": "2026-03-13T15:09:43+08:00"
+    }
+  ],
+  "edges": [
+    {
+      "from": "baseline",
+      "to": "tq-20260313-150831-755f67",
+      "kind": "main"
+    },
+    {
+      "from": "tq-20260313-150831-755f67",
+      "to": "tq-20260313-150934-903d5b",
+      "kind": "main"
+    },
+    {
+      "from": "tq-20260313-150934-903d5b",
+      "to": "rb-tq-20260313-150934-903d5b",
+      "kind": "rollback"
+    }
+  ],
+  "metrics_available": false,
+  "metrics_unavailable_reason": "scoring_not_integrated",
+  "is_test_data": false,
+  "include_test_data": false,
+  "show_test_data": false
+}

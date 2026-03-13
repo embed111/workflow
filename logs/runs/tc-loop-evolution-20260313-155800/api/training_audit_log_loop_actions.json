@@ -1,0 +1,23 @@
+{
+  "loop_id": "plan-20260313-155805-c862c5",
+  "rows": [
+    {
+      "audit_id": "taud-20260313-155917-75d7f9",
+      "action": "rollback-round-increment",
+      "operator": "acceptance-script",
+      "target_id": "plan-20260313-155805-c862c5",
+      "detail_json": "{\"queue_task_id\": \"tq-20260313-155909-780979\", \"loop_id\": \"plan-20260313-155805-c862c5\", \"rollback_node_id\": \"rb-tq-20260313-155909-780979\", \"reason\": \"rollback evidence\"}",
+      "created_at": "2026-03-13T15:59:17+08:00",
+      "_row_index": 1
+    },
+    {
+      "audit_id": "taud-20260313-155909-cd7847",
+      "action": "enter-next-round",
+      "operator": "acceptance-script",
+      "target_id": "plan-20260313-155805-c862c5",
+      "detail_json": "{\"queue_task_id\": \"tq-20260313-155805-303477\", \"loop_id\": \"plan-20260313-155805-c862c5\", \"created_queue_task_id\": \"tq-20260313-155909-780979\", \"created_plan_id\": \"plan-20260313-155909-076848\", \"reason\": \"enter-next-round evidence\"}",
+      "created_at": "2026-03-13T15:59:09+08:00",
+      "_row_index": 2
+    }
+  ]
+}

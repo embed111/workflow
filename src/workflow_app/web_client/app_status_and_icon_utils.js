@@ -100,7 +100,10 @@
     tcLoopMode: 'create', // create | status
     tcLoopSelectedQueueTaskId: '',
     tcLoopSelectedNodeId: '',
-    tcLoopDetailTab: 'score', // score | workset | decision
+    tcLoopCreateTab: 'basic', // basic | workset | launch
+    tcLoopStatusTab: 'overview', // overview | workset | eval | history
+    tcLoopQueueFilter: 'all',
+    tcLoopRoundIndexByQueueTaskId: {},
     tcLoopQueryApplied: false,
     tcLoopServerQueueTaskId: '',
     tcLoopServerData: null,

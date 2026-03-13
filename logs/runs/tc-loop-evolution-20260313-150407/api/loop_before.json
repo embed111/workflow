@@ -1,0 +1,52 @@
+{
+  "ok": true,
+  "loop_id": "plan-20260313-150414-765a0d",
+  "queue_task_id": "tq-20260313-150414-a593e9",
+  "current_node_id": "tq-20260313-150414-a593e9",
+  "nodes": [
+    {
+      "node_id": "baseline",
+      "title": "基线",
+      "round_index": 0,
+      "node_type": "baseline",
+      "decision": "暂无历史",
+      "next_action": "执行首轮评测",
+      "impact": "",
+      "metrics": null,
+      "metrics_available": false,
+      "queue_task_id": "",
+      "plan_id": "",
+      "status": "active",
+      "created_at": "2026-03-13T15:04:14+08:00",
+      "updated_at": "2026-03-13T15:04:14+08:00"
+    },
+    {
+      "node_id": "tq-20260313-150414-a593e9",
+      "title": "R1 当前",
+      "round_index": 1,
+      "node_type": "round",
+      "decision": "queued",
+      "next_action": "enter-next-round / rollback-round-increment",
+      "impact": "",
+      "metrics": null,
+      "metrics_available": false,
+      "queue_task_id": "tq-20260313-150414-a593e9",
+      "plan_id": "plan-20260313-150414-765a0d",
+      "status": "active",
+      "created_at": "2026-03-13T15:04:14+08:00",
+      "updated_at": "2026-03-13T15:04:14+08:00"
+    }
+  ],
+  "edges": [
+    {
+      "from": "baseline",
+      "to": "tq-20260313-150414-a593e9",
+      "kind": "main"
+    }
+  ],
+  "metrics_available": false,
+  "metrics_unavailable_reason": "scoring_not_integrated",
+  "is_test_data": false,
+  "include_test_data": false,
+  "show_test_data": false
+}
