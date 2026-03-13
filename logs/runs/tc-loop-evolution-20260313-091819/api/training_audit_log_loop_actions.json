@@ -1,0 +1,23 @@
+{
+  "loop_id": "plan-20260313-091824-dc49d6",
+  "rows": [
+    {
+      "audit_id": "taud-20260313-091923-d61184",
+      "action": "rollback-round-increment",
+      "operator": "acceptance-script",
+      "target_id": "plan-20260313-091824-dc49d6",
+      "detail_json": "{\"queue_task_id\": \"tq-20260313-091915-232276\", \"loop_id\": \"plan-20260313-091824-dc49d6\", \"rollback_node_id\": \"rb-tq-20260313-091915-232276\", \"reason\": \"rollback evidence\"}",
+      "created_at": "2026-03-13T09:19:23+08:00",
+      "_row_index": 1
+    },
+    {
+      "audit_id": "taud-20260313-091915-9416ca",
+      "action": "enter-next-round",
+      "operator": "acceptance-script",
+      "target_id": "plan-20260313-091824-dc49d6",
+      "detail_json": "{\"queue_task_id\": \"tq-20260313-091824-8e3f23\", \"loop_id\": \"plan-20260313-091824-dc49d6\", \"created_queue_task_id\": \"tq-20260313-091915-232276\", \"created_plan_id\": \"plan-20260313-091915-8d4c1f\", \"reason\": \"enter-next-round evidence\"}",
+      "created_at": "2026-03-13T09:19:15+08:00",
+      "_row_index": 2
+    }
+  ]
+}

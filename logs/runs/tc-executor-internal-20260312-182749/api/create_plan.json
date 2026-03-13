@@ -1,0 +1,26 @@
+{
+  "ok": true,
+  "plan_id": "plan-20260312-182753-427023",
+  "queue_task_id": "tq-20260312-182753-3148b9",
+  "source": "manual",
+  "target_agent_id": "Analyst2",
+  "target_agent_name": "Analyst2",
+  "target_agent_lifecycle_state": "released",
+  "target_agent_training_gate_state": "trainable",
+  "capability_goal": "tc-executor-internal 20260312-182749",
+  "training_tasks": [
+    "executor task 20260312-182749 1",
+    "executor task 20260312-182749 2"
+  ],
+  "acceptance_criteria": "acceptance 20260312-182749",
+  "priority": "P0",
+  "is_test_data": false,
+  "similar_flag": false,
+  "similar_plan_ids": [],
+  "execution_engine": "workflow_native",
+  "can_execute": true,
+  "audit_ids": {
+    "enqueue": "taud-20260312-182753-41267d",
+    "mark_similar": ""
+  }
+}

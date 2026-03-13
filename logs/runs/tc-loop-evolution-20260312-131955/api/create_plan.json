@@ -1,0 +1,26 @@
+{
+  "ok": true,
+  "plan_id": "plan-20260312-132011-183c95",
+  "queue_task_id": "tq-20260312-132011-29342c",
+  "source": "manual",
+  "target_agent_id": "Analyst2",
+  "target_agent_name": "Analyst2",
+  "target_agent_lifecycle_state": "released",
+  "target_agent_training_gate_state": "trainable",
+  "capability_goal": "tc-loop-evidence 20260312-131955",
+  "training_tasks": [
+    "loop task 20260312-131955 1",
+    "loop task 20260312-131955 2"
+  ],
+  "acceptance_criteria": "acceptance 20260312-131955",
+  "priority": "P0",
+  "is_test_data": false,
+  "similar_flag": false,
+  "similar_plan_ids": [],
+  "trainer_match": "trainer-probe",
+  "can_execute": true,
+  "audit_ids": {
+    "enqueue": "taud-20260312-132011-8ea1e4",
+    "mark_similar": ""
+  }
+}

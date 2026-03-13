@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "queue_task_id": "tq-20260312-142436-b3b807",
+  "run_id": "trun-20260312-142525-4a73a4",
+  "run_ref": "workflow://native/trun-20260312-142525-4a73a4",
+  "execution_engine": "workflow_native",
+  "status": "done",
+  "target_agent_id": "Analyst2",
+  "target_agent_lifecycle_state": "pre_release",
+  "result_summary": "训练执行已完成：queue_task_id=tq-20260312-142436-b3b807, execution_engine=workflow_native, mode=workflow_native.",
+  "updated_at": "2026-03-12T14:25:25+08:00",
+  "audit_ids": {
+    "start": "taud-20260312-142525-3e3762",
+    "finish": "taud-20260312-142525-d96e2a"
+  }
+}

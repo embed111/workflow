@@ -1,0 +1,23 @@
+{
+  "queue_task_id": "tq-20260312-142436-b3b807",
+  "rows": [
+    {
+      "audit_id": "taud-20260312-142525-3e3762",
+      "action": "start",
+      "operator": "acceptance-script",
+      "target_id": "tq-20260312-142436-b3b807",
+      "detail_json": "{\"run_id\": \"trun-20260312-142525-4a73a4\", \"run_ref\": \"workflow://native/trun-20260312-142525-4a73a4\", \"execution_engine\": \"workflow_native\"}",
+      "created_at": "2026-03-12T14:25:25+08:00",
+      "_row_index": 1
+    },
+    {
+      "audit_id": "taud-20260312-142525-d96e2a",
+      "action": "finish",
+      "operator": "acceptance-script",
+      "target_id": "tq-20260312-142436-b3b807",
+      "detail_json": "{\"run_id\": \"trun-20260312-142525-4a73a4\", \"status\": \"done\", \"result_summary\": \"训练执行已完成：queue_task_id=tq-20260312-142436-b3b807, execution_engine=workflow_native, mode=workflow_native.\", \"execution_engine\": \"workflow_native\"}",
+      "created_at": "2026-03-12T14:25:25+08:00",
+      "_row_index": 2
+    }
+  ]
+}

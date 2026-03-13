@@ -1,0 +1,73 @@
+{
+  "ok": true,
+  "loop_id": "plan-20260312-123607-7f4807",
+  "queue_task_id": "tq-20260312-123838-99c6da",
+  "current_node_id": "tq-20260312-123838-99c6da",
+  "nodes": [
+    {
+      "node_id": "baseline",
+      "title": "基线",
+      "round_index": 0,
+      "node_type": "baseline",
+      "decision": "暂无历史",
+      "next_action": "执行首轮评测",
+      "impact": "",
+      "metrics": null,
+      "metrics_available": false,
+      "queue_task_id": "",
+      "plan_id": "",
+      "status": "active",
+      "created_at": "2026-03-12T12:36:07+08:00",
+      "updated_at": "2026-03-12T12:36:07+08:00"
+    },
+    {
+      "node_id": "tq-20260312-123607-73e837",
+      "title": "R1 当前",
+      "round_index": 1,
+      "node_type": "round",
+      "decision": "queued",
+      "next_action": "enter-next-round / rollback-round-increment",
+      "impact": "",
+      "metrics": null,
+      "metrics_available": false,
+      "queue_task_id": "tq-20260312-123607-73e837",
+      "plan_id": "plan-20260312-123607-7f4807",
+      "status": "active",
+      "created_at": "2026-03-12T12:36:07+08:00",
+      "updated_at": "2026-03-12T12:36:07+08:00"
+    },
+    {
+      "node_id": "tq-20260312-123838-99c6da",
+      "title": "R2 当前",
+      "round_index": 2,
+      "node_type": "round",
+      "decision": "queued",
+      "next_action": "enter-next-round / rollback-round-increment",
+      "impact": "enter-next-round evidence",
+      "metrics": null,
+      "metrics_available": false,
+      "queue_task_id": "tq-20260312-123838-99c6da",
+      "plan_id": "plan-20260312-123838-cade58",
+      "status": "active",
+      "created_at": "2026-03-12T12:38:38+08:00",
+      "updated_at": "2026-03-12T12:38:38+08:00"
+    }
+  ],
+  "edges": [
+    {
+      "from": "baseline",
+      "to": "tq-20260312-123607-73e837",
+      "kind": "main"
+    },
+    {
+      "from": "tq-20260312-123607-73e837",
+      "to": "tq-20260312-123838-99c6da",
+      "kind": "main"
+    }
+  ],
+  "metrics_available": false,
+  "metrics_unavailable_reason": "scoring_not_integrated",
+  "is_test_data": false,
+  "include_test_data": false,
+  "show_test_data": false
+}
