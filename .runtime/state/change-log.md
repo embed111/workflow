@@ -945,3 +945,150 @@
 ## 2026-03-13 17:25:39+0800 - reconcile run
 - reason=startup, ingress=0, before=0, after=0, gap_after=0
 
+## 2026-03-14 12:43:34+0800 - agent_search_root_changed
+- from=, to=D:/code/AI/J-Agents, closed_sessions=0
+
+## 2026-03-15 01:55:10+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 01:59:04+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 02:00:45+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 02:04:04+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 02:04:35+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 11:13:14+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 11:26:37+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 11:32:40+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 11:34:19+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 11:35:15+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 11:40:42+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 11:46:41+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 12:02:09+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 12:14:00+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 12:23:03+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 12:32:51+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 12:38:12+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 12:39:15+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 12:40:54+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 12:41:55+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 12:42:57+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 13:14:45+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 13:15:05+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 13:17:31+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 13:18:47+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 13:40:49+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 13:49:07+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 13:50:49+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 13:52:45+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 13:53:45+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 13:54:15+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 15:08:11+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 15:10:40+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 15:12:55+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 18:42:26+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 18:43:20+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 18:43:57+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 18:44:11+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 19:22:22+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 19:22:43+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 20:12:28+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 20:17:46+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 20:18:04+0800 - show test data toggle
+- old=0, new=1
+
+## 2026-03-15 20:43:33+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 21:57:31+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 21:58:16+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 22:12:49+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+
+## 2026-03-15 22:39:30+0800 - reconcile run
+- reason=startup, ingress=0, before=0, after=0, gap_after=0
+

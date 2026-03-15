@@ -202,6 +202,54 @@ def ensure_tables(
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_tls_updated ON training_loop_state(updated_at DESC)"
         )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS assignment_graphs (ticket_id TEXT PRIMARY KEY,graph_name TEXT NOT NULL,source_workflow TEXT NOT NULL,summary TEXT NOT NULL DEFAULT '',review_mode TEXT NOT NULL DEFAULT 'none',global_concurrency_limit INTEGER NOT NULL DEFAULT 5,is_test_data INTEGER NOT NULL DEFAULT 0,external_request_id TEXT NOT NULL DEFAULT '',scheduler_state TEXT NOT NULL DEFAULT 'idle',pause_note TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ag_updated ON assignment_graphs(updated_at DESC)"
+        )
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_ag_external_req ON assignment_graphs(source_workflow,external_request_id) WHERE COALESCE(external_request_id,'')<>''"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS assignment_nodes (node_id TEXT PRIMARY KEY,ticket_id TEXT NOT NULL,node_name TEXT NOT NULL,assigned_agent_id TEXT NOT NULL,node_goal TEXT NOT NULL,expected_artifact TEXT NOT NULL DEFAULT '',delivery_mode TEXT NOT NULL DEFAULT 'none',delivery_receiver_agent_id TEXT NOT NULL DEFAULT '',artifact_delivery_status TEXT NOT NULL DEFAULT 'pending',artifact_delivered_at TEXT NOT NULL DEFAULT '',artifact_paths_json TEXT NOT NULL DEFAULT '[]',status TEXT NOT NULL DEFAULT 'pending',priority INTEGER NOT NULL DEFAULT 1,completed_at TEXT NOT NULL DEFAULT '',success_reason TEXT NOT NULL DEFAULT '',result_ref TEXT NOT NULL DEFAULT '',failure_reason TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(ticket_id) REFERENCES assignment_graphs(ticket_id) ON DELETE CASCADE)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_an_ticket_created ON assignment_nodes(ticket_id,created_at)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_an_ticket_status ON assignment_nodes(ticket_id,status,priority,created_at)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_an_agent_status ON assignment_nodes(assigned_agent_id,status,updated_at)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS assignment_edges (edge_id INTEGER PRIMARY KEY AUTOINCREMENT,ticket_id TEXT NOT NULL,from_node_id TEXT NOT NULL,to_node_id TEXT NOT NULL,edge_kind TEXT NOT NULL DEFAULT 'depends_on',created_at TEXT NOT NULL,FOREIGN KEY(ticket_id) REFERENCES assignment_graphs(ticket_id) ON DELETE CASCADE)"
+        )
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_ae_unique ON assignment_edges(ticket_id,from_node_id,to_node_id,edge_kind)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ae_ticket_to ON assignment_edges(ticket_id,to_node_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ae_ticket_from ON assignment_edges(ticket_id,from_node_id)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS assignment_audit_log (audit_id TEXT PRIMARY KEY,ticket_id TEXT NOT NULL DEFAULT '',node_id TEXT NOT NULL DEFAULT '',action TEXT NOT NULL,operator TEXT NOT NULL,reason TEXT NOT NULL DEFAULT '',target_status TEXT NOT NULL DEFAULT '',detail_json TEXT NOT NULL DEFAULT '{}',ref TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_aa_ticket_time ON assignment_audit_log(ticket_id,created_at DESC)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_aa_node_time ON assignment_audit_log(node_id,created_at DESC)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS assignment_system_settings (setting_key TEXT PRIMARY KEY,setting_value TEXT NOT NULL,updated_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO assignment_system_settings(setting_key,setting_value,updated_at) VALUES ('global_concurrency_limit','5','')"
+        )
         ensure_column(conn, "agent_registry", "vector_icon", "vector_icon TEXT NOT NULL DEFAULT ''")
         ensure_column(conn, "agent_registry", "latest_release_version", "latest_release_version TEXT NOT NULL DEFAULT ''")
         ensure_column(conn, "agent_registry", "bound_release_version", "bound_release_version TEXT NOT NULL DEFAULT ''")
@@ -329,6 +377,35 @@ def ensure_tables(
             "latest_no_value_reason",
             "latest_no_value_reason TEXT NOT NULL DEFAULT ''",
         )
+        ensure_column(conn, "assignment_nodes", "delivery_mode", "delivery_mode TEXT NOT NULL DEFAULT 'none'")
+        ensure_column(conn, "assignment_graphs", "is_test_data", "is_test_data INTEGER NOT NULL DEFAULT 0")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ag_test_data_updated ON assignment_graphs(is_test_data,updated_at DESC)"
+        )
+        ensure_column(
+            conn,
+            "assignment_nodes",
+            "delivery_receiver_agent_id",
+            "delivery_receiver_agent_id TEXT NOT NULL DEFAULT ''",
+        )
+        ensure_column(
+            conn,
+            "assignment_nodes",
+            "artifact_delivery_status",
+            "artifact_delivery_status TEXT NOT NULL DEFAULT 'pending'",
+        )
+        ensure_column(
+            conn,
+            "assignment_nodes",
+            "artifact_delivered_at",
+            "artifact_delivered_at TEXT NOT NULL DEFAULT ''",
+        )
+        ensure_column(
+            conn,
+            "assignment_nodes",
+            "artifact_paths_json",
+            "artifact_paths_json TEXT NOT NULL DEFAULT '[]'",
+        )
         conn.execute(
             "UPDATE chat_sessions SET agent_search_root=target_path WHERE COALESCE(agent_search_root,'')=''"
         )
@@ -383,6 +460,24 @@ def ensure_tables(
         )
         conn.execute(
             "UPDATE conversation_messages SET analysis_updated_at=created_at WHERE COALESCE(analysis_updated_at,'')='' AND COALESCE(created_at,'')<>''",
+        )
+        conn.execute(
+            "UPDATE assignment_graphs SET is_test_data=0 WHERE is_test_data IS NULL",
+        )
+        conn.execute(
+            "UPDATE assignment_nodes SET delivery_mode='none' WHERE COALESCE(delivery_mode,'')=''",
+        )
+        conn.execute(
+            "UPDATE assignment_nodes SET delivery_receiver_agent_id='' WHERE delivery_receiver_agent_id IS NULL",
+        )
+        conn.execute(
+            "UPDATE assignment_nodes SET artifact_delivery_status='pending' WHERE COALESCE(artifact_delivery_status,'')=''",
+        )
+        conn.execute(
+            "UPDATE assignment_nodes SET artifact_delivered_at='' WHERE artifact_delivered_at IS NULL",
+        )
+        conn.execute(
+            "UPDATE assignment_nodes SET artifact_paths_json='[]' WHERE COALESCE(artifact_paths_json,'')=''",
         )
         conn.commit()
     finally:

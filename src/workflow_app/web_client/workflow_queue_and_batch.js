@@ -1009,3 +1009,21 @@
       throw err;
     }
   }
+
+  async function switchArtifactRoot() {
+    const root = safe($('artifactRootPathInput').value).trim();
+    if (!root) throw new Error('产物根路径不能为空');
+    const data = await postJSON('/api/config/artifact-root', {
+      artifact_root: root,
+    });
+    state.artifactRootPath = safe(data.artifact_root).trim();
+    state.artifactWorkspaceRoot = safe(data.workspace_root).trim();
+    state.artifactRootDefaultPath = safe(data.default_artifact_root).trim();
+    state.artifactRootValidationStatus = safe(data.path_validation_status).trim();
+    updateArtifactRootMeta();
+    await refreshAgents(false, { autoAnalyze: false });
+    if (selectedAssignmentTicketId && typeof selectedAssignmentTicketId === 'function' && selectedAssignmentTicketId()) {
+      await refreshAssignmentGraphData({ ticketId: selectedAssignmentTicketId() });
+    }
+    setStatus('产物根路径已更新');
+  }

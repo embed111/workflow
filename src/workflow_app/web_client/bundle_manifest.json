@@ -9,5 +9,6 @@
   "workflow_queue_selection_core.js",
   "workflow_queue_and_batch.js",
   "training_center_and_bootstrap.js",
+  "assignment_center.js",
   "app_shell_and_bootstrap.js"
 ]

@@ -8,6 +8,22 @@
      - `state/user-preferences.md`
      - `logs/runs/*.md`
 
+## OpenClaw 启动读取顺序
+1. 顶层治理入口固定先读 `AGENTS.md`。
+2. 默认会话按以下顺序继续读取：
+   - `.codex/SOUL.md`
+   - `.codex/USER.md`
+   - `.codex/memory/2026-03-14.md`
+   - `.codex/memory/2026-03-13.md`
+3. 主会话额外读取 `.codex/MEMORY.md`。
+4. 日期滚动时，将近两天每日记忆路径替换为“当天 + 前一天”的 `.codex/memory/YYYY-MM-DD.md`。
+
+## 三层职责边界
+- `.codex/`：agent 工作记忆、内部工作文档、本地技能入口（如 `.codex/skills/*/SKILL.md`）。
+- `state/`：产品运行态、运行数据库、会话快照与复盘态。
+- `logs/`：运行与审计留痕、执行记录、证据归档。
+- 禁止把 `.codex/MEMORY.md`、`.codex/memory/*.md` 当成产品运行态、配置文件或审计日志使用。
+
 ## Project Structure & Module Organization
 - `src/workflow_app/`：核心源码目录（服务端、CLI、运行时与前端模块源码）。
 - `scripts/`：入口与运维脚本目录（对 `src/workflow_app` 的兼容启动包装 + 工具脚本）。

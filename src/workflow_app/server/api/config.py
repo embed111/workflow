@@ -5,6 +5,9 @@ from ..bootstrap import web_server_runtime as ws
 
 def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
     path = str(ctx.get("path") or "")
+    if path == "/api/config/artifact-root":
+        handler.send_json(200, {"ok": True, **ws.get_artifact_root_settings(cfg.root)})
+        return True
     if path != "/api/config/show-test-data":
         return False
     query = ctx.get("query") or {}
@@ -31,6 +34,21 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
 def try_handle_post(handler, cfg, state, ctx: dict) -> bool:
     path = str(ctx.get("path") or "")
     body = ctx.get("body") or {}
+
+    if path == "/api/config/artifact-root":
+        try:
+            result = ws.set_artifact_root(
+                cfg,
+                state,
+                str(body.get("artifact_root") or body.get("artifactRoot") or ""),
+            )
+            handler.send_json(200, result)
+        except ws.SessionGateError as exc:
+            handler.send_json(
+                exc.status_code,
+                {"ok": False, "error": str(exc), "code": exc.code, **exc.extra},
+            )
+        return True
 
     if path == "/api/config/agent-search-root":
         requested_root = str(

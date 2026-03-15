@@ -1,0 +1,1 @@
+{"event_id": "evt-20260314-1773463414611-86f24f", "timestamp": "2026-03-14T12:43:34+08:00", "session_id": "sess-governance", "actor": "workflow", "stage": "governance", "action": "agent_search_root_changed", "status": "success", "latency_ms": 0, "task_id": "", "reason_tags": ["from:<empty>", "to:D:/code/AI/J-Agents", "closed_sessions:0"], "ref": ""}
