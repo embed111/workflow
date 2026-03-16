@@ -1,4 +1,5 @@
 {
-  "agent_search_root": "C:/work/J-Agents",
-  "show_test_data": false
+  "agent_search_root": "D:/code/AI/J-Agents",
+  "show_test_data": true,
+  "artifact_root": "D:/code/AI/J-Agents/.output"
 }

@@ -22,6 +22,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
             )
             return True
         agents = ws.list_available_agents(cfg) if root_ready else []
+        artifact_settings = ws.get_artifact_root_settings(cfg.root)
         handler.send_json(
             200,
             {
@@ -35,6 +36,10 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                 "show_test_data": bool(ws.current_show_test_data(cfg, state)),
                 "allow_manual_policy_input": bool(ws.current_allow_manual_policy_input(cfg, state)),
                 "policy_closure": ws.policy_closure_stats(cfg.root),
+                "artifact_root": str(artifact_settings.get("artifact_root") or ""),
+                "artifact_workspace_root": str(artifact_settings.get("workspace_root") or ""),
+                "artifact_root_default": str(artifact_settings.get("default_artifact_root") or ""),
+                "artifact_root_validation_status": str(artifact_settings.get("path_validation_status") or ""),
                 "agents": agents,
                 "count": len(agents),
             },

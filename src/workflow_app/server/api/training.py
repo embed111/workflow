@@ -10,6 +10,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
     root_ready = bool(ctx.get("root_ready"))
     root_text = str(ctx.get("root_text") or "")
     query = ctx.get("query") or {}
+    artifact_settings = ws.get_artifact_root_settings(cfg.root)
 
     if path == "/api/training/agents":
         if not root_ready:
@@ -27,6 +28,10 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                     "agent_search_root": root_text,
                     "agent_search_root_ready": False,
                     "features_locked": True,
+                    "artifact_root": str(artifact_settings.get("artifact_root") or ""),
+                    "artifact_workspace_root": str(artifact_settings.get("workspace_root") or ""),
+                    "artifact_root_default": str(artifact_settings.get("default_artifact_root") or ""),
+                    "artifact_root_validation_status": str(artifact_settings.get("path_validation_status") or ""),
                     "show_test_data": bool(ws.current_show_test_data(cfg, state)),
                     "include_test_data": bool(ws.current_show_test_data(cfg, state)),
                 },
@@ -44,6 +49,10 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                 "agent_search_root": root_text,
                 "agent_search_root_ready": True,
                 "features_locked": False,
+                "artifact_root": str(artifact_settings.get("artifact_root") or ""),
+                "artifact_workspace_root": str(artifact_settings.get("workspace_root") or ""),
+                "artifact_root_default": str(artifact_settings.get("default_artifact_root") or ""),
+                "artifact_root_validation_status": str(artifact_settings.get("path_validation_status") or ""),
             },
         )
         return True

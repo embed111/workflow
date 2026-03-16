@@ -70,6 +70,7 @@ DEFAULT_AGENTS_ROOT = Path(os.getenv("WORKFLOW_AGENTS_ROOT") or "C:/work/agents"
 AGENT_SEARCH_ROOT_NOT_SET_CODE = "agent_search_root_not_set"
 WORKFLOW_APP_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PROJECT_ROOT = Path(__file__).resolve().parents[4]
+DEFAULT_ARTIFACT_ROOT = (WORKFLOW_PROJECT_ROOT.parent / ".output").resolve(strict=False)
 TRAINER_SOURCE_ROOT = (WORKFLOW_PROJECT_ROOT.parent / "trainer").resolve(strict=False)
 TRAINING_PRIORITY_LEVELS = ("P0", "P1", "P2", "P3")
 TRAINING_PRIORITY_RANK = {name: idx for idx, name in enumerate(TRAINING_PRIORITY_LEVELS)}
@@ -336,6 +337,121 @@ def save_runtime_config(root: Path, patch: dict[str, Any]) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     tmp.replace(path)
+
+
+def resolve_artifact_root_path(root: Path) -> Path:
+    runtime_cfg = load_runtime_config(root)
+    raw = str(runtime_cfg.get("artifact_root") or "").strip()
+    base = WORKFLOW_PROJECT_ROOT
+    if not raw:
+        return DEFAULT_ARTIFACT_ROOT
+    try:
+        return normalize_abs_path(raw, base=base)
+    except Exception:
+        return DEFAULT_ARTIFACT_ROOT
+
+
+def ensure_artifact_root_dirs(path: Path) -> tuple[Path, Path]:
+    artifact_root = Path(path).resolve(strict=False)
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    workspace_root = artifact_root / "workspace"
+    workspace_root.mkdir(parents=True, exist_ok=True)
+    return artifact_root, workspace_root
+
+
+def get_artifact_root_settings(root: Path) -> dict[str, Any]:
+    artifact_root = resolve_artifact_root_path(root)
+    artifact_root, workspace_root = ensure_artifact_root_dirs(artifact_root)
+    return {
+        "artifact_root": artifact_root.as_posix(),
+        "workspace_root": workspace_root.as_posix(),
+        "default_artifact_root": DEFAULT_ARTIFACT_ROOT.as_posix(),
+        "path_validation_status": "ok",
+        "workspace_ready": True,
+    }
+
+
+def assignment_workspace_records_root(artifact_root: Path) -> Path:
+    return (Path(artifact_root).resolve(strict=False) / "workspace" / "assignments").resolve(strict=False)
+
+
+def legacy_assignment_workspace_records_root(runtime_root: Path) -> Path:
+    return (Path(runtime_root).resolve(strict=False) / "workspace" / "assignments").resolve(strict=False)
+
+
+def migrate_assignment_workspace_records(
+    runtime_root: Path,
+    artifact_root: Path,
+    *,
+    previous_artifact_root: Path | None = None,
+) -> dict[str, Any]:
+    target_root = assignment_workspace_records_root(artifact_root)
+    target_root.mkdir(parents=True, exist_ok=True)
+
+    raw_sources: list[Path] = []
+    if isinstance(previous_artifact_root, Path):
+        raw_sources.append(assignment_workspace_records_root(previous_artifact_root))
+    raw_sources.append(legacy_assignment_workspace_records_root(runtime_root))
+
+    sources: list[Path] = []
+    seen_keys = {target_root.as_posix().lower()}
+    for source in raw_sources:
+        candidate = Path(source).resolve(strict=False)
+        key = candidate.as_posix().lower()
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        sources.append(candidate)
+
+    result: dict[str, Any] = {
+        "target_root": target_root.as_posix(),
+        "moved_count": 0,
+        "skipped_existing_count": 0,
+        "missing_source_count": 0,
+        "moved_ticket_ids": [],
+        "sources": [],
+    }
+    moved_ticket_ids: list[str] = []
+    source_rows: list[dict[str, Any]] = []
+
+    for source in sources:
+        row: dict[str, Any] = {
+            "source_root": source.as_posix(),
+            "exists": source.exists() and source.is_dir(),
+            "moved_ticket_ids": [],
+            "skipped_existing_ticket_ids": [],
+        }
+        if not source.exists() or not source.is_dir():
+            result["missing_source_count"] = int(result["missing_source_count"]) + 1
+            source_rows.append(row)
+            continue
+        for ticket_dir in sorted(source.iterdir(), key=lambda item: item.name.lower()):
+            if not ticket_dir.is_dir():
+                continue
+            ticket_id = str(ticket_dir.name or "").strip()
+            if not ticket_id:
+                continue
+            target_dir = target_root / ticket_id
+            if target_dir.exists():
+                row["skipped_existing_ticket_ids"].append(ticket_id)
+                result["skipped_existing_count"] = int(result["skipped_existing_count"]) + 1
+                continue
+            shutil.move(ticket_dir.as_posix(), target_dir.as_posix())
+            row["moved_ticket_ids"].append(ticket_id)
+            moved_ticket_ids.append(ticket_id)
+            result["moved_count"] = int(result["moved_count"]) + 1
+        try:
+            if source.exists() and source.is_dir() and not any(source.iterdir()):
+                source.rmdir()
+                if source.parent.exists() and source.parent.is_dir() and not any(source.parent.iterdir()):
+                    source.parent.rmdir()
+        except Exception:
+            pass
+        source_rows.append(row)
+
+    result["moved_ticket_ids"] = moved_ticket_ids
+    result["sources"] = source_rows
+    return result
 
 
 def safe_token(value: str, default: str, max_len: int) -> str:
@@ -737,6 +853,76 @@ def set_show_test_data(
     return old_value, new_value
 
 
+def set_artifact_root(
+    cfg: AppConfig,
+    state: RuntimeState,
+    requested_root: str,
+) -> dict[str, Any]:
+    text = str(requested_root or "").strip()
+    if not text:
+        raise SessionGateError(400, "artifact_root required", "artifact_root_required")
+    try:
+        candidate = normalize_abs_path(text, base=WORKFLOW_PROJECT_ROOT)
+        artifact_root, workspace_root = ensure_artifact_root_dirs(candidate)
+    except Exception as exc:
+        raise SessionGateError(
+            400,
+            f"artifact_root invalid: {exc}",
+            "artifact_root_invalid",
+        ) from exc
+    previous = resolve_artifact_root_path(cfg.root)
+    with state.config_lock:
+        try:
+            save_runtime_config(cfg.root, {"artifact_root": artifact_root.as_posix()})
+        except Exception as exc:
+            raise SessionGateError(
+                500,
+                f"artifact_root save failed: {exc}",
+                "artifact_root_save_failed",
+            ) from exc
+    try:
+        assignment_workspace_sync = migrate_assignment_workspace_records(
+            cfg.root,
+            artifact_root,
+            previous_artifact_root=previous,
+        )
+    except Exception as exc:
+        raise SessionGateError(
+            500,
+            f"artifact_root assignment sync failed: {exc}",
+            "artifact_root_assignment_sync_failed",
+            {
+                "artifact_root": artifact_root.as_posix(),
+                "previous_artifact_root": previous.as_posix(),
+            },
+        ) from exc
+    append_change_log(
+        cfg.root,
+        "artifact_root_changed",
+        f"from={previous.as_posix()}, to={artifact_root.as_posix()}, workspace={workspace_root.as_posix()}",
+    )
+    if int(assignment_workspace_sync.get("moved_count") or 0) > 0:
+        append_change_log(
+            cfg.root,
+            "assignment_workspace_records_migrated",
+            (
+                f"target={assignment_workspace_sync.get('target_root')}, "
+                f"moved={assignment_workspace_sync.get('moved_count')}, "
+                f"skipped_existing={assignment_workspace_sync.get('skipped_existing_count')}"
+            ),
+        )
+    return {
+        "ok": True,
+        "artifact_root": artifact_root.as_posix(),
+        "previous_artifact_root": previous.as_posix(),
+        "workspace_root": workspace_root.as_posix(),
+        "path_validation_status": "ok",
+        "workspace_ready": True,
+        "default_artifact_root": DEFAULT_ARTIFACT_ROOT.as_posix(),
+        "assignment_workspace_sync": assignment_workspace_sync,
+    }
+
+
 def resolve_include_test_data(
     query: dict[str, list[str]],
     cfg: AppConfig,
@@ -864,6 +1050,7 @@ from ..services import session_orchestration as _session_orchestration
 from ..services import task_orchestration as _task_orchestration
 from ..services import chat_session_runtime as _chat_session_runtime
 from ..services import training_workflow as _training_workflow
+from ..services import assignment_service as _assignment_service
 from ..infra import audit_runtime as _audit_runtime
 
 _RUNTIME_DOMAIN_MODULES = (
@@ -873,6 +1060,7 @@ _RUNTIME_DOMAIN_MODULES = (
     _task_orchestration,
     _chat_session_runtime,
     _training_workflow,
+    _assignment_service,
     _audit_runtime,
 )
 
@@ -1103,6 +1291,11 @@ def make_handler(cfg: AppConfig, state: RuntimeState) -> type[BaseHTTPRequestHan
 
             dispatch_post(self, cfg, state)
 
+        def do_DELETE(self) -> None:  # noqa: N802
+            from ..api.router import dispatch_delete
+
+            dispatch_delete(self, cfg, state)
+
         def log_message(self, fmt: str, *args: object) -> None:
             return
 
@@ -1203,13 +1396,33 @@ def main() -> None:
     )
     state = RuntimeState()
     ensure_dirs(cfg.root)
+    artifact_settings = get_artifact_root_settings(cfg.root)
     save_runtime_config(
         cfg.root,
         {
             "agent_search_root": agent_search_root_text(agent_search_root),
             "show_test_data": bool(show_test_data),
+            "artifact_root": str(artifact_settings.get("artifact_root") or ""),
         },
     )
+    try:
+        assignment_workspace_sync = migrate_assignment_workspace_records(
+            cfg.root,
+            Path(str(artifact_settings.get("artifact_root") or DEFAULT_ARTIFACT_ROOT.as_posix())),
+        )
+        if int(assignment_workspace_sync.get("moved_count") or 0) > 0:
+            append_change_log(
+                cfg.root,
+                "startup_assignment_workspace_records_migrated",
+                (
+                    f"target={assignment_workspace_sync.get('target_root')}, "
+                    f"moved={assignment_workspace_sync.get('moved_count')}, "
+                    f"skipped_existing={assignment_workspace_sync.get('skipped_existing_count')}"
+                ),
+            )
+    except Exception as exc:
+        append_failure_case(cfg.root, "startup_assignment_workspace_records_migrate_failed", str(exc))
+        append_change_log(cfg.root, "startup assignment workspace records migrate failed", str(exc))
     ensure_tables(cfg.root)
     ensure_metric_files(cfg.root)
     bind_training_center_runtime_once()

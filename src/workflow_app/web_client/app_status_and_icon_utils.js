@@ -110,6 +110,35 @@
     tcLoopServerLoading: false,
     tcLoopServerError: '',
     tcLoopServerRequestSeq: 0,
+    assignmentGraphs: [],
+    assignmentSelectedTicketId: '',
+    assignmentGraphData: null,
+    assignmentSelectedNodeId: '',
+    assignmentScheduler: null,
+    artifactRootPath: '',
+    artifactWorkspaceRoot: '',
+    artifactRootDefaultPath: '',
+    artifactRootValidationStatus: '',
+    assignmentHistoryLoaded: 0,
+    assignmentCreateOpen: false,
+    assignmentCreateForm: {
+      node_name: '',
+      assigned_agent_id: '',
+      priority: 'P1',
+      node_goal: '',
+      expected_artifact: '',
+      delivery_mode: 'none',
+      delivery_receiver_agent_id: '',
+    },
+    assignmentCreateUpstreamSearch: '',
+    assignmentCreateSelectedUpstreamIds: [],
+    assignmentDetail: null,
+    assignmentLoading: false,
+    assignmentError: '',
+    assignmentDetailError: '',
+    assignmentDrawerError: '',
+    assignmentGraphRequestSeq: 0,
+    assignmentDetailRequestSeq: 0,
   };
 
   function safe(value) {
@@ -148,8 +177,16 @@
     return queryParam('tc_probe') === '1';
   }
 
+  function isAssignmentProbeEnabled() {
+    return queryParam('assignment_probe') === '1';
+  }
+
   function isTestDataToggleProbeEnabled() {
     return queryParam('td_probe') === '1';
+  }
+
+  function assignmentProbeCase() {
+    return safe(queryParam('assignment_probe_case')).trim().toLowerCase() || 'visible';
   }
 
   function testDataToggleProbeCase() {

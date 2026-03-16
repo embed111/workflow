@@ -12,9 +12,19 @@
           setTrainingCenterError(err.message || String(err));
         });
     }
+    if (name === 'task-center') {
+      if (!state.agentSearchRootReady) {
+        renderAssignmentCenter();
+        return;
+      }
+      refreshAssignmentGraphs({ preserveSelection: true }).catch((err) => {
+        setAssignmentError(err.message || String(err));
+      });
+    }
   }
 
   function bindEvents() {
+    bindAssignmentCenterEvents();
     $('agentSelect').onchange = () => {
       const agent = selectedAgent();
       if (agent) localStorage.setItem(agentCacheKey, agent);
@@ -535,6 +545,9 @@
         await refreshWorkflows();
         await refreshTrainingCenterAgents();
         await refreshTrainingCenterQueue(false);
+        if (state.agentSearchRootReady && typeof refreshAssignmentGraphs === 'function') {
+          await refreshAssignmentGraphs({ preserveSelection: true });
+        }
         await refreshDashboard();
         setStatus(state.showTestData ? '已开启测试数据展示' : '已隐藏测试数据');
       } catch (err) {
@@ -573,6 +586,18 @@
         setSettingsError(err.message || String(err));
       }
     };
+    if ($('switchArtifactRootBtn')) {
+      $('switchArtifactRootBtn').onclick = async () => {
+        try {
+          setSettingsError('');
+          await withButtonLock('switchArtifactRootBtn', async () => {
+            await switchArtifactRoot();
+          });
+        } catch (err) {
+          setSettingsError(err.message || String(err));
+        }
+      };
+    }
     $('refreshSettingsBtn').onclick = async () => {
       try {
         await withButtonLock('refreshSettingsBtn', async () => {
@@ -778,6 +803,16 @@
     return node;
   }
 
+  function ensureAssignmentCenterProbeOutputNode() {
+    let node = $('assignmentCenterProbeOutput');
+    if (node) return node;
+    node = document.createElement('pre');
+    node.id = 'assignmentCenterProbeOutput';
+    node.style.display = 'none';
+    document.body.appendChild(node);
+    return node;
+  }
+
 
   function ensureTestDataToggleProbeOutputNode() {
     let node = $('testDataToggleProbeOutput');
@@ -953,6 +988,7 @@
     renderTrainingCenterAgentList();
     renderTrainingCenterAgentDetail();
     renderTrainingCenterQueue();
+    renderAssignmentCenter();
     syncTrainingCenterPlanAgentOptions();
     updateTrainingCenterSelectedMeta();
     const cachedShowTestData = localStorage.getItem(showTestDataCacheKey);
@@ -985,6 +1021,9 @@
     }
     if (isTrainingCenterProbeEnabled()) {
       await runTrainingCenterProbe();
+    }
+    if (isAssignmentProbeEnabled()) {
+      await runAssignmentCenterProbe();
     }
     if (isTestDataToggleProbeEnabled()) {
       await runTestDataToggleProbe();

@@ -869,7 +869,40 @@
     const tcEvalReviewerInput = $('tcEvalReviewerInput');
     const tcEvalSummaryInput = $('tcEvalSummaryInput');
     const tcSubmitEvalBtn = $('tcSubmitEvalBtn');
+    const artifactRootPathInput = $('artifactRootPathInput');
+    const switchArtifactRootBtn = $('switchArtifactRootBtn');
+    const assignmentPauseBtn = $('assignmentPauseBtn');
+    const assignmentResumeBtn = $('assignmentResumeBtn');
+    const assignmentCreateBtn = $('assignmentCreateBtn');
+    const assignmentRefreshBtn = $('assignmentRefreshBtn');
+    const assignmentLoadHistoryBtn = $('assignmentLoadHistoryBtn');
+    const assignmentDrawerSubmitBtn = $('assignmentDrawerSubmitBtn');
+    const assignmentTaskNameInput = $('assignmentTaskNameInput');
+    const assignmentAgentSelect = $('assignmentAgentSelect');
+    const assignmentPrioritySelect = $('assignmentPrioritySelect');
+    const assignmentGoalInput = $('assignmentGoalInput');
+    const assignmentArtifactInput = $('assignmentArtifactInput');
+    const assignmentDeliveryModeSelect = $('assignmentDeliveryModeSelect');
+    const assignmentDeliveryReceiverSelect = $('assignmentDeliveryReceiverSelect');
+    const assignmentUpstreamSearch = $('assignmentUpstreamSearch');
     const messageInput = $('msg');
+    const assignmentData = state.assignmentGraphData && typeof state.assignmentGraphData === 'object'
+      ? state.assignmentGraphData
+      : {};
+    const assignmentOverview = assignmentData.graph && typeof assignmentData.graph === 'object'
+      ? assignmentData.graph
+      : null;
+    const assignmentMetrics = assignmentOverview && assignmentOverview.metrics_summary && typeof assignmentOverview.metrics_summary === 'object'
+      ? assignmentOverview.metrics_summary
+      : assignmentData.metrics_summary && typeof assignmentData.metrics_summary === 'object'
+      ? assignmentData.metrics_summary
+      : {};
+    const assignmentHasNodes = !!assignmentOverview && Number(assignmentMetrics.total_nodes || 0) > 0;
+    const assignmentSchedulerState = safe(
+      (assignmentOverview && assignmentOverview.scheduler_state) ||
+      (state.assignmentScheduler && state.assignmentScheduler.state) ||
+      'idle',
+    ).trim().toLowerCase();
     const tcHasSelectedAgent = !!safe(state.tcSelectedAgentId).trim();
     const tcHasTargetAgent = !!trainingCenterSelectedTargetAgent();
     const tcSelectedDetail = state.tcSelectedAgentDetail || {};
@@ -886,6 +919,8 @@
     if (reloadSessionsBtn) reloadSessionsBtn.disabled = !rootReady;
     if (showTestDataCheck) showTestDataCheck.disabled = !rootReady;
     if (allowManualPolicyInputCheck) allowManualPolicyInputCheck.disabled = !rootReady;
+    if (artifactRootPathInput) artifactRootPathInput.disabled = !rootReady;
+    if (switchArtifactRootBtn) switchArtifactRootBtn.disabled = !rootReady;
     if (cleanupHistoryBtn) cleanupHistoryBtn.disabled = !rootReady;
     if (refreshWorkflowBtn) refreshWorkflowBtn.disabled = !rootReady;
     if (refreshEventsBtn) refreshEventsBtn.disabled = !rootReady;
@@ -921,6 +956,29 @@
     if (tcEvalReviewerInput) tcEvalReviewerInput.disabled = !rootReady || !tcHasSelectedAgent;
     if (tcEvalSummaryInput) tcEvalSummaryInput.disabled = !rootReady || !tcHasSelectedAgent;
     if (tcSubmitEvalBtn) tcSubmitEvalBtn.disabled = !rootReady || !tcHasSelectedAgent;
+    if (assignmentPauseBtn) {
+      assignmentPauseBtn.disabled =
+        !rootReady || !assignmentHasNodes || !!state.assignmentLoading || assignmentSchedulerState !== 'running';
+    }
+    if (assignmentResumeBtn) {
+      assignmentResumeBtn.disabled =
+        !rootReady ||
+        !assignmentHasNodes ||
+        !!state.assignmentLoading ||
+        !['idle', 'paused'].includes(assignmentSchedulerState);
+    }
+    if (assignmentCreateBtn) assignmentCreateBtn.disabled = !rootReady;
+    if (assignmentRefreshBtn) assignmentRefreshBtn.disabled = !rootReady;
+    if (assignmentLoadHistoryBtn) assignmentLoadHistoryBtn.disabled = !rootReady;
+    if (assignmentDrawerSubmitBtn) assignmentDrawerSubmitBtn.disabled = !rootReady;
+    if (assignmentTaskNameInput) assignmentTaskNameInput.disabled = !rootReady;
+    if (assignmentAgentSelect) assignmentAgentSelect.disabled = !rootReady;
+    if (assignmentPrioritySelect) assignmentPrioritySelect.disabled = !rootReady;
+    if (assignmentGoalInput) assignmentGoalInput.disabled = !rootReady;
+    if (assignmentArtifactInput) assignmentArtifactInput.disabled = !rootReady;
+    if (assignmentDeliveryModeSelect) assignmentDeliveryModeSelect.disabled = !rootReady;
+    if (assignmentDeliveryReceiverSelect) assignmentDeliveryReceiverSelect.disabled = !rootReady;
+    if (assignmentUpstreamSearch) assignmentUpstreamSearch.disabled = !rootReady;
     if (tcRootMeta) {
       tcRootMeta.textContent = rootReady
         ? '训练对象是 agent 工作区能力，独立于会话流程'
@@ -976,6 +1034,19 @@
       setSessionPolicyGateState('idle_unselected', 'agent_search_root 未设置，请先在设置页配置。', '');
       setChatError('agent_search_root 未设置或无效，所有功能已禁用。请先在设置页配置根路径。');
       setTrainingCenterError('agent_search_root 未设置或无效，训练中心功能已锁定。');
+      state.assignmentGraphs = [];
+      state.assignmentSelectedTicketId = '';
+      state.assignmentGraphData = null;
+      state.assignmentSelectedNodeId = '';
+      state.assignmentScheduler = null;
+      state.assignmentHistoryLoaded = 0;
+      state.assignmentCreateOpen = false;
+      state.assignmentDetail = null;
+      state.assignmentLoading = false;
+      setAssignmentError('agent_search_root 未设置或无效，任务中心功能已锁定。');
+      setAssignmentDetailError('');
+      setAssignmentDrawerError('');
+      renderAssignmentCenter();
       updateBatchActionState();
       return;
     }
@@ -1007,6 +1078,10 @@
       );
     } else {
       setChatError('');
+    }
+    if (state.assignmentError === 'agent_search_root 未设置或无效，任务中心功能已锁定。') {
+      setAssignmentError('');
+      renderAssignmentCenter();
     }
     updateBatchActionState();
     if (!state.agentSearchRootReady) {

@@ -24,3 +24,8 @@
 
 ## Session
 - latest_session_id: sess-reconcile
+
+## Snapshot Addendum
+- preference_ref: state/user-preferences.md
+- delta_observation: 本轮用户继续强调任务中心必须严格按指定 prompt/需求文档/原型实现，并明确要求默认产物根路径落到 `../.output/`。
+- delta_validation: 下轮涉及任务中心或产物路径时，先核对文档约束，再用独立 runtime 做最小回归，避免正式 `.runtime` 的运行态污染验收。

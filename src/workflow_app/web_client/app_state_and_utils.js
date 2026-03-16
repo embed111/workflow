@@ -400,6 +400,17 @@
     });
   }
 
+  async function deleteJSON(url, body) {
+    const options = {
+      method: 'DELETE',
+    };
+    if (body && typeof body === 'object') {
+      options.headers = { 'Content-Type': 'application/json' };
+      options.body = JSON.stringify(body);
+    }
+    return requestJSON(url, options);
+  }
+
   function includeTestDataQueryValue() {
     return state.showTestData ? '1' : '0';
   }
@@ -432,6 +443,23 @@
     const rate = Number(stats.manual_fallback_rate_pct || 0);
     const suffix = alertOn ? '（兜底触发率偏高: ' + String(rate) + '%）' : '';
     node.textContent = (enabled ? '默认开启' : '已关闭') + suffix;
+  }
+
+  function updateArtifactRootMeta() {
+    const pathInput = $('artifactRootPathInput');
+    const pathValue = safe(state.artifactRootPath).trim();
+    if (pathInput && document.activeElement !== pathInput) {
+      pathInput.value = pathValue;
+    }
+    const workspaceNode = $('artifactWorkspacePath');
+    if (workspaceNode) {
+      workspaceNode.textContent = safe(state.artifactWorkspaceRoot).trim() || '-';
+    }
+    const statusNode = $('artifactRootStatusMeta');
+    if (statusNode) {
+      const status = safe(state.artifactRootValidationStatus).trim().toLowerCase();
+      statusNode.textContent = status === 'ok' ? '路径校验通过，当前生效' : (status || '未校验');
+    }
   }
 
   function normalizePathToken(value) {

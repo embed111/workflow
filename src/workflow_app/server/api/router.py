@@ -2,7 +2,7 @@
 
 from urllib.parse import parse_qs, urlparse
 
-from . import chat, config, dashboard, legacy, policy, training
+from . import assignments, chat, config, dashboard, legacy, policy, training
 
 
 def dispatch_get(handler, cfg, state) -> None:
@@ -26,6 +26,8 @@ def dispatch_get(handler, cfg, state) -> None:
     if chat.try_handle_get(handler, cfg, state, ctx):
         return
     if training.try_handle_get(handler, cfg, state, ctx):
+        return
+    if assignments.try_handle_get(handler, cfg, state, ctx):
         return
     if policy.try_handle_get(handler, cfg, state, ctx):
         return
@@ -58,7 +60,30 @@ def dispatch_post(handler, cfg, state) -> None:
         return
     if training.try_handle_post(handler, cfg, state, ctx):
         return
+    if assignments.try_handle_post(handler, cfg, state, ctx):
+        return
     if policy.try_handle_post(handler, cfg, state, ctx):
         return
 
     legacy.handle_post_legacy(handler, cfg, state)
+
+
+def dispatch_delete(handler, cfg, state) -> None:
+    parsed = urlparse(handler.path)
+    path = parsed.path
+
+    try:
+        body = handler.read_json()
+    except Exception:
+        handler.send_json(400, {"ok": False, "error": "invalid json"})
+        return
+
+    ctx = {
+        "path": path,
+        "body": body,
+    }
+
+    if assignments.try_handle_delete(handler, cfg, state, ctx):
+        return
+
+    handler.send_json(404, {"ok": False, "error": "not found"})

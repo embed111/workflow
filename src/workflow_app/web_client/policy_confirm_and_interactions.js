@@ -435,6 +435,11 @@
     }
     state.allowManualPolicyInput = !!data.allow_manual_policy_input;
     state.policyClosureStats = data.policy_closure && typeof data.policy_closure === 'object' ? data.policy_closure : {};
+    state.artifactRootPath = safe(data.artifact_root).trim();
+    state.artifactWorkspaceRoot = safe(data.artifact_workspace_root).trim();
+    state.artifactRootDefaultPath = safe(data.artifact_root_default).trim();
+    state.artifactRootValidationStatus = safe(data.artifact_root_validation_status).trim();
+    updateArtifactRootMeta();
     const hasRootField = Object.prototype.hasOwnProperty.call(data || {}, 'agent_search_root');
     const nextRoot = hasRootField
       ? safe(data.agent_search_root).trim()
@@ -487,6 +492,9 @@
       $('agentSearchRoot').value = safe(data.agent_search_root);
     }
     renderAgentSelectOptions(manual);
+    if (typeof renderAssignmentCenter === 'function') {
+      renderAssignmentCenter();
+    }
     refreshAnalystOptions(selectedAnalyst());
     if (!state.agentSearchRootReady) {
       setSessionPolicyGateState('idle_unselected', 'agent_search_root 未设置，请先在设置页配置。', '');
