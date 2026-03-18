@@ -1,8 +1,0 @@
-{
-  "ok": true,
-  "audit_id": "taud-20260313-165159-9aebe1",
-  "loop_id": "plan-20260313-165055-ab2ffd",
-  "current_node_id": "rb-tq-20260313-165141-16e627",
-  "rollback_node_id": "rb-tq-20260313-165141-16e627",
-  "execution_engine": "workflow_native"
-}

@@ -1,0 +1,39 @@
+{
+  "role": "",
+  "goal": "",
+  "responsibilities": {
+    "must": [],
+    "must_not": [],
+    "preconditions": []
+  },
+  "evidence": [
+    {
+      "source_title": "document_title",
+      "evidence": "Line 1: \"# governance test\""
+    },
+    {
+      "source_title": "metadata",
+      "evidence": "Line 2: \"version: task-v2\""
+    }
+  ],
+  "parse_status": "incomplete",
+  "clarity_score": 4,
+  "clarity_gate": "block",
+  "warnings": [
+    "insufficient_content",
+    "role_missing",
+    "goal_missing",
+    "responsibilities_missing",
+    "constraints_evidence_missing"
+  ],
+  "missing_fields": [
+    "role",
+    "goal",
+    "responsibilities.must",
+    "responsibilities.must_not",
+    "responsibilities.preconditions",
+    "responsibilities.must evidence missing",
+    "responsibilities.must_not evidence missing",
+    "responsibilities.preconditions evidence missing"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "environment": "prod",
+  "version": "20260318-073748",
+  "control_root": "C:\\work\\J-Agents\\workflow\\.running\\control",
+  "manifest_path": "C:\\work\\J-Agents\\workflow\\.running\\control\\envs\\prod.json",
+  "deploy_root": "C:\\work\\J-Agents\\workflow\\.running\\prod",
+  "pid": 12056,
+  "host": "127.0.0.1",
+  "port": 8090,
+  "started_at": "2026-03-18T09:50:38Z",
+  "status": "running"
+}

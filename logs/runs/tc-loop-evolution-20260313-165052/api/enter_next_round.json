@@ -1,9 +1,0 @@
-{
-  "ok": true,
-  "audit_id": "taud-20260313-165141-7dd56d",
-  "loop_id": "plan-20260313-165055-ab2ffd",
-  "current_node_id": "tq-20260313-165141-16e627",
-  "created_queue_task_id": "tq-20260313-165141-16e627",
-  "created_plan_id": "plan-20260313-165141-258b83",
-  "execution_engine": "workflow_native"
-}

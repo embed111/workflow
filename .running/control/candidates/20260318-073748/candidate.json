@@ -1,0 +1,11 @@
+{
+    "source_deploy_root":  "C:\\work\\J-Agents\\workflow\\.running\\test",
+    "version":  "20260318-073748",
+    "test_batch_id":  "test-gate-20260318-073748",
+    "created_at":  "2026-03-18T07:37:52.9693196Z",
+    "source_environment":  "test",
+    "version_rank":  "20260318-073748",
+    "evidence_path":  "C:\\work\\J-Agents\\workflow\\.running\\control\\reports\\test-gate-20260318-073748.json",
+    "passed_at":  "2026-03-18T07:37:52.9693196Z",
+    "candidate_app_root":  "C:\\work\\J-Agents\\workflow\\.running\\control\\candidates\\20260318-073748\\app"
+}
