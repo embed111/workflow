@@ -1,9 +1,9 @@
 {
-    "candidate_version":  "20260318-073748",
+    "candidate_version":  "20260318-150842",
     "action":  "upgrade",
-    "current_version":  "20260318-073748",
+    "current_version":  "20260318-150842",
     "status":  "success",
-    "previous_version":  "20260318-073735",
-    "finished_at":  "2026-03-18T09:13:21.1493936Z",
-    "evidence_path":  "C:\\work\\J-Agents\\workflow\\.running\\control\\reports\\test-gate-20260318-073748.json"
+    "previous_version":  "20260318-073748",
+    "finished_at":  "2026-03-18T15:10:42.7316339Z",
+    "evidence_path":  "D:\\code\\AI\\J-Agents\\workflow\\.running\\control\\reports\\test-gate-20260318-150842.json"
 }

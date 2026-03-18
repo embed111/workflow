@@ -197,6 +197,8 @@
     const items = Array.isArray(state.tcAgents) ? state.tcAgents : [];
     const current = safe(state.assignmentCreateForm.assigned_agent_id).trim();
     const currentReceiver = safe(state.assignmentCreateForm.delivery_receiver_agent_id).trim();
+    const currentExists = items.some((item) => safe(item && item.agent_id).trim() === current);
+    const receiverExists = items.some((item) => safe(item && item.agent_id).trim() === currentReceiver);
     let html = '';
     if (!items.length) {
       html = "<option value=''>暂无可用角色</option>";
@@ -212,9 +214,11 @@
         .join('');
     }
     select.innerHTML = html;
-    if (!current && items.length) {
+    if (items.length && (!current || !currentExists)) {
       state.assignmentCreateForm.assigned_agent_id = safe(items[0].agent_id).trim();
       select.value = state.assignmentCreateForm.assigned_agent_id;
+    } else if (!items.length) {
+      state.assignmentCreateForm.assigned_agent_id = '';
     }
     if (receiverSelect) {
       receiverSelect.innerHTML = items.length
@@ -226,7 +230,12 @@
             '>' + escapeHtml(agentName || agentId) + '</option>';
         }).join(''))
         : "<option value=''>暂无可用角色</option>";
-      receiverSelect.value = currentReceiver;
+      if (currentReceiver && receiverExists) {
+        receiverSelect.value = currentReceiver;
+      } else {
+        state.assignmentCreateForm.delivery_receiver_agent_id = '';
+        receiverSelect.value = '';
+      }
     }
   }
 
@@ -529,12 +538,22 @@
     return refreshAssignmentGraphData({ ticketId: tid });
   }
 
-  function setAssignmentCreateOpen(nextOpen) {
+  function setAssignmentCreateOpen(nextOpen, options) {
+    const opts = options && typeof options === 'object' ? options : {};
+    const wasOpen = !!state.assignmentCreateOpen;
     state.assignmentCreateOpen = !!nextOpen;
     if (!state.assignmentCreateOpen) {
-      resetAssignmentCreateForm();
+      if (opts.clearDraft) {
+        resetAssignmentCreateForm({ clearDraft: true });
+      } else if (wasOpen) {
+        syncAssignmentCreateFormFromInputs();
+        persistAssignmentCreateDraft();
+      }
+      setAssignmentDrawerError('');
     }
     if (state.assignmentCreateOpen) {
+      restoreAssignmentCreateDraft();
+      setAssignmentDrawerError('');
       ensureAssignmentAgentPool(false).catch((err) => {
         setAssignmentDrawerError(err.message || String(err));
       });
@@ -553,6 +572,7 @@
       delivery_receiver_agent_id: safe($('assignmentDeliveryReceiverSelect') ? $('assignmentDeliveryReceiverSelect').value : '').trim(),
     };
     state.assignmentCreateUpstreamSearch = safe($('assignmentUpstreamSearch') ? $('assignmentUpstreamSearch').value : '').trim();
+    persistAssignmentCreateDraft();
   }
 
   async function submitAssignmentCreate() {
@@ -579,7 +599,8 @@
       operator: 'web-user',
     };
     await postJSON('/api/assignments/' + encodeURIComponent(ticketId) + '/nodes', payload);
-    setAssignmentCreateOpen(false);
+    resetAssignmentCreateForm({ clearDraft: true });
+    setAssignmentCreateOpen(false, { clearDraft: true });
     await refreshAssignmentGraphs({ preserveSelection: true });
     await maybeDispatchAssignmentTicket(ticketId);
     setStatus('任务已创建');

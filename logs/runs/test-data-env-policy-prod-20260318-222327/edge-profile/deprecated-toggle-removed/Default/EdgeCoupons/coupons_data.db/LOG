@@ -1,0 +1,6 @@
+2026/03/18-22:24:15.268 c094 Reusing MANIFEST D:\code\AI\J-Agents\workflow\logs\runs\test-data-env-policy-prod-20260318-222327\edge-profile\deprecated-toggle-removed\Default\EdgeCoupons/coupons_data.db/MANIFEST-000001
+2026/03/18-22:24:15.268 c094 Recovering log #4
+2026/03/18-22:24:15.269 c094 Reusing old log D:\code\AI\J-Agents\workflow\logs\runs\test-data-env-policy-prod-20260318-222327\edge-profile\deprecated-toggle-removed\Default\EdgeCoupons/coupons_data.db/000004.log 
+2026/03/18-22:24:15.298 c35c Level-0 table #8: started
+2026/03/18-22:24:15.301 c35c Level-0 table #8: 681708 bytes OK
+2026/03/18-22:24:15.303 c35c Delete type=0 #4

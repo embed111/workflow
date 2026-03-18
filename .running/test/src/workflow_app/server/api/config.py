@@ -25,7 +25,9 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
         200,
         {
             "ok": True,
-            "show_test_data": bool(ws.current_show_test_data(cfg, state)),
+            "deprecated": True,
+            "read_only": True,
+            **ws.show_test_data_policy_fields(cfg, state),
         },
     )
     return True
@@ -74,36 +76,13 @@ def try_handle_post(handler, cfg, state, ctx: dict) -> bool:
             body.get("show_test_data", body.get("showTestData")),
             default=ws.current_show_test_data(cfg, state),
         )
-        if ws.parse_bool_flag(body.get("force_fail"), default=False):
-            handler.send_json(
-                500,
-                {
-                    "ok": False,
-                    "error": "show_test_data save failed: forced by request",
-                    "code": "show_test_data_save_failed",
-                },
-            )
-            return True
-        try:
-            old_value, new_value = ws.set_show_test_data(cfg, state, requested)
-        except ws.SessionGateError as exc:
-            handler.send_json(
-                exc.status_code,
-                {"ok": False, "error": str(exc), "code": exc.code, **exc.extra},
-            )
-            return True
-        ws.append_change_log(
-            cfg.root,
-            "show test data toggle",
-            f"old={int(old_value)}, new={int(new_value)}",
-        )
         handler.send_json(
-            200,
-            {
-                "ok": True,
-                "show_test_data": bool(new_value),
-                "previous_show_test_data": bool(old_value),
-            },
+            410,
+            ws.show_test_data_toggle_removed_payload(
+                cfg,
+                state,
+                requested_value=requested,
+            ),
         )
         return True
 

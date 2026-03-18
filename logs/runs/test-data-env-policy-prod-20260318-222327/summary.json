@@ -1,0 +1,68 @@
+{
+  "base_url": "http://127.0.0.1:8090",
+  "recorded_at": "2026-03-18T22:24:22+0800",
+  "evidence_root": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327",
+  "api": {
+    "healthz": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/api/healthz.json",
+    "show_test_data_get": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/api/show_test_data_get.json",
+    "status": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/api/status.json",
+    "dashboard": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/api/dashboard.json",
+    "training_agents": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/api/training_agents.json",
+    "chat_sessions": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/api/chat_sessions.json",
+    "assignments": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/api/assignments.json",
+    "agents": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/api/agents.json",
+    "show_test_data_post_removed": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/api/show_test_data_post_removed.json"
+  },
+  "screenshots": {
+    "settings_no_toggle": {
+      "url": "http://127.0.0.1:8090/?td_probe=1&td_probe_case=ac_td_01&_ts=1773843809591",
+      "screenshot": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/screenshots/settings-no-toggle.png",
+      "dom": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/probes/settings-no-toggle.dom.html",
+      "probe": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/probes/settings-no-toggle.probe.json",
+      "probe_pass": true
+    },
+    "session_entry_prod_hidden": {
+      "url": "http://127.0.0.1:8090/?td_probe=1&td_probe_case=ac_td_03&_ts=1773843824918",
+      "screenshot": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/screenshots/session-entry-prod-hidden.png",
+      "dom": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/probes/session-entry-prod-hidden.dom.html",
+      "probe": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/probes/session-entry-prod-hidden.probe.json",
+      "probe_pass": true
+    },
+    "training_dashboard_policy": {
+      "url": "http://127.0.0.1:8090/?td_probe=1&td_probe_case=ac_td_04&_ts=1773843832819",
+      "screenshot": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/screenshots/training-dashboard-policy.png",
+      "dom": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/probes/training-dashboard-policy.dom.html",
+      "probe": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/probes/training-dashboard-policy.probe.json",
+      "probe_pass": true
+    },
+    "sessions_queue_policy": {
+      "url": "http://127.0.0.1:8090/?td_probe=1&td_probe_case=ac_td_05&_ts=1773843842492",
+      "screenshot": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/screenshots/sessions-queue-policy.png",
+      "dom": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/probes/sessions-queue-policy.dom.html",
+      "probe": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/probes/sessions-queue-policy.probe.json",
+      "probe_pass": true
+    },
+    "deprecated_toggle_removed": {
+      "url": "http://127.0.0.1:8090/?td_probe=1&td_probe_case=ac_td_06&_ts=1773843848408",
+      "screenshot": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/screenshots/deprecated-toggle-removed.png",
+      "dom": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/probes/deprecated-toggle-removed.dom.html",
+      "probe": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/probes/deprecated-toggle-removed.probe.json",
+      "probe_pass": true
+    },
+    "task_center_prod_hidden": {
+      "url": "http://127.0.0.1:8090/?td_probe=1&td_probe_case=ac_td_08&_ts=1773843856058",
+      "screenshot": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/screenshots/task-center-prod-hidden.png",
+      "dom": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/probes/task-center-prod-hidden.dom.html",
+      "probe": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/probes/task-center-prod-hidden.probe.json",
+      "probe_pass": true
+    }
+  },
+  "config_paths": {
+    "runtime_config_source": "D:/code/AI/J-Agents/workflow/.running/control/runtime/prod/state/runtime-config.json",
+    "instance_source": "D:/code/AI/J-Agents/workflow/.running/control/instances/prod.json",
+    "pid_source": "D:/code/AI/J-Agents/workflow/.running/control/pids/prod.pid",
+    "runtime_config_copy": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/config/runtime-config.json",
+    "instance_copy": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/config/prod.json",
+    "pid_copy": "D:/code/AI/J-Agents/workflow/logs/runs/test-data-env-policy-prod-20260318-222327/config/prod.pid"
+  }
+}

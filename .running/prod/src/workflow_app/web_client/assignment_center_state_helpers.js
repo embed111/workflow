@@ -35,11 +35,112 @@
     };
   }
 
-  function resetAssignmentCreateForm() {
+  function normalizeAssignmentCreateDraftForm(raw) {
+    const form = raw && typeof raw === 'object' ? raw : {};
+    const deliveryMode = safe(form.delivery_mode).trim().toLowerCase() === 'specified' ? 'specified' : 'none';
+    return {
+      node_name: safe(form.node_name),
+      assigned_agent_id: safe(form.assigned_agent_id).trim(),
+      priority: assignmentPriorityLabel(form.priority),
+      node_goal: safe(form.node_goal),
+      expected_artifact: safe(form.expected_artifact),
+      delivery_mode: deliveryMode,
+      delivery_receiver_agent_id: deliveryMode === 'specified'
+        ? safe(form.delivery_receiver_agent_id).trim()
+        : '',
+    };
+  }
+
+  function normalizeAssignmentCreateUpstreamIds(raw) {
+    if (!Array.isArray(raw)) return [];
+    const seen = new Set();
+    return raw
+      .map((item) => safe(item).trim())
+      .filter((item) => {
+        if (!item || seen.has(item)) return false;
+        seen.add(item);
+        return true;
+      });
+  }
+
+  function assignmentCreateDraftPayload() {
+    return {
+      form: normalizeAssignmentCreateDraftForm(state.assignmentCreateForm || defaultAssignmentCreateForm()),
+      upstream_search: safe(state.assignmentCreateUpstreamSearch),
+      upstream_node_ids: normalizeAssignmentCreateUpstreamIds(state.assignmentCreateSelectedUpstreamIds),
+    };
+  }
+
+  function assignmentCreateDraftHasContent(payload) {
+    const draft = payload && typeof payload === 'object' ? payload : assignmentCreateDraftPayload();
+    const form = draft.form && typeof draft.form === 'object'
+      ? draft.form
+      : defaultAssignmentCreateForm();
+    return !!(
+      safe(form.node_name).trim() ||
+      safe(form.assigned_agent_id).trim() ||
+      assignmentPriorityLabel(form.priority) !== 'P1' ||
+      safe(form.node_goal).trim() ||
+      safe(form.expected_artifact).trim() ||
+      safe(form.delivery_mode).trim().toLowerCase() === 'specified' ||
+      safe(form.delivery_receiver_agent_id).trim() ||
+      safe(draft.upstream_search).trim() ||
+      normalizeAssignmentCreateUpstreamIds(draft.upstream_node_ids).length
+    );
+  }
+
+  function persistAssignmentCreateDraft() {
+    const payload = assignmentCreateDraftPayload();
+    try {
+      if (!assignmentCreateDraftHasContent(payload)) {
+        localStorage.removeItem(assignmentCreateDraftCacheKey);
+        return;
+      }
+      localStorage.setItem(assignmentCreateDraftCacheKey, JSON.stringify(payload));
+    } catch (_) {
+      // ignore localStorage errors
+    }
+  }
+
+  function restoreAssignmentCreateDraft() {
+    if (state.assignmentCreateDraftLoaded) return;
+    state.assignmentCreateDraftLoaded = true;
+    try {
+      const raw = localStorage.getItem(assignmentCreateDraftCacheKey);
+      if (!raw) return;
+      const payload = JSON.parse(raw);
+      state.assignmentCreateForm = normalizeAssignmentCreateDraftForm(payload && payload.form);
+      state.assignmentCreateSelectedUpstreamIds = normalizeAssignmentCreateUpstreamIds(
+        payload && payload.upstream_node_ids,
+      );
+      state.assignmentCreateUpstreamSearch = safe(payload && payload.upstream_search);
+    } catch (_) {
+      try {
+        localStorage.removeItem(assignmentCreateDraftCacheKey);
+      } catch (_) {
+        // ignore localStorage errors
+      }
+    }
+  }
+
+  function clearAssignmentCreateDraft() {
+    try {
+      localStorage.removeItem(assignmentCreateDraftCacheKey);
+    } catch (_) {
+      // ignore localStorage errors
+    }
+  }
+
+  function resetAssignmentCreateForm(options) {
+    const opts = options && typeof options === 'object' ? options : {};
     state.assignmentCreateForm = defaultAssignmentCreateForm();
     state.assignmentCreateSelectedUpstreamIds = [];
     state.assignmentCreateUpstreamSearch = '';
     state.assignmentDrawerError = '';
+    state.assignmentCreateDraftLoaded = true;
+    if (opts.clearDraft !== false) {
+      clearAssignmentCreateDraft();
+    }
   }
 
   function selectedAssignmentTicketId() {

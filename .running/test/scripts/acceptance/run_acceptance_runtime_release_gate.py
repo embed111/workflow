@@ -107,6 +107,7 @@ def patch_runtime_config(runtime_root: Path, fixture_root: Path) -> str:
     if not isinstance(payload, dict):
         payload = {}
     payload["agent_search_root"] = fixture_root.as_posix()
+    payload["show_test_data"] = True
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
     cfg_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return original
@@ -198,13 +199,16 @@ def main() -> int:
         assert_true(structure_path.exists(), "tasks structure guide missing")
         evidence["checks"]["artifact_root"] = artifact_root
 
-        status, show_on = api_request(base_url, "POST", "/api/config/show-test-data", {"show_test_data": True})
-        assert_true(status == 200 and isinstance(show_on, dict) and show_on.get("ok"), "show_test_data enable failed")
+        status, show_on = api_request(base_url, "GET", "/api/config/show-test-data")
+        assert_true(status == 200 and isinstance(show_on, dict) and show_on.get("ok"), "show_test_data policy unavailable")
+        assert_true(bool(show_on.get("show_test_data")), "test gate should run with show_test_data=true environment policy")
+        assert_true(str(show_on.get("environment") or "").strip() == "test", "show_test_data policy should expose test environment")
+        evidence["checks"]["show_test_data_policy"] = show_on
         status, bootstrap = api_request(base_url, "POST", "/api/assignments/test-data/bootstrap", {"operator": "release-gate"})
         assert_true(status == 200 and isinstance(bootstrap, dict) and bootstrap.get("ok"), "assignment test-data bootstrap failed")
         ticket_id = str(bootstrap.get("ticket_id") or "").strip()
         assert_true(ticket_id, "assignment bootstrap missing ticket_id")
-        status, graph = api_request(base_url, "GET", f"/api/assignments/{ticket_id}/graph?include_test_data=1")
+        status, graph = api_request(base_url, "GET", f"/api/assignments/{ticket_id}/graph")
         assert_true(status == 200 and isinstance(graph, dict) and graph.get("ok"), "assignment graph fetch failed")
         metrics = (graph.get("metrics_summary") or {}).get("status_counts") or {}
         assert_true(int((graph.get("metrics_summary") or {}).get("total_nodes") or 0) == 20, "test assignment graph should contain 20 nodes")

@@ -14,21 +14,13 @@
       case: testDataToggleProbeCase(),
       pass: false,
       error: '',
-      total_agents: 0,
-      visible_when_off: 0,
-      visible_when_on: 0,
-      tc_agents_off: 0,
-      tc_agents_on: 0,
-      tc_queue_off: 0,
-      tc_queue_on: 0,
-      error_text: '',
-      retry_ok: false,
+      environment: '',
+      show_test_data: false,
+      show_test_data_source: '',
       session_toggle_exists: false,
       settings_toggle_exists: false,
-      dashboard_off: {},
-      dashboard_on: {},
+      settings_policy_meta: '',
     };
-    const waitMs = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
     try {
       const probeCase = output.case;
       const refreshAll = async () => {
@@ -39,113 +31,157 @@
         await refreshTrainingCenterAgents();
         await refreshTrainingCenterQueue(true);
       };
+      const syncPolicyOutput = () => {
+        output.environment = safe(state.runtimeEnvironment).trim();
+        output.show_test_data = !!state.showTestData;
+        output.show_test_data_source = safe(state.showTestDataSource).trim();
+      };
+      const capturePolicyTuple = (payload) => ({
+        environment: safe(payload && payload.environment).trim(),
+        show_test_data: !!(payload && payload.show_test_data),
+        show_test_data_source: safe(payload && payload.show_test_data_source).trim(),
+      });
+      const policiesMatch = (items) => {
+        const rows = Array.isArray(items) ? items.filter((item) => !!item) : [];
+        if (!rows.length) return false;
+        const baseline = rows[0];
+        return rows.every((item) =>
+          safe(item.environment).trim() === safe(baseline.environment).trim() &&
+          !!item.show_test_data === !!baseline.show_test_data &&
+          safe(item.show_test_data_source).trim() === safe(baseline.show_test_data_source).trim()
+        );
+      };
+      const postDeprecatedToggle = async (nextValue) => {
+        const response = await fetch('/api/config/show-test-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ show_test_data: !!nextValue }),
+        });
+        let body = {};
+        try {
+          body = await response.json();
+        } catch (_) {
+          body = {};
+        }
+        return {
+          status: Number(response.status || 0),
+          body: body && typeof body === 'object' ? body : {},
+        };
+      };
+      await refreshAll();
+      syncPolicyOutput();
       if (probeCase === 'ac_td_01') {
         switchTab('chat');
         output.session_toggle_exists = !!$('showSystemAgentsCheck');
         switchTab('settings');
         output.settings_toggle_exists = !!$('showTestDataCheck');
-        output.pass = !output.session_toggle_exists && output.settings_toggle_exists;
+        output.settings_policy_meta = safe($('showTestDataPolicyMeta') ? $('showTestDataPolicyMeta').textContent : '').trim();
+        output.pass = !output.session_toggle_exists && !output.settings_toggle_exists && !!output.settings_policy_meta;
       } else if (probeCase === 'ac_td_02') {
         switchTab('settings');
-        await postJSON('/api/config/show-test-data', { show_test_data: false });
-        await refreshAll();
-        output.server_value_after_set = !!state.showTestData;
-        localStorage.setItem(showTestDataCacheKey, '1');
+        const before = !!state.showTestData;
+        localStorage.setItem(showSystemAgentsLegacyCacheKey, '1');
+        localStorage.setItem(showTestDataCacheKey, before ? '0' : '1');
         await refreshAgents(true, { autoAnalyze: false });
-        output.server_value_after_reload = !!state.showTestData;
-        output.pass = !output.server_value_after_set && !output.server_value_after_reload;
+        output.before_state = before;
+        output.after_state = !!state.showTestData;
+        output.legacy_show_system_after_refresh = safe(localStorage.getItem(showSystemAgentsLegacyCacheKey)).trim();
+        output.legacy_show_test_after_refresh = safe(localStorage.getItem(showTestDataCacheKey)).trim();
+        output.pass =
+          output.after_state === before &&
+          !output.legacy_show_system_after_refresh &&
+          !output.legacy_show_test_after_refresh;
       } else if (probeCase === 'ac_td_03') {
         switchTab('chat');
-        await postJSON('/api/config/show-test-data', { show_test_data: false });
         await refreshAgents(true, { autoAnalyze: false });
         output.total_agents = Array.isArray(state.agents) ? state.agents.length : 0;
-        output.visible_when_off = visibleAgents().length;
-        await postJSON('/api/config/show-test-data', { show_test_data: true });
-        await refreshAgents(true, { autoAnalyze: false });
-        output.visible_when_on = visibleAgents().length;
+        output.system_like_agents = (state.agents || []).filter((item) => isSystemOrTestAgent(item)).length;
+        output.visible_agents = visibleAgents().length;
+        output.visible_system_agents = visibleAgents().filter((item) => isSystemOrTestAgent(item)).length;
         setAgentDropdownOpen(true);
         output.pass =
-          output.total_agents >= output.visible_when_off &&
-          output.visible_when_on >= output.visible_when_off &&
-          output.visible_when_on === output.total_agents &&
-          output.visible_when_on > output.visible_when_off;
+          output.total_agents >= output.visible_agents &&
+          (state.showTestData
+            ? output.visible_system_agents === output.system_like_agents
+            : output.visible_system_agents === 0);
       } else if (probeCase === 'ac_td_04') {
         switchTab('training');
-        await postJSON('/api/config/show-test-data', { show_test_data: false });
+        switchTab('training-center');
+        await refreshTrainingCenterAgents();
         await refreshDashboard();
-        output.dashboard_off = await getJSON('/api/dashboard');
-        await postJSON('/api/config/show-test-data', { show_test_data: true });
-        await refreshDashboard();
-        output.dashboard_on = await getJSON('/api/dashboard');
-        const changed =
-          Number(output.dashboard_off.new_sessions_24h || 0) !== Number(output.dashboard_on.new_sessions_24h || 0) ||
-          Number(output.dashboard_off.pending_analysis || 0) !== Number(output.dashboard_on.pending_analysis || 0) ||
-          Number(output.dashboard_off.pending_training || 0) !== Number(output.dashboard_on.pending_training || 0);
-        output.pass = !!changed;
+        const dashboard = await getJSON('/api/dashboard');
+        const trainingAgents = await getJSON('/api/training/agents');
+        output.dashboard_policy = capturePolicyTuple(dashboard);
+        output.training_policy = capturePolicyTuple(trainingAgents);
+        output.training_test_items = Array.isArray(trainingAgents.items)
+          ? trainingAgents.items.filter((item) => !!(item && item.is_test_data)).length
+          : 0;
+        output.pass =
+          policiesMatch([output.dashboard_policy, output.training_policy]) &&
+          (state.showTestData || output.training_test_items === 0);
       } else if (probeCase === 'ac_td_05') {
         switchTab('training-center');
         setTrainingCenterModule('ops');
-        await postJSON('/api/config/show-test-data', { show_test_data: false });
-        await refreshTrainingCenterAgents();
+        await refreshSessions();
         await refreshTrainingCenterQueue(true);
-        output.tc_agents_off = Array.isArray(state.tcAgents) ? state.tcAgents.length : 0;
-        output.tc_queue_off = Array.isArray(state.tcQueue) ? state.tcQueue.length : 0;
-        await postJSON('/api/config/show-test-data', { show_test_data: true });
-        await refreshTrainingCenterAgents();
-        await refreshTrainingCenterQueue(true);
-        output.tc_agents_on = Array.isArray(state.tcAgents) ? state.tcAgents.length : 0;
-        output.tc_queue_on = Array.isArray(state.tcQueue) ? state.tcQueue.length : 0;
+        const sessionsPayload = await getJSON('/api/chat/sessions');
+        const queuePayload = await getJSON('/api/training/queue?include_removed=1');
+        output.sessions_policy = capturePolicyTuple(sessionsPayload);
+        output.queue_policy = capturePolicyTuple(queuePayload);
+        output.session_test_rows = Array.isArray(sessionsPayload.sessions)
+          ? sessionsPayload.sessions.filter((item) => !!(item && item.is_test_data)).length
+          : 0;
+        output.queue_test_rows = Array.isArray(queuePayload.items)
+          ? queuePayload.items.filter((item) => !!(item && item.is_test_data)).length
+          : 0;
         output.pass =
-          output.tc_agents_on >= output.tc_agents_off &&
-          output.tc_queue_on >= output.tc_queue_off &&
-          (output.tc_agents_on > output.tc_agents_off || output.tc_queue_on > output.tc_queue_off);
+          policiesMatch([output.sessions_policy, output.queue_policy]) &&
+          (state.showTestData || (output.session_test_rows === 0 && output.queue_test_rows === 0));
       } else if (probeCase === 'ac_td_06') {
         switchTab('settings');
         await refreshAgents(true, { autoAnalyze: false });
-        const check = $('showTestDataCheck');
         const before = !!state.showTestData;
-        if (!check) throw new Error('showTestDataCheck not found');
-        check.checked = !before;
-        check.dispatchEvent(new Event('change', { bubbles: true }));
-        await waitMs(240);
+        const result = await postDeprecatedToggle(!before);
+        const afterPayload = await getJSON('/api/agents');
         output.before_state = before;
-        output.after_state = !!state.showTestData;
-        output.after_checked = !!check.checked;
-        output.error_text = safe($('settingsErr') ? $('settingsErr').textContent : '').trim();
+        output.write_status = result.status;
+        output.write_code = safe(result.body && result.body.code).trim();
+        output.after_state = !!afterPayload.show_test_data;
         output.pass =
           output.after_state === before &&
-          output.after_checked === before &&
-          !!output.error_text;
+          output.write_status === 410 &&
+          output.write_code === 'show_test_data_toggle_removed';
       } else if (probeCase === 'ac_td_07') {
         switchTab('settings');
-        let failed = false;
-        try {
-          await refreshAgents(true, {
-            autoAnalyze: false,
-            agentsPath: '/api/agents?force_show_test_data_read_fail=1',
-          });
-        } catch (err) {
-          failed = true;
-          setSettingsError(err.message || String(err));
-        }
-        output.error_text = safe($('settingsErr') ? $('settingsErr').textContent : '').trim();
-        await refreshAgents(true, { autoAnalyze: false });
-        output.retry_ok = !!state.agentSearchRootReady;
-        output.pass = failed && !!output.error_text && output.retry_ok;
+        const agentsPayload = await getJSON('/api/agents');
+        const statusPayload = await getJSON('/api/status');
+        const dashboardPayload = await getJSON('/api/dashboard');
+        const trainingPayload = await getJSON('/api/training/agents');
+        output.policy_payloads = {
+          agents: capturePolicyTuple(agentsPayload),
+          status: capturePolicyTuple(statusPayload),
+          dashboard: capturePolicyTuple(dashboardPayload),
+          training: capturePolicyTuple(trainingPayload),
+        };
+        output.pass = policiesMatch([
+          output.policy_payloads.agents,
+          output.policy_payloads.status,
+          output.policy_payloads.dashboard,
+          output.policy_payloads.training,
+        ]);
       } else if (probeCase === 'ac_td_08') {
-        switchTab('settings');
-        await postJSON('/api/config/show-test-data', { show_test_data: false });
-        await refreshAgents(true, { autoAnalyze: false });
-        localStorage.setItem('workflow.p0.settings.showSystemAgents', '1');
-        localStorage.setItem(showTestDataCacheKey, '1');
-        await refreshAgents(true, { autoAnalyze: false });
-        const legacyValue = safe(localStorage.getItem('workflow.p0.settings.showSystemAgents')).trim();
-        output.legacy_key_after_refresh = legacyValue;
-        output.server_state = !!state.showTestData;
-        output.pass = !output.server_state && !legacyValue;
+        switchTab('task-center');
+        if (state.agentSearchRootReady && typeof refreshAssignmentGraphs === 'function') {
+          await refreshAssignmentGraphs({ preserveSelection: true });
+        }
+        output.assignment_test_rows = Array.isArray(state.assignmentGraphs)
+          ? state.assignmentGraphs.filter((item) => !!(item && item.is_test_data)).length
+          : 0;
+        output.pass = state.showTestData || output.assignment_test_rows === 0;
       } else {
         output.pass = true;
       }
+      syncPolicyOutput();
     } catch (err) {
       output.error = safe(err && err.message ? err.message : err);
     }
@@ -175,12 +211,7 @@
     renderAssignmentCenter();
     syncTrainingCenterPlanAgentOptions();
     updateTrainingCenterSelectedMeta();
-    const cachedShowTestData = localStorage.getItem(showTestDataCacheKey);
-    if (cachedShowTestData === '0' || cachedShowTestData === '1') {
-      state.showTestData = cachedShowTestData === '1';
-    }
-    cleanupLegacyShowSystemAgentsCache();
-    $('showTestDataCheck').checked = state.showTestData;
+    cleanupLegacyTestDataCaches();
     updateShowTestDataMeta();
     updateClearPolicyCacheButton();
     setWorkflowQueueMode('records');

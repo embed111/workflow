@@ -16,18 +16,19 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
     path = str(ctx.get("path") or "")
     query = ctx.get("query") or {}
     include_test_data = ws.resolve_include_test_data(query, cfg, state)
+    policy_fields = ws.show_test_data_policy_fields(cfg, state)
 
     if path.startswith("/api/assignments") and not handler.ensure_root_ready():
         return True
 
     if path == "/api/assignments/settings/concurrency":
         data = ws.get_assignment_concurrency_settings(cfg.root)
-        handler.send_json(200, {"ok": True, **data})
+        handler.send_json(200, {"ok": True, **policy_fields, **data})
         return True
 
     if path == "/api/assignments/settings/execution":
         data = ws.get_assignment_execution_settings(cfg.root)
-        handler.send_json(200, {"ok": True, **data})
+        handler.send_json(200, {"ok": True, **policy_fields, **data})
         return True
 
     martifact_preview = re.fullmatch(
@@ -51,7 +52,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
 
     if path == "/api/assignments":
         data = ws.list_assignments(cfg.root, include_test_data=include_test_data)
-        handler.send_json(200, {"ok": True, **data})
+        handler.send_json(200, {"ok": True, "include_test_data": include_test_data, **policy_fields, **data})
         return True
 
     mgraph = re.fullmatch(r"/api/assignments/([0-9A-Za-z._:-]+)/graph", path)
@@ -64,7 +65,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                 history_batch_size=_parse_int_query(query, "history_batch_size", 12),
                 include_test_data=include_test_data,
             )
-            handler.send_json(200, {"ok": True, **data})
+            handler.send_json(200, {"ok": True, "include_test_data": include_test_data, **policy_fields, **data})
         except ws.AssignmentCenterError as exc:
             payload = {"ok": False, "error": str(exc), "code": exc.code}
             payload.update(exc.extra)
@@ -80,7 +81,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                 node_id_text=str((query.get("node_id") or [""])[0] or "").strip(),
                 include_test_data=include_test_data,
             )
-            handler.send_json(200, {"ok": True, **data})
+            handler.send_json(200, {"ok": True, "include_test_data": include_test_data, **policy_fields, **data})
         except ws.AssignmentCenterError as exc:
             payload = {"ok": False, "error": str(exc), "code": exc.code}
             payload.update(exc.extra)
@@ -95,7 +96,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                 ws.safe_token(mscheduler.group(1), "", 160),
                 include_test_data=include_test_data,
             )
-            handler.send_json(200, {"ok": True, **data})
+            handler.send_json(200, {"ok": True, "include_test_data": include_test_data, **policy_fields, **data})
         except ws.AssignmentCenterError as exc:
             payload = {"ok": False, "error": str(exc), "code": exc.code}
             payload.update(exc.extra)
@@ -110,7 +111,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                 ws.safe_token(moverview.group(1), "", 160),
                 include_test_data=include_test_data,
             )
-            handler.send_json(200, {"ok": True, **data})
+            handler.send_json(200, {"ok": True, "include_test_data": include_test_data, **policy_fields, **data})
         except ws.AssignmentCenterError as exc:
             payload = {"ok": False, "error": str(exc), "code": exc.code}
             payload.update(exc.extra)
@@ -124,6 +125,7 @@ def try_handle_post(handler, cfg, state, ctx: dict) -> bool:
     path = str(ctx.get("path") or "")
     body = ctx.get("body") or {}
     current_include_test_data = ws.current_show_test_data(cfg, state)
+    policy_fields = ws.show_test_data_policy_fields(cfg, state)
 
     if path.startswith("/api/assignments") and not handler.ensure_root_ready():
         return True
@@ -177,8 +179,12 @@ def try_handle_post(handler, cfg, state, ctx: dict) -> bool:
             if not current_include_test_data:
                 raise ws.AssignmentCenterError(
                     409,
-                    "assignment test data hidden by global switch",
+                    "assignment test data hidden by environment policy",
                     "assignment_test_data_hidden",
+                    {
+                        **policy_fields,
+                        "read_only": True,
+                    },
                 )
             data = ws.bootstrap_assignment_test_graph(
                 cfg,

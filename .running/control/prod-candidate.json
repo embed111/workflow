@@ -1,10 +1,10 @@
 {
-    "version":  "20260318-073748",
-    "test_batch_id":  "test-gate-20260318-073748",
-    "candidate_meta_path":  "C:\\work\\J-Agents\\workflow\\.running\\control\\candidates\\20260318-073748\\candidate.json",
+    "version":  "20260318-150842",
+    "test_batch_id":  "test-gate-20260318-150842",
+    "candidate_meta_path":  "D:\\code\\AI\\J-Agents\\workflow\\.running\\control\\candidates\\20260318-150842\\candidate.json",
     "source_environment":  "test",
-    "version_rank":  "20260318-073748",
-    "evidence_path":  "C:\\work\\J-Agents\\workflow\\.running\\control\\reports\\test-gate-20260318-073748.json",
-    "passed_at":  "2026-03-18T07:37:52.9693196Z",
-    "candidate_app_root":  "C:\\work\\J-Agents\\workflow\\.running\\control\\candidates\\20260318-073748\\app"
+    "version_rank":  "20260318-150842",
+    "evidence_path":  "D:\\code\\AI\\J-Agents\\workflow\\.running\\control\\reports\\test-gate-20260318-150842.json",
+    "passed_at":  "2026-03-18T15:08:47.6883552Z",
+    "candidate_app_root":  "D:\\code\\AI\\J-Agents\\workflow\\.running\\control\\candidates\\20260318-150842\\app"
 }

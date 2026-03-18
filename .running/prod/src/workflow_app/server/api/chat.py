@@ -24,6 +24,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
         agents = ws.list_available_agents(cfg) if root_ready else []
         artifact_settings = ws.get_artifact_root_settings(cfg.root)
         execution_settings = ws.get_assignment_execution_settings(cfg.root)
+        policy_fields = ws.show_test_data_policy_fields(cfg, state)
         handler.send_json(
             200,
             {
@@ -34,7 +35,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                 "workspace_root_error": root_error,
                 "agent_search_root_ready": bool(root_ready),
                 "features_locked": not bool(root_ready),
-                "show_test_data": bool(ws.current_show_test_data(cfg, state)),
+                **policy_fields,
                 "allow_manual_policy_input": bool(ws.current_allow_manual_policy_input(cfg, state)),
                 "policy_closure": ws.policy_closure_stats(cfg.root),
                 "artifact_root": str(artifact_settings.get("artifact_root") or ""),
@@ -56,12 +57,13 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
     if path == "/api/chat/sessions":
         query = ctx.get("query") or {}
         include_test_data = ws.resolve_include_test_data(query, cfg, state)
+        policy_fields = ws.show_test_data_policy_fields(cfg, state)
         handler.send_json(
             200,
             {
                 "ok": True,
                 "include_test_data": include_test_data,
-                "show_test_data": bool(ws.current_show_test_data(cfg, state)),
+                **policy_fields,
                 "sessions": (
                     ws.list_chat_sessions(
                         cfg.root,

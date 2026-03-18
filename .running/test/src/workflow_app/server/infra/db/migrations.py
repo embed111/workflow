@@ -410,25 +410,6 @@ def ensure_tables(
         conn.execute(
             "UPDATE conversation_messages SET analysis_updated_at=created_at WHERE COALESCE(analysis_updated_at,'')='' AND COALESCE(created_at,'')<>''",
         )
-        for table in (
-            "conversation_events",
-            "analysis_tasks",
-            "training_tasks",
-            "conversation_messages",
-            "chat_sessions",
-            "task_runs",
-            "task_events",
-            "ingress_requests",
-            "reconcile_runs",
-            "training_workflows",
-            "training_workflow_events",
-            "analysis_runs",
-            "analysis_run_plan_items",
-            "message_delete_audit",
-            "policy_confirmation_audit",
-            "agent_policy_patch_tasks",
-        ):
-            drop_table_if_exists(conn, table)
         conn.commit()
     finally:
         conn.close()

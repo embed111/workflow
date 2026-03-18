@@ -12,6 +12,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
     query = ctx.get("query") or {}
     artifact_settings = ws.get_artifact_root_settings(cfg.root)
     execution_settings = ws.get_assignment_execution_settings(cfg.root)
+    policy_fields = ws.show_test_data_policy_fields(cfg, state)
 
     if path == "/api/training/agents":
         if not root_ready:
@@ -34,7 +35,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                     "artifact_root_default": str(artifact_settings.get("default_artifact_root") or ""),
                     "artifact_root_validation_status": str(artifact_settings.get("path_validation_status") or ""),
                     "assignment_execution_settings": execution_settings,
-                    "show_test_data": bool(ws.current_show_test_data(cfg, state)),
+                    **policy_fields,
                     "include_test_data": bool(ws.current_show_test_data(cfg, state)),
                 },
             )
@@ -47,7 +48,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                 "ok": True,
                 **data,
                 "include_test_data": include_test_data,
-                "show_test_data": bool(ws.current_show_test_data(cfg, state)),
+                **policy_fields,
                 "agent_search_root": root_text,
                 "agent_search_root_ready": True,
                 "features_locked": False,
@@ -91,7 +92,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                 {
                     "ok": True,
                     "items": [],
-                    "show_test_data": bool(ws.current_show_test_data(cfg, state)),
+                    **policy_fields,
                     "include_test_data": bool(ws.current_show_test_data(cfg, state)),
                     "agent_search_root": root_text,
                     "agent_search_root_ready": False,
@@ -112,7 +113,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                 ),
                 "include_removed": include_removed,
                 "include_test_data": include_test_data,
-                "show_test_data": bool(ws.current_show_test_data(cfg, state)),
+                **policy_fields,
             },
         )
         return True
@@ -132,7 +133,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                     "metrics_available": False,
                     "metrics_unavailable_reason": "agent_search_root_not_ready",
                     "is_test_data": False,
-                    "show_test_data": bool(ws.current_show_test_data(cfg, state)),
+                    **policy_fields,
                     "include_test_data": bool(ws.current_show_test_data(cfg, state)),
                     "agent_search_root": root_text,
                     "agent_search_root_ready": False,
@@ -153,7 +154,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                     "ok": True,
                     **data,
                     "include_test_data": include_test_data,
-                    "show_test_data": bool(ws.current_show_test_data(cfg, state)),
+                    **policy_fields,
                 },
             )
         except ws.TrainingCenterError as exc:
@@ -178,7 +179,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                     "evaluations": [],
                     "history_records": [],
                     "is_test_data": False,
-                    "show_test_data": bool(ws.current_show_test_data(cfg, state)),
+                    **policy_fields,
                     "include_test_data": bool(ws.current_show_test_data(cfg, state)),
                     "agent_search_root": root_text,
                     "agent_search_root_ready": False,
@@ -199,7 +200,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                     "ok": True,
                     **data,
                     "include_test_data": include_test_data,
-                    "show_test_data": bool(ws.current_show_test_data(cfg, state)),
+                    **policy_fields,
                 },
             )
         except ws.TrainingCenterError as exc:

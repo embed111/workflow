@@ -414,24 +414,13 @@
     state.agentSearchRootReady = !!rootReadyRaw;
     state.agentSearchRootError = safe(data.workspace_root_error || data.agent_search_root_error || '');
     state.agents = state.agentSearchRootReady && Array.isArray(data.agents) ? data.agents : [];
-    const hasShowTestData = Object.prototype.hasOwnProperty.call(data || {}, 'show_test_data');
-    if (hasShowTestData) {
-      state.showTestData = !!data.show_test_data;
-      const showTestDataCheck = $('showTestDataCheck');
-      if (showTestDataCheck) showTestDataCheck.checked = state.showTestData;
-      try {
-        localStorage.setItem(showTestDataCacheKey, state.showTestData ? '1' : '0');
-      } catch (_) {
-        // ignore storage errors
-      }
-      cleanupLegacyShowSystemAgentsCache();
-      updateShowTestDataMeta();
+    if (applyShowTestDataPolicyPayload(data)) {
       const currentErr = safe($('settingsErr') ? $('settingsErr').textContent : '').trim();
-      if (currentErr.includes('测试数据开关配置读取失败')) {
+      if (currentErr.includes('测试数据环境策略读取失败')) {
         setSettingsError('');
       }
     } else {
-      setSettingsError('测试数据开关配置读取失败，请点击“刷新状态”重试。');
+      setSettingsError('测试数据环境策略读取失败，请点击“刷新状态”重试。');
     }
     state.allowManualPolicyInput = !!data.allow_manual_policy_input;
     state.policyClosureStats = data.policy_closure && typeof data.policy_closure === 'object' ? data.policy_closure : {};
@@ -526,6 +515,7 @@
   async function refreshDashboard() {
     try {
       const d = await getJSON('/api/dashboard');
+      applyShowTestDataPolicyPayload(d);
       state.dashboardMetrics = d && typeof d === 'object' ? d : {};
       state.dashboardError = '';
       renderGlobalRuntimeMetricLine();

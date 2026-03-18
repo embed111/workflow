@@ -23,6 +23,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
         running_task_count = max(0, session_running_task_count + assignment_running_task_count)
         agent_call_count = max(0, session_running_task_count + assignment_agent_call_count)
         pa, pt = ws.pending_counts(cfg.root, include_test_data=include_test_data)
+        policy_fields = ws.show_test_data_policy_fields(cfg, state)
         if ws.AB_FEATURE_ENABLED:
             ab = ws.ab_status(cfg)
         else:
@@ -36,7 +37,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                 "active_version": ab["active_version"],
                 "active_slot": ab["active_slot"],
                 "available_agents": len(ws.list_available_agents(cfg)) if root_ready else 0,
-                "show_test_data": bool(include_test_data),
+                **policy_fields,
                 "agent_search_root": root_text,
                 "agent_search_root_ready": bool(root_ready),
                 "agent_search_root_error": root_error,
@@ -60,11 +61,12 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
     assignment_agent_call_count = int(assignment_runtime.get("agent_call_count") or 0)
     running_task_count = max(0, session_running_task_count + assignment_running_task_count)
     agent_call_count = max(0, session_running_task_count + assignment_agent_call_count)
+    policy_fields = ws.show_test_data_policy_fields(cfg, state)
     handler.send_json(
         200,
         {
             **ws.dashboard(cfg, include_test_data=include_test_data),
-            "show_test_data": bool(ws.current_show_test_data(cfg, state)),
+            **policy_fields,
             "include_test_data": bool(include_test_data),
             "running_task_count": running_task_count,
             "agent_call_count": agent_call_count,

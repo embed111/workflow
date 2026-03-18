@@ -411,27 +411,69 @@
     return requestJSON(url, options);
   }
 
-  function includeTestDataQueryValue() {
-    return state.showTestData ? '1' : '0';
-  }
-
   function withTestDataQuery(url) {
-    const join = url.includes('?') ? '&' : '?';
-    return url + join + 'include_test_data=' + includeTestDataQueryValue();
+    return safe(url);
   }
 
-  function cleanupLegacyShowSystemAgentsCache() {
+  function cleanupLegacyTestDataCaches() {
     try {
       localStorage.removeItem(showSystemAgentsLegacyCacheKey);
     } catch (_) {
       // ignore storage errors
     }
+    try {
+      localStorage.removeItem(showTestDataCacheKey);
+    } catch (_) {
+      // ignore storage errors
+    }
+  }
+
+  function cleanupLegacyShowSystemAgentsCache() {
+    cleanupLegacyTestDataCaches();
+  }
+
+  function applyShowTestDataPolicyPayload(payload) {
+    const data = payload && typeof payload === 'object' ? payload : {};
+    if (!Object.prototype.hasOwnProperty.call(data, 'show_test_data')) {
+      return false;
+    }
+    state.showTestData = !!data.show_test_data;
+    state.runtimeEnvironment = safe(data.environment).trim().toLowerCase();
+    state.showTestDataSource = safe(data.show_test_data_source).trim() || 'environment_policy';
+    cleanupLegacyTestDataCaches();
+    updateShowTestDataMeta();
+    return true;
+  }
+
+  function runtimeEnvironmentBadgeInfo() {
+    const env = safe(state.runtimeEnvironment).trim().toLowerCase() || 'source';
+    const map = {
+      prod: { key: 'prod', label: 'PROD' },
+      test: { key: 'test', label: 'TEST' },
+      dev: { key: 'dev', label: 'DEV' },
+      source: { key: 'source', label: 'SOURCE' },
+    };
+    return map[env] || { key: env, label: env.toUpperCase() };
+  }
+
+  function updateRuntimeEnvironmentBadge() {
+    const node = $('runtimeEnvBadge');
+    if (!node) return;
+    const info = runtimeEnvironmentBadgeInfo();
+    node.textContent = safe(info.label).trim() || 'SOURCE';
+    node.setAttribute('data-env', safe(info.key).trim() || 'source');
+    node.setAttribute('title', '当前环境: ' + (safe(info.key).trim() || 'source'));
+    node.setAttribute('aria-label', '当前环境 ' + (safe(info.label).trim() || 'SOURCE'));
   }
 
   function updateShowTestDataMeta() {
-    const node = $('showTestDataMeta');
+    const node = $('showTestDataPolicyMeta');
+    updateRuntimeEnvironmentBadge();
     if (!node) return;
-    node.textContent = state.showTestData ? '当前显示测试数据' : '已隐藏测试数据';
+    const env = safe(state.runtimeEnvironment).trim() || 'source';
+    const visibility = state.showTestData ? '显示测试数据' : '隐藏测试数据';
+    const source = safe(state.showTestDataSource).trim() || 'environment_policy';
+    node.textContent = '环境=' + env + ' · ' + visibility + ' · 来源=' + source + '（只读）';
   }
 
   function updateManualPolicyInputMeta() {

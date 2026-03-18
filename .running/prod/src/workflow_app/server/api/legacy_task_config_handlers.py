@@ -29,36 +29,13 @@ def _handle_show_test_data(handler, cfg, state, body: dict[str, Any], _match) ->
         body.get("show_test_data", body.get("showTestData")),
         default=current_show_test_data(cfg, state),
     )
-    if parse_bool_flag(body.get("force_fail"), default=False):
-        handler.send_json(
-            500,
-            {
-                "ok": False,
-                "error": "show_test_data save failed: forced by request",
-                "code": "show_test_data_save_failed",
-            },
-        )
-        return
-    try:
-        old_value, new_value = set_show_test_data(cfg, state, requested)
-    except SessionGateError as exc:
-        handler.send_json(
-            exc.status_code,
-            {"ok": False, "error": str(exc), "code": exc.code, **exc.extra},
-        )
-        return
-    append_change_log(
-        cfg.root,
-        "show test data toggle",
-        f"old={int(old_value)}, new={int(new_value)}",
-    )
     handler.send_json(
-        200,
-        {
-            "ok": True,
-            "show_test_data": bool(new_value),
-            "previous_show_test_data": bool(old_value),
-        },
+        410,
+        show_test_data_toggle_removed_payload(
+            cfg,
+            state,
+            requested_value=requested,
+        ),
     )
 
 

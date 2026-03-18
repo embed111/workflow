@@ -196,11 +196,17 @@ $runtimeConfigPatch = @{
     artifact_root     = [string]$descriptor.artifact_root
     task_artifact_root = [string]$descriptor.artifact_root
 }
-$sourceRuntimeConfig = Read-WorkflowJson -Path (Join-Path $sourceRoot '.runtime\state\runtime-config.json') -Default @{}
-if ($sourceRuntimeConfig.ContainsKey('show_test_data')) {
-    $runtimeConfigPatch['show_test_data'] = [bool]$sourceRuntimeConfig.show_test_data
+$existingRuntimeConfig = Get-WorkflowRuntimeConfig -RuntimeRoot ([string]$descriptor.runtime_root)
+$showTestData = $false
+if ($Environment -eq 'prod') {
+    $showTestData = $false
 }
+elseif ($existingRuntimeConfig.ContainsKey('show_test_data')) {
+    $showTestData = [bool]$existingRuntimeConfig.show_test_data
+}
+$runtimeConfigPatch['show_test_data'] = $showTestData
 $runtimeConfig = Write-WorkflowRuntimeConfig -RuntimeRoot ([string]$descriptor.runtime_root) -Patch $runtimeConfigPatch
+Write-Host "[workflow-deploy] show_test_data policy: $showTestData"
 
 if ($Environment -eq 'prod') {
     Remove-Item -LiteralPath (Get-WorkflowProdUpgradeRequestPath -SourceRoot $sourceRoot) -Force -ErrorAction SilentlyContinue
@@ -213,6 +219,7 @@ $manifest = Write-WorkflowEnvironmentManifest -Descriptor $descriptor -Extra @{
     deployed_at          = $deployedAt
     deployment_metadata_path = $metadataPath
     runtime_config_path  = (Get-WorkflowRuntimeConfigPath -RuntimeRoot ([string]$descriptor.runtime_root))
+    show_test_data       = $showTestData
 }
 
 $deployReportPath = Join-Path ([string]$descriptor.log_root) ('deploy-' + $version + '.json')
@@ -229,6 +236,7 @@ $deployReport = @{
     port                = [int]$descriptor.port
     agent_search_root   = [string]$descriptor.agent_search_root
     artifact_root       = [string]$descriptor.artifact_root
+    show_test_data      = [bool]$showTestData
     runtime_config_path = [string](Get-WorkflowRuntimeConfigPath -RuntimeRoot ([string]$descriptor.runtime_root))
     deployment_metadata_path = $metadataPath
     result              = 'success'

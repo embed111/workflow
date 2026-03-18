@@ -185,6 +185,12 @@
       detail_section_body_overlaps: false,
       detail_section_summary_height: 0,
       detail_section_body_height: 0,
+      drawer_open: false,
+      draft_cache_present: false,
+      draft_node_name: '',
+      draft_goal: '',
+      draft_priority: '',
+      draft_upstream_search: '',
     };
   }
 
@@ -216,6 +222,50 @@
       state.assignmentSelectedNodeId = requestedNodeId;
       await refreshAssignmentDetail(requestedNodeId);
     }
+  }
+
+  async function prepareAssignmentDraftPersistProbe(output) {
+    const expectedName = '缓存保留验证任务';
+    const expectedGoal = '关闭抽屉后再次打开，之前编辑内容应自动回填。';
+    const expectedPriority = 'P2';
+    const expectedSearch = 'cache-check';
+    output.draft_node_name = expectedName;
+    output.draft_goal = expectedGoal;
+    output.draft_priority = expectedPriority;
+    output.draft_upstream_search = expectedSearch;
+    clearAssignmentCreateDraft();
+    resetAssignmentCreateForm({ clearDraft: true });
+    state.assignmentCreateDraftLoaded = false;
+    switchTab('task-center');
+    await ensureAssignmentAgentPool(false);
+    setAssignmentCreateOpen(true);
+    await assignmentProbeWait(80);
+    const nameInput = $('assignmentTaskNameInput');
+    if (nameInput) {
+      nameInput.value = expectedName;
+      nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    const goalInput = $('assignmentGoalInput');
+    if (goalInput) {
+      goalInput.value = expectedGoal;
+      goalInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    const prioritySelect = $('assignmentPrioritySelect');
+    if (prioritySelect) {
+      prioritySelect.value = expectedPriority;
+      prioritySelect.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    const upstreamSearch = $('assignmentUpstreamSearch');
+    if (upstreamSearch) {
+      upstreamSearch.value = expectedSearch;
+      upstreamSearch.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    await assignmentProbeWait(80);
+    setAssignmentCreateOpen(false);
+    await assignmentProbeWait(80);
+    resetAssignmentCreateForm({ clearDraft: false });
+    state.assignmentCreateDraftLoaded = false;
+    setAssignmentCreateOpen(true);
   }
 
   async function probeAssignmentDetailSection(output) {
@@ -390,6 +440,31 @@
       output.detail_section_body_height > 24;
   }
 
+  function collectAssignmentDraftPersistProbe(output) {
+    output.drawer_open = !!state.assignmentCreateOpen;
+    try {
+      output.draft_cache_present = !!safe(localStorage.getItem(assignmentCreateDraftCacheKey)).trim();
+    } catch (_) {
+      output.draft_cache_present = false;
+    }
+    output.draft_node_name = safe($('assignmentTaskNameInput') ? $('assignmentTaskNameInput').value : '');
+    output.draft_goal = safe($('assignmentGoalInput') ? $('assignmentGoalInput').value : '');
+    output.draft_priority = assignmentPriorityLabel(
+      $('assignmentPrioritySelect') ? $('assignmentPrioritySelect').value : 'P1',
+    );
+    output.draft_upstream_search = safe($('assignmentUpstreamSearch') ? $('assignmentUpstreamSearch').value : '');
+  }
+
+  function assignmentDraftPersistProbePass(output) {
+    return output.active_tab === 'task-center' &&
+      output.drawer_open &&
+      output.draft_cache_present &&
+      output.draft_node_name === '缓存保留验证任务' &&
+      output.draft_goal === '关闭抽屉后再次打开，之前编辑内容应自动回填。' &&
+      output.draft_priority === 'P2' &&
+      output.draft_upstream_search === 'cache-check';
+  }
+
   function createAssignmentTaskCenterProbeStrategy(evaluate, options) {
     const opts = options && typeof options === 'object' ? options : {};
     return {
@@ -414,6 +489,11 @@
       scheduler_idle_display: createAssignmentTaskCenterProbeStrategy(assignmentSchedulerIdleProbePass),
       detail_collapsed: createAssignmentTaskCenterProbeStrategy(assignmentDetailCollapsedProbePass, { probeDetailSection: true }),
       detail_expanded: createAssignmentTaskCenterProbeStrategy(assignmentDetailExpandedProbePass, { probeDetailSection: true }),
+      draft_persist: {
+        prepare: prepareAssignmentDraftPersistProbe,
+        collect: collectAssignmentDraftPersistProbe,
+        evaluate: assignmentDraftPersistProbePass,
+      },
       default: createAssignmentTaskCenterProbeStrategy(assignmentDefaultTaskCenterProbePass),
     },
     'default',
@@ -543,6 +623,7 @@
         if (!state.assignmentCreateSelectedUpstreamIds.includes(nodeId)) {
           state.assignmentCreateSelectedUpstreamIds.push(nodeId);
         }
+        persistAssignmentCreateDraft();
         renderAssignmentDrawer();
       });
     }
@@ -557,6 +638,7 @@
         const nodeId = safe(button.getAttribute('data-assignment-upstream-remove')).trim();
         state.assignmentCreateSelectedUpstreamIds = (state.assignmentCreateSelectedUpstreamIds || [])
           .filter((item) => safe(item).trim() !== nodeId);
+        persistAssignmentCreateDraft();
         renderAssignmentDrawer();
       });
     }
@@ -640,41 +722,48 @@
       $('assignmentClearUpstreamSearchBtn').onclick = () => {
         state.assignmentCreateUpstreamSearch = '';
         if ($('assignmentUpstreamSearch')) $('assignmentUpstreamSearch').value = '';
+        persistAssignmentCreateDraft();
         renderAssignmentDrawer();
       };
     }
     if ($('assignmentUpstreamSearch')) {
       $('assignmentUpstreamSearch').addEventListener('input', () => {
         state.assignmentCreateUpstreamSearch = safe($('assignmentUpstreamSearch').value).trim();
+        persistAssignmentCreateDraft();
         renderAssignmentUpstreamResults();
       });
     }
     if ($('assignmentTaskNameInput')) {
       $('assignmentTaskNameInput').addEventListener('input', () => {
         state.assignmentCreateForm.node_name = safe($('assignmentTaskNameInput').value);
+        persistAssignmentCreateDraft();
         renderAssignmentPathPreview();
       });
     }
     if ($('assignmentGoalInput')) {
       $('assignmentGoalInput').addEventListener('input', () => {
         state.assignmentCreateForm.node_goal = safe($('assignmentGoalInput').value);
+        persistAssignmentCreateDraft();
       });
     }
     if ($('assignmentArtifactInput')) {
       $('assignmentArtifactInput').addEventListener('input', () => {
         state.assignmentCreateForm.expected_artifact = safe($('assignmentArtifactInput').value);
+        persistAssignmentCreateDraft();
         renderAssignmentPathPreview();
       });
     }
     if ($('assignmentAgentSelect')) {
       $('assignmentAgentSelect').addEventListener('change', () => {
         state.assignmentCreateForm.assigned_agent_id = safe($('assignmentAgentSelect').value).trim();
+        persistAssignmentCreateDraft();
         renderAssignmentPathPreview();
       });
     }
     if ($('assignmentPrioritySelect')) {
       $('assignmentPrioritySelect').addEventListener('change', () => {
         state.assignmentCreateForm.priority = assignmentPriorityLabel($('assignmentPrioritySelect').value);
+        persistAssignmentCreateDraft();
       });
     }
     if ($('assignmentDeliveryModeSelect')) {
@@ -683,12 +772,14 @@
         if (safe(state.assignmentCreateForm.delivery_mode).trim().toLowerCase() !== 'specified') {
           state.assignmentCreateForm.delivery_receiver_agent_id = '';
         }
+        persistAssignmentCreateDraft();
         renderAssignmentPathPreview();
       });
     }
     if ($('assignmentDeliveryReceiverSelect')) {
       $('assignmentDeliveryReceiverSelect').addEventListener('change', () => {
         state.assignmentCreateForm.delivery_receiver_agent_id = safe($('assignmentDeliveryReceiverSelect').value).trim();
+        persistAssignmentCreateDraft();
         renderAssignmentPathPreview();
       });
     }

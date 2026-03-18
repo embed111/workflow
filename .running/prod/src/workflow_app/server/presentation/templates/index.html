@@ -11,7 +11,7 @@
 <div id='appRoot' class='app'>
   <aside class='rail'>
     <div class='brand'>
-      <div class='title'>workflow</div>
+      <div class='title'>workflow<span id='runtimeEnvBadge' class='brand-env-badge' data-env='source' title='当前环境: source' aria-label='当前环境 source'>SOURCE</span></div>
       <div id='statusLine' class='meta'>就绪</div>
       <div id='metricLine' class='brand-metric-list'>指标加载中...</div>
     </div>
@@ -545,10 +545,9 @@
         <label for='agentSearchRoot' class='hint'>当前 agent路径</label>
         <input id='agentSearchRoot' value='' placeholder='例如 C:/work/agents'/>
         <div style='height:8px'></div>
-        <div class='checkline'>
-          <label><input id='showTestDataCheck' type='checkbox'/>展示测试数据</label>
-          <span id='showTestDataMeta' class='hint'>已隐藏测试数据</span>
-        </div>
+        <div class='card-title'>测试数据环境策略</div>
+        <div id='showTestDataPolicyMeta' class='hint'>环境策略读取中...</div>
+        <div class='hint'>该策略由当前运行环境决定，为只读信息；页面不提供运行时覆盖入口。</div>
         <div style='height:8px'></div>
         <div class='checkline'>
           <label><input id='allowManualPolicyInputCheck' type='checkbox'/>允许手动角色与职责兜底（管理员）</label>

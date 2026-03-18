@@ -953,4 +953,11 @@
 .brand-metric-note { padding:5px 7px; border:1px solid var(--line-soft); border-radius:8px; background:rgba(255,255,255,.78); line-height:1.45; }
 .brand-metric-note.is-warn { border-color:#ffd591; background:#fffaf0; color:#8c5f00; }
 .brand-metric-note.is-bad { border-color:#ffccc7; background:#fff2f0; color:#a8071a; }
+
+.brand .title { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.brand-env-badge { display:inline-flex; align-items:center; justify-content:center; min-height:22px; padding:0 8px; border-radius:999px; border:1px solid #d7dce5; background:#f3f4f6; color:#4b5563; font-size:11px; font-weight:700; letter-spacing:.6px; line-height:1; vertical-align:middle; }
+.brand-env-badge[data-env='dev'] { border-color:#b7ebd3; background:#edfdf6; color:#06794f; }
+.brand-env-badge[data-env='test'] { border-color:#ffd591; background:#fff7e8; color:#ad6800; }
+.brand-env-badge[data-env='prod'] { border-color:#ffccc7; background:#fff2f0; color:#cf1322; }
+.brand-env-badge[data-env='source'] { border-color:#d7dce5; background:#f3f4f6; color:#4b5563; }
 @media (max-width: 1080px) { .rail { grid-template-rows:auto auto; } }

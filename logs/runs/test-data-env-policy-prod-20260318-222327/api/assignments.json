@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/assignments",
+    "payload": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "include_test_data": false,
+      "environment": "prod",
+      "show_test_data": false,
+      "show_test_data_source": "environment_policy",
+      "items": [],
+      "settings": {
+        "global_concurrency_limit": 5,
+        "updated_at": "2026-03-18T17:20:07+08:00"
+      }
+    }
+  }
+}

@@ -98,9 +98,48 @@ def current_allow_manual_policy_input(cfg: AppConfig, state: RuntimeState) -> bo
         return bool(cfg.allow_manual_policy_input)
 
 
+def current_runtime_environment_name(cfg: AppConfig, state: RuntimeState) -> str:
+    with state.config_lock:
+        value = getattr(cfg, "runtime_environment", DEFAULT_RUNTIME_ENVIRONMENT)
+    return normalize_runtime_environment(value)
+
+
 def current_show_test_data(cfg: AppConfig, state: RuntimeState) -> bool:
     with state.config_lock:
         return bool(cfg.show_test_data)
+
+
+def current_show_test_data_source(cfg: AppConfig, state: RuntimeState) -> str:
+    with state.config_lock:
+        value = str(getattr(cfg, "show_test_data_source", "") or "").strip()
+    return value or SHOW_TEST_DATA_SOURCE_ENVIRONMENT_POLICY
+
+
+def show_test_data_policy_fields(cfg: AppConfig, state: RuntimeState) -> dict[str, Any]:
+    return {
+        "environment": current_runtime_environment_name(cfg, state),
+        "show_test_data": bool(current_show_test_data(cfg, state)),
+        "show_test_data_source": current_show_test_data_source(cfg, state),
+    }
+
+
+def show_test_data_toggle_removed_payload(
+    cfg: AppConfig,
+    state: RuntimeState,
+    *,
+    requested_value: Any | None = None,
+) -> dict[str, Any]:
+    payload = {
+        "ok": False,
+        "error": "show_test_data runtime toggle removed; use environment policy",
+        "code": "show_test_data_toggle_removed",
+        "deprecated": True,
+        "read_only": True,
+        **show_test_data_policy_fields(cfg, state),
+    }
+    if requested_value is not None:
+        payload["requested_show_test_data"] = bool(requested_value)
+    return payload
 
 
 def set_show_test_data(
@@ -108,19 +147,9 @@ def set_show_test_data(
     state: RuntimeState,
     value: bool,
 ) -> tuple[bool, bool]:
-    new_value = bool(value)
-    with state.config_lock:
-        old_value = bool(cfg.show_test_data)
-        try:
-            save_runtime_config(cfg.root, {"show_test_data": bool(new_value)})
-        except Exception as exc:
-            raise SessionGateError(
-                500,
-                f"show_test_data save failed: {exc}",
-                "show_test_data_save_failed",
-            ) from exc
-        cfg.show_test_data = new_value
-    return old_value, new_value
+    _ignored = bool(value)
+    current_value = current_show_test_data(cfg, state)
+    return current_value, current_value
 
 
 def set_artifact_root(
@@ -212,11 +241,8 @@ def resolve_include_test_data(
     cfg: AppConfig,
     state: RuntimeState,
 ) -> bool:
-    default_value = current_show_test_data(cfg, state)
-    values = list(query.get("include_test_data") or query.get("includeTestData") or [])
-    if not values:
-        return bool(default_value)
-    return parse_bool_flag(values[0], default=default_value)
+    _unused_query = query
+    return bool(current_show_test_data(cfg, state))
 
 
 def set_agent_search_root(
@@ -668,7 +694,16 @@ def main() -> None:
         )
     else:
         allow_manual_policy_input = ALLOW_MANUAL_POLICY_INPUT_DEFAULT
-    show_test_data = parse_bool_flag(runtime_cfg.get("show_test_data"), default=True)
+    runtime_environment = normalize_runtime_environment(runtime_upgrade.current_runtime_environment())
+    show_test_data, show_test_data_source = resolve_show_test_data_policy(
+        runtime_cfg,
+        environment=runtime_environment,
+    )
+    if runtime_environment == "prod" and parse_bool_flag(runtime_cfg.get("show_test_data"), default=False):
+        print(
+            "web> prod environment ignores show_test_data=true in runtime-config; forced false",
+            flush=True,
+        )
     cfg = AppConfig(
         root=root,
         entry_script=entry_script,
@@ -679,6 +714,8 @@ def main() -> None:
         focus=str(args.focus),
         reconcile_interval_s=max(60, int(args.reconcile_interval_s)),
         allow_manual_policy_input=allow_manual_policy_input,
+        runtime_environment=runtime_environment,
+        show_test_data_source=show_test_data_source,
     )
     state = RuntimeState()
     ensure_dirs(cfg.root)

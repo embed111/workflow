@@ -1,0 +1,6 @@
+2026/03/18-22:23:52.205 6300 Reusing MANIFEST D:\code\AI\J-Agents\workflow\logs\runs\test-data-env-policy-prod-20260318-222327\edge-profile\session-entry-prod-hidden\Default\EdgeCoupons/coupons_data.db/MANIFEST-000001
+2026/03/18-22:23:52.206 6300 Recovering log #4
+2026/03/18-22:23:52.206 6300 Reusing old log D:\code\AI\J-Agents\workflow\logs\runs\test-data-env-policy-prod-20260318-222327\edge-profile\session-entry-prod-hidden\Default\EdgeCoupons/coupons_data.db/000004.log 
+2026/03/18-22:23:52.255 ae14 Level-0 table #8: started
+2026/03/18-22:23:52.257 ae14 Level-0 table #8: 681708 bytes OK
+2026/03/18-22:23:52.258 ae14 Delete type=0 #4

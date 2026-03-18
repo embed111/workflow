@@ -1,0 +1,31 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/status",
+    "payload": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "pending_analysis": 0,
+      "pending_training": 0,
+      "active_version": "disabled",
+      "active_slot": "disabled",
+      "available_agents": 11,
+      "environment": "prod",
+      "show_test_data": false,
+      "show_test_data_source": "environment_policy",
+      "agent_search_root": "D:/code/AI/J-Agents",
+      "agent_search_root_ready": true,
+      "agent_search_root_error": "",
+      "features_locked": false,
+      "running_task_count": 0,
+      "agent_call_count": 0,
+      "session_running_task_count": 0,
+      "assignment_running_task_count": 0,
+      "assignment_running_agent_count": 0,
+      "assignment_active_execution_count": 0
+    }
+  }
+}

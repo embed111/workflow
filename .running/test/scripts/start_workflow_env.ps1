@@ -389,7 +389,8 @@ while ($true) {
     $openNow = $OpenBrowser -and (-not $openedBrowser)
     $launcher = Start-EnvironmentLauncher -Descriptor $descriptor -SkipBackfill:$SkipBackfill -OpenBrowser:$openNow
     $openedBrowser = $true
-    $health = Wait-WorkflowHealth -BindHost ([string]$descriptor.host) -Port ([int]$descriptor.port) -LauncherProcess $launcher -TimeoutSeconds 30
+    $healthTimeoutSeconds = if ($pendingUpgrade -and $Environment -eq 'prod') { 60 } else { 30 }
+    $health = Wait-WorkflowHealth -BindHost ([string]$descriptor.host) -Port ([int]$descriptor.port) -LauncherProcess $launcher -TimeoutSeconds $healthTimeoutSeconds
 
     if (-not $health.ok) {
         Stop-WorkflowServerFromDescriptor -Descriptor $descriptor -LauncherProcess $launcher

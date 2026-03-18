@@ -21,7 +21,6 @@
     const agentSelectTrigger = $('agentSelectTrigger');
     const agentSelectSearch = $('agentSelectSearch');
     const reloadSessionsBtn = $('reloadSessionsBtn');
-    const showTestDataCheck = $('showTestDataCheck');
     const allowManualPolicyInputCheck = $('allowManualPolicyInputCheck');
     const cleanupHistoryBtn = $('cleanupHistoryBtn');
     const refreshWorkflowBtn = $('refreshWorkflowBtn');
@@ -125,7 +124,6 @@
       !!safe(tcSelectedDetail.bound_release_version || tcSelectedDetail.latest_release_version).trim();
 
     if (reloadSessionsBtn) reloadSessionsBtn.disabled = !rootReady;
-    if (showTestDataCheck) showTestDataCheck.disabled = !rootReady;
     if (allowManualPolicyInputCheck) allowManualPolicyInputCheck.disabled = !rootReady;
     if (artifactRootPathInput) artifactRootPathInput.disabled = !rootReady;
     if (switchArtifactRootBtn) switchArtifactRootBtn.disabled = !rootReady;

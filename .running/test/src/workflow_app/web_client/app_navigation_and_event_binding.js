@@ -529,43 +529,6 @@
         }
       }
     };
-    $('showTestDataCheck').onchange = async () => {
-      const node = $('showTestDataCheck');
-      const previous = !!state.showTestData;
-      const checked = !!$('showTestDataCheck').checked;
-      try {
-        setSettingsError('');
-        const payload = {
-          show_test_data: checked,
-        };
-        if (queryParam('td_probe_force_write_fail') === '1') {
-          payload.force_fail = true;
-        }
-        const saved = await postJSON('/api/config/show-test-data', payload);
-        state.showTestData = !!saved.show_test_data;
-        node.checked = state.showTestData;
-        localStorage.setItem(showTestDataCacheKey, state.showTestData ? '1' : '0');
-        cleanupLegacyShowSystemAgentsCache();
-        updateShowTestDataMeta();
-        await refreshAgents(true, { autoAnalyze: false });
-        await refreshSessions();
-        await refreshWorkflows();
-        await refreshTrainingCenterAgents();
-        await refreshTrainingCenterQueue(false);
-        if (state.agentSearchRootReady && typeof refreshAssignmentGraphs === 'function') {
-          await refreshAssignmentGraphs({ preserveSelection: true });
-        }
-        await refreshDashboard();
-        setStatus(state.showTestData ? '已开启测试数据展示' : '已隐藏测试数据');
-      } catch (err) {
-        state.showTestData = previous;
-        node.checked = previous;
-        localStorage.setItem(showTestDataCacheKey, previous ? '1' : '0');
-        updateShowTestDataMeta();
-        setSettingsError(err.message || String(err));
-        setStatus('测试数据开关更新失败');
-      }
-    };
     $('allowManualPolicyInputCheck').onchange = async () => {
       const checked = !!$('allowManualPolicyInputCheck').checked;
       try {

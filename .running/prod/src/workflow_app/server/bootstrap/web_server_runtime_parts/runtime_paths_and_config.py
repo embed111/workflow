@@ -68,6 +68,8 @@ AB_STATE_FILE = "state/ab-slots.json"
 RUNTIME_CONFIG_FILE = "state/runtime-config.json"
 DEFAULT_AGENTS_ROOT = Path(os.getenv("WORKFLOW_AGENTS_ROOT") or "C:/work/agents")
 AGENT_SEARCH_ROOT_NOT_SET_CODE = "agent_search_root_not_set"
+DEFAULT_RUNTIME_ENVIRONMENT = "source"
+SHOW_TEST_DATA_SOURCE_ENVIRONMENT_POLICY = "environment_policy"
 WORKFLOW_APP_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PROJECT_ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_ARTIFACT_ROOT = (WORKFLOW_PROJECT_ROOT.parent / ".output").resolve(strict=False)
@@ -126,6 +128,8 @@ class AppConfig:
     focus: str
     reconcile_interval_s: int
     allow_manual_policy_input: bool
+    runtime_environment: str = DEFAULT_RUNTIME_ENVIRONMENT
+    show_test_data_source: str = SHOW_TEST_DATA_SOURCE_ENVIRONMENT_POLICY
 
 
 @dataclass
@@ -316,15 +320,39 @@ def runtime_config_file(root: Path) -> Path:
     return root / RUNTIME_CONFIG_FILE
 
 
-def load_runtime_config(root: Path) -> dict[str, Any]:
+def load_runtime_config(
+    root: Path,
+    *,
+    meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     path = runtime_config_file(root)
+    if isinstance(meta, dict):
+        meta.clear()
+        meta.update(
+            {
+                "path": path.as_posix(),
+                "exists": bool(path.exists()),
+                "status": "missing",
+                "error": "",
+            }
+        )
     if not path.exists():
         return {}
     try:
         payload = json.loads(path.read_text(encoding="utf-8-sig"))
-    except Exception:
+    except Exception as exc:
+        if isinstance(meta, dict):
+            meta["status"] = "invalid_json"
+            meta["error"] = str(exc)
         return {}
-    return payload if isinstance(payload, dict) else {}
+    if not isinstance(payload, dict):
+        if isinstance(meta, dict):
+            meta["status"] = "invalid_type"
+            meta["error"] = "runtime-config payload must be a JSON object"
+        return {}
+    if isinstance(meta, dict):
+        meta["status"] = "ok"
+    return payload
 
 
 def save_runtime_config(root: Path, patch: dict[str, Any]) -> None:
@@ -360,7 +388,18 @@ def resolve_artifact_root_candidate(raw: Any) -> tuple[Path, str]:
 
 
 def resolve_artifact_root_path(root: Path) -> Path:
-    runtime_cfg = load_runtime_config(root)
+    runtime_cfg_meta: dict[str, Any] = {}
+    runtime_cfg = load_runtime_config(root, meta=runtime_cfg_meta)
+    runtime_cfg_status = str(runtime_cfg_meta.get("status") or "").strip().lower()
+    if runtime_cfg_status and runtime_cfg_status not in {"ok", "missing"}:
+        detail = str(runtime_cfg_meta.get("path") or "").strip() or runtime_config_file(root).as_posix()
+        error_text = str(runtime_cfg_meta.get("error") or "").strip()
+        if error_text:
+            detail = f"{detail} ({error_text})"
+        print(
+            f"web> runtime-config load fallback ({runtime_cfg_status}): {detail}",
+            flush=True,
+        )
     candidate_root, _source = resolve_artifact_root_candidate(_runtime_artifact_root_value(runtime_cfg))
     try:
         return ensure_artifact_root_dirs(candidate_root)[0]
@@ -578,6 +617,33 @@ def parse_query_bool(query: dict[str, list[str]], key: str, default: bool = Fals
     if not values:
         return default
     return parse_bool_flag(values[0], default=default)
+
+
+def normalize_runtime_environment(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    if text in {"prod", "production"}:
+        return "prod"
+    if text in {"dev", "development"}:
+        return "dev"
+    if text == "test":
+        return "test"
+    return text or DEFAULT_RUNTIME_ENVIRONMENT
+
+
+def resolve_show_test_data_policy(
+    runtime_cfg: dict[str, Any],
+    *,
+    environment: str,
+) -> tuple[bool, str]:
+    env_name = normalize_runtime_environment(environment)
+    if env_name == "prod":
+        return False, SHOW_TEST_DATA_SOURCE_ENVIRONMENT_POLICY
+    if not isinstance(runtime_cfg, dict) or "show_test_data" not in runtime_cfg:
+        return False, SHOW_TEST_DATA_SOURCE_ENVIRONMENT_POLICY
+    return (
+        parse_bool_flag(runtime_cfg.get("show_test_data"), default=False),
+        SHOW_TEST_DATA_SOURCE_ENVIRONMENT_POLICY,
+    )
 
 
 def new_session_id() -> str:

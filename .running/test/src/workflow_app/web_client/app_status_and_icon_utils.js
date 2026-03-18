@@ -4,6 +4,8 @@
   const $ = (id) => document.getElementById(id);
   const sessionCacheKey = 'workflow.p0.session';
   const agentCacheKey = 'workflow.p0.agent';
+  const assignmentCreateDraftCacheKey = 'workflow.p0.assignment.createDraft';
+  // Legacy-only keys. They are cleaned on bootstrap and never drive runtime truth.
   const showTestDataCacheKey = 'workflow.p0.settings.showTestData';
   const showSystemAgentsLegacyCacheKey = 'workflow.p0.settings.showSystemAgents';
   const layoutKeys = {
@@ -33,7 +35,9 @@
     workflowEventDebugOpen: {}, // workflow_id:event_id -> bool
     workflowPoller: 0,
     workflowPollBusy: false,
-    showTestData: true,
+    showTestData: false,
+    runtimeEnvironment: '',
+    showTestDataSource: 'environment_policy',
     queueMode: 'records', // records | training
     selectedWorkflowIds: {},
     batchRun: {
@@ -137,6 +141,7 @@
     assignmentExecutionPollIntervalMs: 800,
     assignmentHistoryLoaded: 0,
     assignmentCreateOpen: false,
+    assignmentCreateDraftLoaded: false,
     assignmentCreateForm: {
       node_name: '',
       assigned_agent_id: '',
