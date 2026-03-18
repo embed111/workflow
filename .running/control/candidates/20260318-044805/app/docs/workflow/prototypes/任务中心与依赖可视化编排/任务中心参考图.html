@@ -1,0 +1,2549 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>任务中心参考图</title>
+  <style>
+    :root {
+      --bg: #f2f3f5;
+      --panel: #ffffff;
+      --panel-soft: #fafbfc;
+      --line: #e5e6eb;
+      --line-strong: #d8dee6;
+      --text: #1f2329;
+      --muted: #646a73;
+      --blue: #5c97ff;
+      --blue-soft: #eef5ff;
+      --green: #24c98b;
+      --green-soft: #f0fff8;
+      --orange: #d97904;
+      --orange-soft: #fff7eb;
+      --red: #d84b4b;
+      --red-soft: #fff2f0;
+      --gray: #c8ccd5;
+      --gray-soft: #f3f4f7;
+      --shadow: 0 1px 3px rgba(31, 35, 41, 0.08);
+      --rail-width: 232px;
+      --detail-width: 332px;
+      --time-width: 102px;
+      --node-radius: 18px;
+      --canvas-pad: 28px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font: 13px/1.5 "PingFang SC", "Helvetica Neue", "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 7px 12px;
+      background: var(--blue);
+      color: #fff;
+      cursor: default;
+    }
+
+    button.secondary {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+    }
+
+    button.danger-secondary {
+      border: 1px solid #f2c6c1;
+      background: #fff7f6;
+      color: #b42318;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: var(--rail-width) minmax(0, 1fr);
+      gap: 10px;
+      height: 100vh;
+      padding: 10px;
+      overflow: hidden;
+    }
+
+    .rail,
+    .window,
+    .graph-panel,
+    .detail-panel {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .rail {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 10px;
+      padding: 12px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .brand {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 10px 12px;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .tabs {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .tab {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      color: #4e5969;
+      padding: 8px 12px;
+      font-weight: 500;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .tab.active {
+      border-color: #c8d9ff;
+      background: var(--blue-soft);
+      color: #245bdb;
+      font-weight: 700;
+    }
+
+    .workspace {
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .window {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .window-head,
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    .window-title {
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+
+    .window-note {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .window-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .panel-title {
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .content {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) var(--detail-width);
+      gap: 10px;
+      min-height: 0;
+      flex: 1 1 auto;
+      padding: 8px;
+      overflow: hidden;
+    }
+
+    .graph-panel,
+    .detail-panel {
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .graph-panel {
+      background: var(--panel-soft);
+    }
+
+    .graph-scroll,
+    .detail-scroll {
+      min-height: 0;
+      flex: 1 1 auto;
+      overflow: auto;
+      scrollbar-width: auto;
+      scrollbar-color: #c9cfda transparent;
+    }
+
+    .graph-scroll::-webkit-scrollbar,
+    .detail-scroll::-webkit-scrollbar {
+      width: 14px;
+      height: 14px;
+    }
+
+    .graph-scroll::-webkit-scrollbar-track,
+    .detail-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .graph-scroll::-webkit-scrollbar-thumb,
+    .detail-scroll::-webkit-scrollbar-thumb {
+      background: #c9cfda;
+      border-radius: 999px;
+      border: 3px solid transparent;
+      background-clip: padding-box;
+    }
+
+    .graph-scroll {
+      position: relative;
+      background: var(--panel-soft);
+    }
+
+    .graph-topbar {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      display: grid;
+      grid-template-columns: var(--time-width) minmax(0, 1fr);
+      align-items: stretch;
+      background: linear-gradient(180deg, rgba(250, 251, 252, 0.97), rgba(250, 251, 252, 0));
+    }
+
+    .time-column-cap {
+      min-height: 48px;
+      background: #f3f6f9;
+      border-right: 1px solid var(--line-strong);
+    }
+
+    .graph-overlay {
+      min-width: 0;
+      padding: 12px 16px 8px 10px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      pointer-events: none;
+    }
+
+    .graph-legend,
+    .history-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid #e7ebf3;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.94);
+      color: var(--muted);
+      box-shadow: 0 8px 24px rgba(31, 35, 41, 0.08);
+      backdrop-filter: blur(10px);
+    }
+
+    .graph-legend {
+      padding: 5px 10px;
+      font-size: 11.5px;
+      font-weight: 700;
+    }
+
+    .history-chip {
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #6b7280;
+    }
+
+    .history-chip[data-state="counting"] {
+      color: #245bdb;
+      border-color: #c8d9ff;
+      background: rgba(245, 248, 255, 0.96);
+    }
+
+    .history-chip[data-state="loaded"] {
+      color: #0f8a5f;
+      border-color: #cdeedc;
+      background: rgba(237, 253, 246, 0.96);
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      flex: none;
+    }
+
+    .legend-dot.done { background: var(--green); }
+    .legend-dot.running { background: var(--blue); }
+    .legend-dot.blocked { background: var(--orange); }
+    .legend-dot.fail { background: var(--red); }
+    .legend-dot.future { background: var(--gray); }
+
+    .graph-stage {
+      display: grid;
+      grid-template-columns: var(--time-width) minmax(0, 1fr);
+      min-height: 100%;
+      position: relative;
+    }
+
+    .time-column {
+      position: relative;
+      min-height: 100%;
+      background: #f3f6f9;
+      border-right: 1px solid var(--line-strong);
+    }
+
+    .time-entry {
+      position: absolute;
+      right: 8px;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+      color: #8a919d;
+      font: 600 10px/1 "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
+      white-space: normal;
+      letter-spacing: 0;
+    }
+
+    .time-entry.pending {
+      color: #a7afbb;
+    }
+
+    .time-date,
+    .time-clock {
+      display: block;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .time-date {
+      font-size: 10px;
+    }
+
+    .time-clock {
+      font-size: 11px;
+    }
+
+    .canvas-column {
+      position: relative;
+      min-width: 0;
+      background: transparent;
+    }
+
+    .graph-svg {
+      display: block;
+      min-width: 0;
+    }
+
+    .graph-line {
+      fill: none;
+      stroke: #c6ccd6;
+      stroke-width: 2.4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .graph-line.future,
+    .graph-line.blocked,
+    .graph-line.fail {
+      stroke-dasharray: 6 6;
+    }
+
+    .graph-line.back {
+      stroke-width: 5.6;
+      opacity: 0.12;
+      marker-end: none;
+    }
+
+    .task-node {
+      cursor: pointer;
+    }
+
+    .graph-node {
+      fill: #fff;
+      stroke-width: 3;
+    }
+
+    .graph-node.done { stroke: var(--green); }
+    .graph-node.running {
+      stroke: var(--blue);
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: node-breath 1.8s ease-in-out infinite;
+      filter: drop-shadow(0 0 0.55rem rgba(51, 112, 255, 0.24));
+    }
+    .graph-node.blocked { stroke: var(--orange); }
+    .graph-node.fail { stroke: var(--red); }
+    .graph-node.future { stroke: var(--gray); }
+
+    .task-node.selected .graph-node {
+      filter: drop-shadow(0 0 0.7rem rgba(31, 35, 41, 0.16));
+    }
+
+    .task-node.selected .graph-node.blocked {
+      filter: drop-shadow(0 0 0.8rem rgba(217, 121, 4, 0.24));
+    }
+
+    .graph-label {
+      fill: var(--text);
+      font-size: 16px;
+      font-weight: 700;
+      dominant-baseline: middle;
+      pointer-events: none;
+    }
+
+    @keyframes node-breath {
+      0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      50% {
+        transform: scale(1.12);
+        opacity: 0.78;
+      }
+    }
+
+    .detail-scroll {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      background: var(--panel-soft);
+    }
+
+    .detail-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      padding: 12px;
+    }
+
+    .detail-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .detail-sub {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .detail-name {
+      margin-top: 2px;
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .chip.done {
+      color: var(--green);
+      background: var(--green-soft);
+      border-color: #cdeedc;
+    }
+
+    .chip.running {
+      color: #245bdb;
+      background: var(--blue-soft);
+      border-color: #c8d9ff;
+    }
+
+    .chip.blocked {
+      color: var(--orange);
+      background: var(--orange-soft);
+      border-color: #f7ddbd;
+    }
+
+    .chip.fail {
+      color: var(--red);
+      background: var(--red-soft);
+      border-color: #f3c8c3;
+    }
+
+    .chip.future {
+      color: #6b7280;
+      background: var(--gray-soft);
+      border-color: #dfe3e8;
+    }
+
+    .chip.pause {
+      color: var(--orange);
+      background: var(--orange-soft);
+      border-color: #f7ddbd;
+    }
+
+    .chip.paused {
+      color: #475467;
+      background: #f2f4f7;
+      border-color: #d9dee7;
+    }
+
+    .chip.idle {
+      color: #667085;
+      background: #f8f9fb;
+      border-color: #e4e7ec;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .summary-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 10px;
+    }
+
+    .summary-k {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .summary-v {
+      margin-top: 2px;
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .summary-v.mono {
+      font-family: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+
+    .action-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .action-hint {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .execution-card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .execution-section-title {
+      margin-top: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .prompt-box {
+      margin-top: 8px;
+      border: 1px solid #dde3ea;
+      border-radius: 10px;
+      background: #f8fafc;
+      padding: 10px 12px;
+      color: #344054;
+      font-family: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .terminal-box {
+      margin-top: 8px;
+      min-height: 164px;
+      border: 1px solid #d0d7e3;
+      border-radius: 10px;
+      background: #0f172a;
+      padding: 10px 12px;
+      color: #d7e0ea;
+      font-family: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .terminal-line {
+      display: block;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .terminal-line + .terminal-line {
+      margin-top: 4px;
+    }
+
+    .terminal-line.system { color: #93c5fd; }
+    .terminal-line.command { color: #fcd34d; }
+    .terminal-line.stdout { color: #d1fae5; }
+    .terminal-line.stderr { color: #fecaca; }
+    .terminal-line.queue { color: #cbd5e1; }
+    .terminal-line.live { color: #bfdbfe; }
+
+    .terminal-line.live::after {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      margin-left: 8px;
+      border-radius: 999px;
+      background: #5c97ff;
+      vertical-align: middle;
+      animation: terminal-live 1.1s ease-in-out infinite;
+    }
+
+    @keyframes terminal-live {
+      0%, 100% { opacity: 0.35; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.1); }
+    }
+
+    .path-box {
+      margin-top: 10px;
+      border: 1px dashed #d7dbe3;
+      border-radius: 10px;
+      background: #fbfcfe;
+      padding: 10px;
+      color: #475467;
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 12px;
+      line-height: 1.55;
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+
+    .helper-text {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .sheet-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      background: rgba(15, 23, 42, 0.18);
+      backdrop-filter: blur(4px);
+    }
+
+    .sheet-panel {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      bottom: 14px;
+      width: 430px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.98);
+      box-shadow: 0 18px 48px rgba(15, 23, 42, 0.16);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sheet-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 18px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.94);
+    }
+
+    .sheet-title {
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.15;
+    }
+
+    .sheet-desc {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .sheet-close {
+      padding: 6px 10px;
+    }
+
+    .sheet-scroll {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      padding: 16px 18px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      background: #fbfcfe;
+    }
+
+    .form-section {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      padding: 14px;
+    }
+
+    .form-section-title {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .form-field.span-2 {
+      grid-column: 1 / -1;
+    }
+
+    .field-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .field-control,
+    .field-textarea,
+    .field-static {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--text);
+      padding: 10px 12px;
+      line-height: 1.4;
+      font: inherit;
+    }
+
+    .field-textarea {
+      min-height: 92px;
+      resize: none;
+    }
+
+    .field-static {
+      background: #f8fafc;
+      color: #475467;
+    }
+
+    .field-control::placeholder,
+    .field-textarea::placeholder {
+      color: #98a2b3;
+    }
+
+    select.field-control {
+      appearance: none;
+      padding-right: 36px;
+      background-image:
+        linear-gradient(45deg, transparent 50%, #667085 50%),
+        linear-gradient(135deg, #667085 50%, transparent 50%);
+      background-position:
+        calc(100% - 18px) calc(50% - 2px),
+        calc(100% - 13px) calc(50% - 2px);
+      background-size: 5px 5px, 5px 5px;
+      background-repeat: no-repeat;
+    }
+
+    .field-hint {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .search-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .search-row .field-control {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .search-row button {
+      flex: 0 0 auto;
+      padding: 10px 12px;
+    }
+
+    .token-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .search-row + .token-list {
+      margin-top: 10px;
+    }
+
+    .token-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #f8fafc;
+      color: #475467;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .sheet-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding-top: 4px;
+    }
+
+    .settings-stage {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      padding: 12px;
+      background: var(--panel-soft);
+    }
+
+    .settings-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      padding: 14px;
+    }
+
+    .settings-card + .settings-card {
+      margin-top: 12px;
+    }
+
+    .settings-title {
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .settings-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      margin-top: 12px;
+    }
+
+    .settings-form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .mono-inline {
+      font-family: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .rule-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .settings-placeholder {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .placeholder-line {
+      height: 12px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #edf1f6, #f7f9fc);
+    }
+
+    .placeholder-line.short { width: 44%; }
+    .placeholder-line.mid { width: 68%; }
+    .placeholder-line.long { width: 86%; }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 1300px) {
+      .content {
+        grid-template-columns: 1fr;
+      }
+
+      .detail-panel {
+        min-height: 340px;
+      }
+    }
+
+    @media (max-width: 1080px) {
+      html,
+      body {
+        overflow: auto;
+      }
+
+      .app {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+
+      .window {
+        min-height: 1100px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="rail">
+      <div class="brand">workflow</div>
+      <div class="tabs">
+        <div class="tab">对话</div>
+        <div class="tab">工作记录与训练</div>
+        <div class="tab">训练中心</div>
+        <div class="tab active" id="taskTab">任务中心</div>
+        <div class="tab" id="settingsTab">设置</div>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <section class="window">
+        <header class="window-head">
+          <div>
+            <div class="window-title" id="windowTitle">任务中心</div>
+            <div class="window-note" id="windowNote">当前运行任务完成后可继续调度后续任务。</div>
+          </div>
+          <div class="window-actions" id="windowActions">
+            <span class="chip running" id="schedulerStateChip">运行中</span>
+            <span class="chip future" id="parallelCountChip">并行agent数 0</span>
+            <button class="secondary" id="pauseDispatchButton">暂停调度</button>
+            <button class="secondary" id="resumeDispatchButton">继续运行</button>
+            <button class="secondary danger-secondary" id="clearTasksButton">清空任务</button>
+            <button id="createTaskButton">+ 创建任务</button>
+          </div>
+        </header>
+
+        <div class="content" id="taskContent">
+          <section class="graph-panel">
+            <div class="panel-head">
+              <div class="panel-title">任务图</div>
+            </div>
+            <div class="graph-scroll" id="graphScroll">
+              <div class="graph-topbar">
+                <div class="time-column-cap" aria-hidden="true"></div>
+                <div class="graph-overlay" aria-hidden="true">
+                  <div class="graph-legend">
+                    <span class="legend-item"><span class="legend-dot done"></span>已完成</span>
+                    <span class="legend-item"><span class="legend-dot running"></span>进行中</span>
+                    <span class="legend-item"><span class="legend-dot blocked"></span>阻塞</span>
+                    <span class="legend-item"><span class="legend-dot fail"></span>失败</span>
+                    <span class="legend-item"><span class="legend-dot future"></span>待开始</span>
+                  </div>
+                  <div class="history-chip" id="historyChip" data-state="idle">
+                    <span id="historyText">上滑 2 次加载历史</span>
+                  </div>
+                </div>
+              </div>
+              <div class="graph-stage" id="graphStage">
+                <div class="time-column" id="timeColumn"></div>
+                <div class="canvas-column" id="canvasColumn">
+                  <svg class="graph-svg" id="graphSvg" aria-label="任务图"></svg>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <aside class="detail-panel">
+            <div class="panel-head">
+              <div class="panel-title">任务详情</div>
+            </div>
+            <div class="detail-scroll">
+              <section class="detail-card">
+                <div class="detail-top">
+                  <div>
+                    <div class="detail-sub">选中任务</div>
+                    <div class="detail-name" id="detailName">-</div>
+                  </div>
+                  <span class="chip future" id="detailStatus">待显示</span>
+                </div>
+                <div class="summary-grid">
+                  <div class="summary-card">
+                    <div class="summary-k">执行 agent</div>
+                    <div class="summary-v" id="detailAgent">-</div>
+                  </div>
+                  <div class="summary-card">
+                    <div class="summary-k">优先级</div>
+                    <div class="summary-v" id="detailPriority">-</div>
+                  </div>
+                  <div class="summary-card">
+                    <div class="summary-k">上游任务</div>
+                    <div class="summary-v" id="detailUpstream">-</div>
+                  </div>
+                  <div class="summary-card">
+                    <div class="summary-k">下游任务</div>
+                    <div class="summary-v" id="detailDownstream">-</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="detail-card" id="taskManageCard">
+                <div class="panel-title">任务管理</div>
+                <div class="action-row">
+                  <button class="secondary" id="overrideStatusButton">人工修改执行状态</button>
+                  <button class="secondary" id="retryTaskButton">重跑任务</button>
+                  <button class="secondary danger-secondary" id="deleteTaskButton">删除任务</button>
+                </div>
+                <div class="action-hint" id="taskManageHint">若改为成功，需先完成产物交付；删除后自动桥接上下游并保留删除留痕。</div>
+              </section>
+
+              <section class="detail-card">
+                <div class="execution-card-head">
+                  <div class="panel-title">执行链路</div>
+                  <span class="chip running" id="executionStateChip">实时输出中</span>
+                </div>
+                <div class="summary-grid">
+                  <div class="summary-card">
+                    <div class="summary-k">执行通道</div>
+                    <div class="summary-v" id="executionProvider">-</div>
+                  </div>
+                  <div class="summary-card">
+                    <div class="summary-k">运行批次</div>
+                    <div class="summary-v" id="executionRunId">-</div>
+                  </div>
+                  <div class="summary-card">
+                    <div class="summary-k">最新事件</div>
+                    <div class="summary-v" id="executionTime">-</div>
+                  </div>
+                  <div class="summary-card">
+                    <div class="summary-k">目标工作区</div>
+                    <div class="summary-v mono" id="executionWorkspace">-</div>
+                  </div>
+                </div>
+                <div class="execution-section-title">调用命令</div>
+                <div class="path-box" id="executionCommand">-</div>
+                <div class="execution-section-title">完整提示词</div>
+                <div class="prompt-box" id="executionPrompt">-</div>
+                <div class="execution-section-title">执行过程</div>
+                <div class="terminal-box" id="executionLog">-</div>
+              </section>
+
+              <section class="detail-card">
+                <div class="panel-title">回执</div>
+                <div class="summary-grid">
+                  <div class="summary-card">
+                    <div class="summary-k">产物</div>
+                    <div class="summary-v" id="receiptArtifact">-</div>
+                  </div>
+                  <div class="summary-card">
+                    <div class="summary-k">执行结果</div>
+                    <div class="summary-v" id="receiptResult">-</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="detail-card">
+                <div class="panel-title">产物</div>
+                <div class="summary-grid">
+                  <div class="summary-card">
+                    <div class="summary-k">交付状态</div>
+                    <div class="summary-v" id="deliveryStatus">-</div>
+                  </div>
+                  <div class="summary-card">
+                    <div class="summary-k">交付类型</div>
+                    <div class="summary-v" id="deliveryMode">-</div>
+                  </div>
+                  <div class="summary-card">
+                    <div class="summary-k">交付对象</div>
+                    <div class="summary-v" id="deliveryReceiver">-</div>
+                  </div>
+                  <div class="summary-card">
+                    <div class="summary-k">最近交付</div>
+                    <div class="summary-v" id="deliveryTime">-</div>
+                  </div>
+                </div>
+                <div class="path-box" id="deliveryPaths">-</div>
+                <div class="action-row">
+                  <button class="secondary" id="viewArtifactButton">查看产物</button>
+                </div>
+              </section>
+
+            </div>
+          </aside>
+        </div>
+
+        <section class="settings-stage hidden" id="settingsContent">
+          <section class="settings-card">
+            <div class="settings-title">既有全局设置</div>
+            <div class="settings-placeholder" aria-hidden="true">
+              <div class="placeholder-line long"></div>
+              <div class="placeholder-line mid"></div>
+              <div class="placeholder-line short"></div>
+            </div>
+          </section>
+          <section class="settings-card">
+            <div class="settings-title">任务执行</div>
+            <div class="settings-form-grid">
+              <label class="form-field">
+                <span class="field-label">执行通道</span>
+                <select class="field-control" id="settingsExecutionProvider">
+                  <option>Codex</option>
+                </select>
+              </label>
+              <label class="form-field">
+                <span class="field-label">全局并发上限</span>
+                <div class="field-static" id="settingsConcurrencyLimit">-</div>
+              </label>
+              <label class="form-field span-2">
+                <span class="field-label">Codex 调用路径</span>
+                <div class="field-static mono-inline" id="settingsExecutionBinary">-</div>
+              </label>
+              <label class="form-field span-2">
+                <span class="field-label">命令模板</span>
+                <div class="field-static mono-inline" id="settingsExecutionCommand">-</div>
+              </label>
+            </div>
+            <div class="action-row">
+              <span class="chip done">路径校验通过</span>
+              <span class="chip running">当前生效</span>
+            </div>
+            <div class="rule-list">
+              <div>完整提示词与执行过程在任务详情中查看。</div>
+            </div>
+          </section>
+          <section class="settings-card">
+            <div class="settings-title">产物路径</div>
+            <div class="settings-grid">
+              <div class="path-box" id="settingsPathValue" style="margin-top:0;">D:\workspace-output</div>
+              <button>选择本地路径</button>
+            </div>
+            <div class="helper-text" style="margin-top:12px;">任务记录目录</div>
+            <div class="path-box" id="settingsWorkspacePath">D:\workspace-output\workspace</div>
+            <div class="action-row">
+              <span class="chip done">路径校验通过</span>
+              <span class="chip running">当前生效</span>
+            </div>
+            <div class="rule-list">
+              <div>无交付人：`&lt;根路径&gt;/&lt;工作agent&gt;/product/&lt;任务名&gt;/...`</div>
+              <div>指定交付人：工作 agent 本地保留一份，同时写入 `&lt;根路径&gt;/&lt;交付agent&gt;/receive/&lt;任务名&gt;/...`</div>
+              <div>任务记录：所有创建的任务记录统一写入 `&lt;根路径&gt;/workspace/...`</div>
+              <div>若未配置有效产物根路径，任务不得人工修改为成功。</div>
+            </div>
+          </section>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div class="sheet-backdrop" id="createTaskSheet" hidden>
+    <section class="sheet-panel" aria-label="创建任务表单">
+      <div class="sheet-head">
+        <div>
+          <div class="sheet-title">创建任务</div>
+        </div>
+        <button class="secondary sheet-close" id="closeCreateTaskButton">关闭</button>
+      </div>
+      <div class="sheet-scroll">
+        <section class="form-section">
+          <div class="form-section-title">基础信息</div>
+          <div class="form-grid">
+            <label class="form-field span-2">
+              <span class="field-label">任务名称</span>
+              <input class="field-control" id="createTaskName" value="修复 workflow 任务调度状态切换" />
+            </label>
+            <label class="form-field">
+              <span class="field-label">执行 agent</span>
+              <select class="field-control" id="createExecutorAgent">
+                <option>后端代理</option>
+                <option>前端代理</option>
+                <option>测试代理</option>
+                <option>需求分析师</option>
+              </select>
+            </label>
+            <label class="form-field">
+              <span class="field-label">优先级</span>
+              <select class="field-control">
+                <option>P0</option>
+                <option>P1</option>
+                <option>P2</option>
+                <option>P3</option>
+              </select>
+            </label>
+            <label class="form-field span-2">
+              <span class="field-label">确认任务目标</span>
+              <textarea class="field-textarea">确保任务调度状态切换在页头与任务图中保持一致，并为失败任务保留重跑与人工改状态入口。</textarea>
+            </label>
+            <label class="form-field span-2">
+              <span class="field-label">预期产物（选填）</span>
+              <textarea class="field-textarea" placeholder="可留空"></textarea>
+            </label>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <div class="form-section-title">依赖关系</div>
+          <div class="form-grid">
+            <div class="form-field span-2">
+              <span class="field-label">上游任务（可选）</span>
+              <div class="search-row">
+                <input class="field-control" placeholder="搜索任务名称或任务 ID" />
+                <button class="secondary" type="button">添加</button>
+              </div>
+              <div class="token-list">
+                <span class="token-chip">T8 节点映射</span>
+                <span class="token-chip">T20 沙箱试跑</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <div class="form-section-title">产物交付</div>
+          <div class="form-grid">
+            <label class="form-field">
+              <span class="field-label">产物交付类型</span>
+              <select class="field-control" id="createDeliveryMode">
+                <option>无交付人</option>
+                <option>指定交付人</option>
+              </select>
+            </label>
+            <label class="form-field" id="createDeliveryReceiverField">
+              <span class="field-label">交付给 agent</span>
+              <select class="field-control" id="createDeliveryReceiver">
+                <option>测试代理</option>
+                <option>前端代理</option>
+                <option>协调代理</option>
+              </select>
+            </label>
+            <div class="form-field span-2">
+              <span class="field-label">路径预览</span>
+              <div class="path-box" id="createPathPreview">D:\workspace-output\后端代理\product\修复 workflow 任务调度状态切换\...</div>
+            </div>
+          </div>
+        </section>
+
+        <div class="sheet-actions">
+          <button class="secondary" id="cancelCreateTaskButton">取消</button>
+          <button id="submitCreateTaskButton">提交创建</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    (() => {
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const ARTIFACT_ROOT_PATH = "D:\\workspace-output";
+      const WORKSPACE_RECORD_ROOT = `${ARTIFACT_ROOT_PATH}\\workspace`;
+      const RECENT_OFFSET = 460;
+      const TOP_PAD = 46;
+      const BOTTOM_PAD = 72;
+      const NODE_RADIUS = 18;
+      const LABEL_RIGHT_SPACE = 180;
+      const Y_BASE = 110;
+      const Y_COMPACT_SCALE = 0.78;
+      const EXECUTION_PROVIDER = "Codex";
+      const EXECUTION_BINARY_PATH = "codex";
+      const EXECUTION_COMMAND_TEMPLATE = "codex exec --json --color never";
+      const EXECUTION_WORKSPACE_ROOT = "../workflow";
+      const GLOBAL_AGENT_CONCURRENCY = 3;
+
+      const tasks = [
+        {
+          id: "T1",
+          label: "需求澄清",
+          lane: 0.44,
+          fullY: 110,
+          batch: "history",
+          status: "done",
+          completedAt: "2026-03-14 10:12:08",
+          agent: "需求分析师",
+          artifact: "澄清记录",
+          result: "运行成功"
+        },
+        {
+          id: "T2",
+          label: "范围收口",
+          lane: 0.26,
+          fullY: 240,
+          batch: "history",
+          status: "done",
+          completedAt: "2026-03-14 10:24:17",
+          agent: "需求分析师",
+          artifact: "范围边界表",
+          result: "运行成功"
+        },
+        {
+          id: "T3",
+          label: "角色映射",
+          lane: 0.66,
+          fullY: 300,
+          batch: "history",
+          status: "done",
+          completedAt: "2026-03-14 10:31:06",
+          agent: "协调代理",
+          artifact: "角色映射表",
+          result: "运行成功"
+        },
+        {
+          id: "T4",
+          label: "基线确认",
+          lane: 0.44,
+          fullY: 430,
+          batch: "history",
+          status: "done",
+          completedAt: "2026-03-14 10:46:11",
+          agent: "需求分析师",
+          artifact: "基线快照",
+          result: "运行成功"
+        },
+        {
+          id: "T5",
+          label: "数据备份",
+          lane: 0.44,
+          fullY: 570,
+          batch: "recent",
+          status: "done",
+          completedAt: "2026-03-14 11:18:09",
+          agent: "协调代理",
+          artifact: "备份结果",
+          result: "运行成功"
+        },
+        {
+          id: "T6",
+          label: "任务拆分",
+          lane: 0.26,
+          fullY: 710,
+          batch: "recent",
+          status: "done",
+          completedAt: "2026-03-14 11:31:25",
+          agent: "需求分析师",
+          artifact: "任务树",
+          result: "运行成功"
+        },
+        {
+          id: "T7",
+          label: "原型骨架",
+          lane: 0.66,
+          fullY: 790,
+          batch: "recent",
+          status: "done",
+          completedAt: "2026-03-14 11:44:40",
+          agent: "设计代理",
+          artifact: "低保真原型",
+          result: "运行成功"
+        },
+        {
+          id: "T8",
+          label: "节点映射",
+          lane: 0.44,
+          fullY: 930,
+          batch: "recent",
+          status: "done",
+          completedAt: "2026-03-14 12:01:18",
+          agent: "协调代理",
+          artifact: "依赖关系图",
+          result: "运行成功",
+          delivery: {
+            status: "已交付",
+            mode: "无交付人",
+            deliveredAt: "2026-03-14 12:02:07",
+            paths: [
+              "D:\\workspace-output\\协调代理\\product\\节点映射\\依赖关系图.md"
+            ],
+            canView: true
+          }
+        },
+        {
+          id: "T16",
+          label: "知识快照",
+          lane: 0.82,
+          fullY: 980,
+          batch: "recent",
+          status: "done",
+          completedAt: "2026-03-14 12:08:56",
+          agent: "知识代理",
+          artifact: "快照归档",
+          result: "运行成功"
+        },
+        {
+          id: "T9",
+          label: "接口预留",
+          lane: 0.28,
+          fullY: 1110,
+          batch: "recent",
+          status: "running",
+          completedAt: null,
+          agent: "后端代理",
+          artifact: "接口草案",
+          result: "进行中",
+          delivery: {
+            status: "待交付",
+            mode: "指定交付人",
+            receiver: "测试代理",
+            deliveredAt: null,
+            paths: [
+              "D:\\workspace-output\\后端代理\\product\\接口预留\\接口草案.md",
+              "D:\\workspace-output\\测试代理\\receive\\接口预留\\接口草案.md"
+            ],
+            canView: false
+          }
+        },
+        {
+          id: "T10",
+          label: "联调验收",
+          lane: 0.44,
+          fullY: 1250,
+          batch: "recent",
+          status: "blocked",
+          completedAt: null,
+          agent: "测试代理",
+          artifact: "待补充联调记录",
+          result: "阻塞",
+          delivery: {
+            status: "等待上游交付",
+            mode: "指定交付人",
+            receiver: "测试代理",
+            deliveredAt: null,
+            paths: [],
+            canView: false
+          }
+        },
+        {
+          id: "T11",
+          label: "回写关闭",
+          lane: 0.44,
+          fullY: 1390,
+          batch: "recent",
+          status: "future",
+          completedAt: null,
+          agent: "协调代理",
+          artifact: "-",
+          result: "待开始"
+        },
+        {
+          id: "T12",
+          label: "回执汇总",
+          lane: 0.24,
+          fullY: 1540,
+          batch: "recent",
+          status: "future",
+          completedAt: null,
+          agent: "分析代理",
+          artifact: "-",
+          result: "待开始"
+        },
+        {
+          id: "T13",
+          label: "结果广播",
+          lane: 0.66,
+          fullY: 1640,
+          batch: "recent",
+          status: "future",
+          completedAt: null,
+          agent: "协调代理",
+          artifact: "-",
+          result: "待开始"
+        },
+        {
+          id: "T17",
+          label: "风险巡检",
+          lane: 0.12,
+          fullY: 1710,
+          batch: "recent",
+          status: "future",
+          completedAt: null,
+          agent: "风险代理",
+          artifact: "-",
+          result: "待开始"
+        },
+        {
+          id: "T14",
+          label: "人工确认",
+          lane: 0.78,
+          fullY: 1770,
+          batch: "recent",
+          status: "future",
+          completedAt: null,
+          agent: "人工审核",
+          artifact: "-",
+          result: "待开始"
+        },
+        {
+          id: "T15",
+          label: "自动关闭",
+          lane: 0.44,
+          fullY: 1910,
+          batch: "recent",
+          status: "future",
+          completedAt: null,
+          agent: "协调代理",
+          artifact: "-",
+          result: "待开始"
+        },
+        {
+          id: "T18",
+          label: "模板同步",
+          lane: 0.86,
+          fullY: 1980,
+          batch: "recent",
+          status: "future",
+          completedAt: null,
+          agent: "知识代理",
+          artifact: "-",
+          result: "待开始"
+        },
+        {
+          id: "T19",
+          label: "资源回收",
+          lane: 0.12,
+          fullY: 2060,
+          batch: "recent",
+          status: "future",
+          completedAt: null,
+          agent: "运维代理",
+          artifact: "-",
+          result: "待开始"
+        },
+        {
+          id: "T20",
+          label: "沙箱试跑",
+          lane: 0.78,
+          fullY: 1180,
+          batch: "recent",
+          status: "fail",
+          completedAt: "2026-03-14 12:19:33",
+          agent: "执行代理",
+          artifact: "失败日志",
+          result: "运行失败",
+          delivery: {
+            status: "未交付",
+            mode: "无交付人",
+            deliveredAt: null,
+            paths: [
+              "D:\\workspace-output\\执行代理\\product\\沙箱试跑\\失败日志.txt"
+            ],
+            canView: true
+          }
+        }
+      ];
+
+      let dependencies = [
+        ["T1", "T2"],
+        ["T1", "T3"],
+        ["T2", "T4"],
+        ["T3", "T4"],
+        ["T4", "T5"],
+        ["T5", "T6"],
+        ["T5", "T7"],
+        ["T6", "T8"],
+        ["T7", "T8"],
+        ["T8", "T9"],
+        ["T9", "T10"],
+        ["T10", "T11"],
+        ["T11", "T12"],
+        ["T11", "T13"],
+        ["T12", "T15"],
+        ["T13", "T14"],
+        ["T14", "T15"]
+      ];
+
+      const statusMeta = {
+        done: { label: "已完成", chipClass: "done" },
+        running: { label: "进行中", chipClass: "running" },
+        blocked: { label: "阻塞", chipClass: "blocked" },
+        fail: { label: "失败", chipClass: "fail" },
+        future: { label: "待开始", chipClass: "future" }
+      };
+
+      const taskMap = new Map(tasks.map((task) => [task.id, task]));
+      const upstreamMap = new Map();
+      const downstreamMap = new Map();
+      const rebuildDependencyMaps = () => {
+        upstreamMap.clear();
+        downstreamMap.clear();
+        for (const [from, to] of dependencies) {
+          if (!downstreamMap.has(from)) downstreamMap.set(from, []);
+          if (!upstreamMap.has(to)) upstreamMap.set(to, []);
+          downstreamMap.get(from).push(to);
+          upstreamMap.get(to).push(from);
+        }
+      };
+      rebuildDependencyMaps();
+
+      const graphScroll = document.getElementById("graphScroll");
+      const graphStage = document.getElementById("graphStage");
+      const timeColumn = document.getElementById("timeColumn");
+      const canvasColumn = document.getElementById("canvasColumn");
+      const graphSvg = document.getElementById("graphSvg");
+      const historyChip = document.getElementById("historyChip");
+      const historyText = document.getElementById("historyText");
+      const taskTab = document.getElementById("taskTab");
+      const settingsTab = document.getElementById("settingsTab");
+      const taskContent = document.getElementById("taskContent");
+      const settingsContent = document.getElementById("settingsContent");
+      const windowTitle = document.getElementById("windowTitle");
+      const windowNote = document.getElementById("windowNote");
+      const windowActions = document.getElementById("windowActions");
+
+      const detailName = document.getElementById("detailName");
+      const detailStatus = document.getElementById("detailStatus");
+      const detailAgent = document.getElementById("detailAgent");
+      const detailPriority = document.getElementById("detailPriority");
+      const detailUpstream = document.getElementById("detailUpstream");
+      const detailDownstream = document.getElementById("detailDownstream");
+      const executionStateChip = document.getElementById("executionStateChip");
+      const executionProvider = document.getElementById("executionProvider");
+      const executionRunId = document.getElementById("executionRunId");
+      const executionTime = document.getElementById("executionTime");
+      const executionWorkspace = document.getElementById("executionWorkspace");
+      const executionCommand = document.getElementById("executionCommand");
+      const executionPrompt = document.getElementById("executionPrompt");
+      const executionLog = document.getElementById("executionLog");
+      const receiptArtifact = document.getElementById("receiptArtifact");
+      const receiptResult = document.getElementById("receiptResult");
+      const deliveryStatus = document.getElementById("deliveryStatus");
+      const deliveryMode = document.getElementById("deliveryMode");
+      const deliveryReceiver = document.getElementById("deliveryReceiver");
+      const deliveryTime = document.getElementById("deliveryTime");
+      const deliveryPaths = document.getElementById("deliveryPaths");
+      const viewArtifactButton = document.getElementById("viewArtifactButton");
+      const taskManageCard = document.getElementById("taskManageCard");
+      const taskManageHint = document.getElementById("taskManageHint");
+      const overrideStatusButton = document.getElementById("overrideStatusButton");
+      const retryTaskButton = document.getElementById("retryTaskButton");
+      const deleteTaskButton = document.getElementById("deleteTaskButton");
+      const schedulerStateChip = document.getElementById("schedulerStateChip");
+      const parallelCountChip = document.getElementById("parallelCountChip");
+      const pauseDispatchButton = document.getElementById("pauseDispatchButton");
+      const resumeDispatchButton = document.getElementById("resumeDispatchButton");
+      const clearTasksButton = document.getElementById("clearTasksButton");
+      const createTaskButton = document.getElementById("createTaskButton");
+      const createTaskSheet = document.getElementById("createTaskSheet");
+      const closeCreateTaskButton = document.getElementById("closeCreateTaskButton");
+      const cancelCreateTaskButton = document.getElementById("cancelCreateTaskButton");
+      const submitCreateTaskButton = document.getElementById("submitCreateTaskButton");
+      const settingsPathValue = document.getElementById("settingsPathValue");
+      const settingsWorkspacePath = document.getElementById("settingsWorkspacePath");
+      const settingsExecutionProvider = document.getElementById("settingsExecutionProvider");
+      const settingsExecutionBinary = document.getElementById("settingsExecutionBinary");
+      const settingsExecutionCommand = document.getElementById("settingsExecutionCommand");
+      const settingsConcurrencyLimit = document.getElementById("settingsConcurrencyLimit");
+      const createTaskNameInput = document.getElementById("createTaskName");
+      const createExecutorAgent = document.getElementById("createExecutorAgent");
+      const createDeliveryMode = document.getElementById("createDeliveryMode");
+      const createDeliveryReceiverField = document.getElementById("createDeliveryReceiverField");
+      const createDeliveryReceiver = document.getElementById("createDeliveryReceiver");
+      const createPathPreview = document.getElementById("createPathPreview");
+
+      const params = new URLSearchParams(window.location.search);
+      const pageViewParam = params.get("view");
+      const schedulerParam = params.get("scheduler");
+      const artifactMode = params.get("artifact") === "1";
+      const allowedSchedulerStates = new Set(["running", "pause_pending", "paused", "idle"]);
+
+      let historyLoaded = params.get("history") === "1";
+      let wheelCount = 0;
+      let loading = false;
+      let graphCleared = false;
+      const removedIds = new Set();
+      let selectedId = params.get("task") || (artifactMode ? "T8" : "T9");
+      let pageView = pageViewParam === "settings" ? "settings" : "task";
+      let schedulerState = allowedSchedulerStates.has(schedulerParam) ? schedulerParam : "running";
+      let createTaskOpen = params.get("create") === "1" && pageView === "task";
+      let schedulerNoteText = "当前运行任务完成后可继续调度后续任务。";
+
+      const markerIds = {
+        done: "arrowDone",
+        running: "arrowRunning",
+        blocked: "arrowBlocked",
+        fail: "arrowFail",
+        future: "arrowFuture"
+      };
+
+      const isTaskActive = (task) => !graphCleared && !removedIds.has(task.id);
+      const isTaskVisibleById = (taskId) => {
+        const task = taskMap.get(taskId);
+        return !!task && isTaskActive(task) && (historyLoaded || task.batch !== "history");
+      };
+      const getVisibleTasks = () => tasks.filter((task) => isTaskActive(task) && (historyLoaded || task.batch !== "history"));
+
+      const normalizePathPart = (value, fallback) => {
+        const text = `${value || fallback || ""}`.trim() || fallback || "未命名";
+        return text.replace(/[\\\\/:*?\"<>|]/g, "-");
+      };
+
+      const buildArtifactFileName = (task) => {
+        const artifactName = normalizePathPart(task.artifact, "产物");
+        const ext = artifactName.includes("日志") ? ".txt" : ".md";
+        return `${artifactName}${ext}`;
+      };
+
+      const buildProductPath = (agent, taskName, fileName) => [
+        ARTIFACT_ROOT_PATH,
+        normalizePathPart(agent, "未指定agent"),
+        "product",
+        normalizePathPart(taskName, "未命名任务"),
+        fileName
+      ].join("\\");
+
+      const buildReceivePath = (agent, taskName, fileName) => [
+        ARTIFACT_ROOT_PATH,
+        normalizePathPart(agent, "未指定agent"),
+        "receive",
+        normalizePathPart(taskName, "未命名任务"),
+        fileName
+      ].join("\\");
+
+      const getDeliveryInfo = (task) => {
+        const fileName = buildArtifactFileName(task);
+        const defaults = {
+          status: "未开始",
+          mode: "-",
+          receiver: null,
+          deliveredAt: null,
+          paths: [],
+          canView: false
+        };
+
+        if (task.status === "done") {
+          defaults.status = "已交付";
+          defaults.mode = "无交付人";
+          defaults.deliveredAt = task.completedAt;
+          defaults.paths = [buildProductPath(task.agent, task.label, fileName)];
+          defaults.canView = true;
+        } else if (task.status === "running") {
+          defaults.status = "待交付";
+          defaults.mode = "无交付人";
+          defaults.paths = [buildProductPath(task.agent, task.label, fileName)];
+        } else if (task.status === "blocked") {
+          defaults.status = "等待上游交付";
+        } else if (task.status === "fail") {
+          defaults.status = "未交付";
+          defaults.mode = "无交付人";
+          defaults.paths = [buildProductPath(task.agent, task.label, fileName)];
+          defaults.canView = true;
+        }
+
+        const delivery = task.delivery || {};
+        return {
+          ...defaults,
+          ...delivery,
+          paths: Array.isArray(delivery.paths) ? delivery.paths : defaults.paths
+        };
+      };
+
+      const executionStateMeta = {
+        done: { label: "已结束", chipClass: "done" },
+        running: { label: "实时输出中", chipClass: "running" },
+        blocked: { label: "等待依赖", chipClass: "blocked" },
+        fail: { label: "运行失败", chipClass: "fail" },
+        future: { label: "待启动", chipClass: "future" }
+      };
+
+      const buildExecutionCommand = (task) => `${EXECUTION_COMMAND_TEMPLATE} --workspace "${EXECUTION_WORKSPACE_ROOT}" --agent "${task.agent || "未指定agent"}" --task "${task.label}"`;
+
+      const buildPromptText = (task, delivery) => {
+        const upstreamIds = (upstreamMap.get(task.id) || []).filter((id) => !removedIds.has(id));
+        const artifactGoal = task.artifact && task.artifact !== "-" ? `输出 ${task.artifact}` : "完成当前节点目标";
+        const deliveryRule = delivery.mode === "指定交付人"
+          ? `工作产物保留本地，同时向 ${delivery.receiver || "指定agent"} 交付一份。`
+          : "无交付人，产物仅写入工作 agent 的 product 目录。";
+
+        return [
+          `角色：${task.agent || "-"}`,
+          `任务：${task.id} ${task.label}`,
+          `目标：${artifactGoal}`,
+          `依赖：${upstreamIds.length ? upstreamIds.join(" / ") : "无"}`,
+          `执行约束：仅处理当前节点，不得跳过依赖，不得直接修改其他任务状态。`,
+          `交付约束：${deliveryRule}`,
+          `回写要求：执行完成后通过任务中心回写状态、结果与产物。`
+        ].join("\n");
+      };
+
+      const buildExecutionLogEntries = (task, delivery) => {
+        if (task.status === "running") {
+          return [
+            { kind: "system", text: `[2026-03-14 12:26:08] scheduler dispatch ${task.id} -> ${task.agent}` },
+            { kind: "command", text: `[2026-03-14 12:26:09] ${buildExecutionCommand(task)}` },
+            { kind: "stdout", text: "[2026-03-14 12:26:12] 已读取 AGENTS.md、任务依赖与当前工作区上下文" },
+            { kind: "stdout", text: `[2026-03-14 12:26:15] 已生成 ${task.artifact || "当前产物"} 初稿结构` },
+            { kind: "live", text: `[2026-03-14 12:26:19] 正在整理 ${task.label} 的执行结果并准备回写` }
+          ];
+        }
+
+        if (task.status === "done") {
+          return [
+            { kind: "system", text: `[${task.completedAt || "2026-03-14 11:18:09"}] scheduler completed ${task.id}` },
+            { kind: "command", text: `[${task.completedAt || "2026-03-14 11:18:09"}] ${buildExecutionCommand(task)}` },
+            { kind: "stdout", text: `[${task.completedAt || "2026-03-14 11:18:09"}] 任务执行完成，结果已回写为：${task.result || "运行成功"}` },
+            { kind: "stdout", text: `[${task.completedAt || "2026-03-14 11:18:09"}] 产物路径：${delivery.paths[0] || "待回填"}` },
+            { kind: "system", text: `[${delivery.deliveredAt || task.completedAt || "2026-03-14 11:18:09"}] 当前批次已结束` }
+          ];
+        }
+
+        if (task.status === "fail") {
+          return [
+            { kind: "system", text: "[2026-03-14 12:16:42] scheduler dispatch T20 -> 执行代理" },
+            { kind: "command", text: `[2026-03-14 12:16:43] ${buildExecutionCommand(task)}` },
+            { kind: "stdout", text: "[2026-03-14 12:16:46] 已进入目标工作区并开始执行" },
+            { kind: "stderr", text: "[2026-03-14 12:19:28] 返回非零退出码，执行未收口" },
+            { kind: "stderr", text: `[2026-03-14 12:19:33] 失败结果：${task.result || "运行失败"}` }
+          ];
+        }
+
+        if (task.status === "blocked") {
+          const blockers = (upstreamMap.get(task.id) || []).filter((id) => !removedIds.has(id));
+          return [
+            { kind: "queue", text: `[待调度] 等待上游 ${blockers.length ? blockers.join(" / ") : "任务"} 完成后再派发` },
+            { kind: "queue", text: "[待调度] 当前不会创建实际运行批次" },
+            { kind: "queue", text: "[待调度] 提示词已预生成，满足依赖后直接进入执行队列" }
+          ];
+        }
+
+        return [
+          { kind: "queue", text: "[待调度] 尚未进入运行队列" },
+          { kind: "queue", text: "[待调度] 若无上游，则按优先级与创建顺序派发" },
+          { kind: "queue", text: "[待调度] 当前仅展示预生成命令与完整提示词" }
+        ];
+      };
+
+      const getExecutionInfo = (task) => {
+        const delivery = getDeliveryInfo(task);
+        const info = {
+          provider: EXECUTION_PROVIDER,
+          runId: task.status === "blocked" || task.status === "future" ? "待创建" : `run-${task.id.toLowerCase()}-20260314-01`,
+          time: task.status === "running"
+            ? "2026-03-14 12:26:19"
+            : task.status === "blocked"
+              ? "等待上游完成"
+              : task.status === "future"
+                ? "待调度"
+                : (delivery.deliveredAt || task.completedAt || "2026-03-14 11:18:09"),
+          workspace: EXECUTION_WORKSPACE_ROOT,
+          command: buildExecutionCommand(task),
+          prompt: buildPromptText(task, delivery),
+          logs: buildExecutionLogEntries(task, delivery)
+        };
+
+        const state = executionStateMeta[task.status] || executionStateMeta.future;
+        return {
+          ...info,
+          stateLabel: state.label,
+          stateChipClass: state.chipClass
+        };
+      };
+
+      const renderExecutionLog = (entries) => {
+        executionLog.replaceChildren();
+        if (!entries || !entries.length) {
+          const fallback = document.createElement("div");
+          fallback.className = "terminal-line queue";
+          fallback.textContent = "-";
+          executionLog.appendChild(fallback);
+          return;
+        }
+
+        for (const entry of entries) {
+          const line = document.createElement("div");
+          line.className = `terminal-line ${entry.kind || "queue"}`;
+          line.textContent = entry.text;
+          executionLog.appendChild(line);
+        }
+      };
+
+      const resolveY = (task) => {
+        const rawY = !historyLoaded && task.batch !== "history"
+          ? task.fullY - RECENT_OFFSET
+          : task.fullY;
+
+        return Y_BASE + ((rawY - Y_BASE) * Y_COMPACT_SCALE);
+      };
+
+      const setHistoryChip = (state, text) => {
+        historyChip.dataset.state = state;
+        historyText.textContent = text;
+      };
+
+      const setSchedulerNote = (text) => {
+        schedulerNoteText = text;
+        if (pageView === "task") {
+          windowNote.textContent = schedulerNoteText;
+        }
+      };
+
+      const createSvg = (tag, attributes = {}) => {
+        const node = document.createElementNS(SVG_NS, tag);
+        for (const [key, value] of Object.entries(attributes)) {
+          node.setAttribute(key, value);
+        }
+        return node;
+      };
+
+      const syncTimeColumnWidth = () => {
+        const entries = Array.from(timeColumn.children);
+        const measuredWidth = entries.length
+          ? Math.max(...entries.map((entry) => entry.offsetWidth))
+          : 86;
+        const nextWidth = Math.max(84, Math.min(Math.ceil(measuredWidth + 14), 122));
+        graphScroll.style.setProperty("--time-width", `${nextWidth}px`);
+        return nextWidth;
+      };
+
+      const getVisualStatus = (task) => {
+        if (schedulerState === "paused" || schedulerState === "idle") {
+          if (task.status === "running") {
+            return "future";
+          }
+        }
+        return task.status;
+      };
+
+      const getRunningAgentCount = () => {
+        const runningAgents = new Set(
+          getVisibleTasks()
+            .filter((task) => getVisualStatus(task) === "running")
+            .map((task) => task.agent)
+            .filter(Boolean)
+        );
+        return runningAgents.size;
+      };
+
+      const updateSchedulerControls = () => {
+        clearTasksButton.disabled = getRunningAgentCount() > 0 || getVisibleTasks().length === 0;
+        clearTasksButton.title = getRunningAgentCount() > 0
+          ? "存在运行中任务时不可清空"
+          : "清空当前任务图";
+
+        if (schedulerState === "pause_pending") {
+          schedulerStateChip.textContent = "暂停中";
+          schedulerStateChip.className = "chip pause";
+          setSchedulerNote("已请求暂停：等待当前运行任务完成后，不再调度后续任务。");
+          parallelCountChip.textContent = `并行agent数 ${getRunningAgentCount()}`;
+          parallelCountChip.className = "chip future";
+          pauseDispatchButton.disabled = true;
+          resumeDispatchButton.disabled = false;
+          resumeDispatchButton.textContent = "继续运行";
+          pauseDispatchButton.textContent = "暂停调度";
+          return;
+        }
+
+        if (schedulerState === "paused") {
+          schedulerStateChip.textContent = "已暂停";
+          schedulerStateChip.className = "chip paused";
+          setSchedulerNote("当前不再调度新任务，可点击继续运行恢复。");
+          parallelCountChip.textContent = "并行agent数 0";
+          parallelCountChip.className = "chip future";
+          pauseDispatchButton.disabled = true;
+          resumeDispatchButton.disabled = false;
+          resumeDispatchButton.textContent = "继续运行";
+          pauseDispatchButton.textContent = "暂停调度";
+          return;
+        }
+
+        if (schedulerState === "idle") {
+          schedulerStateChip.textContent = "未启动";
+          schedulerStateChip.className = "chip idle";
+          setSchedulerNote("尚未启动调度，启动后按依赖关系与并发上限执行。");
+          parallelCountChip.textContent = "并行agent数 0";
+          parallelCountChip.className = "chip future";
+          pauseDispatchButton.disabled = true;
+          resumeDispatchButton.disabled = false;
+          resumeDispatchButton.textContent = "启动运行";
+          pauseDispatchButton.textContent = "暂停调度";
+          return;
+        }
+
+        schedulerStateChip.textContent = "运行中";
+        schedulerStateChip.className = "chip running";
+        setSchedulerNote("当前运行任务完成后可继续调度后续任务。");
+        parallelCountChip.textContent = `并行agent数 ${getRunningAgentCount()}`;
+        parallelCountChip.className = "chip future";
+        pauseDispatchButton.disabled = false;
+        resumeDispatchButton.disabled = true;
+        resumeDispatchButton.textContent = "继续运行";
+        pauseDispatchButton.textContent = "暂停调度";
+      };
+
+      const syncCreateTaskSheet = () => {
+        createTaskSheet.hidden = pageView === "settings" || !createTaskOpen;
+      };
+
+      const openCreateTaskSheet = () => {
+        if (pageView === "settings") {
+          return;
+        }
+        createTaskOpen = true;
+        syncCreateTaskSheet();
+      };
+
+      const closeCreateTaskSheet = () => {
+        createTaskOpen = false;
+        syncCreateTaskSheet();
+      };
+
+      const syncPageView = () => {
+        const settings = pageView === "settings";
+        taskTab.classList.toggle("active", !settings);
+        settingsTab.classList.toggle("active", settings);
+        taskContent.classList.toggle("hidden", settings);
+        settingsContent.classList.toggle("hidden", !settings);
+        windowActions.classList.toggle("hidden", settings);
+
+        if (settings) {
+          windowTitle.textContent = "设置";
+          windowNote.textContent = "在既有设置页中新增任务执行与产物路径配置。";
+          createTaskOpen = false;
+          syncCreateTaskSheet();
+          return;
+        }
+
+        windowTitle.textContent = "任务中心";
+        windowNote.textContent = schedulerNoteText;
+      };
+
+      const syncCreateTaskDeliveryFields = () => {
+        const deliveryModeValue = createDeliveryMode.value;
+        const taskName = createTaskNameInput.value.trim() || "<任务名>";
+        const executor = createExecutorAgent.value || "<工作agent>";
+        const receiver = createDeliveryReceiver.value || "<交付agent>";
+        const lines = [
+          buildProductPath(executor, taskName, "...")
+        ];
+
+        const directed = deliveryModeValue === "指定交付人";
+        createDeliveryReceiverField.classList.toggle("hidden", !directed);
+        if (directed) {
+          lines.push(buildReceivePath(receiver, taskName, "..."));
+        }
+        createPathPreview.textContent = lines.join("\n");
+      };
+
+      const getTaskManageHint = (task, delivery) => {
+        const successHint = !ARTIFACT_ROOT_PATH
+          ? "未配置有效产物根路径，暂不可人工改为成功。"
+          : delivery.status !== "已交付"
+            ? "若改为成功，需先完成产物交付。"
+            : "已完成产物交付，可人工改为成功。";
+
+        if (task.status === "fail") {
+          return `失败任务可重跑，也可人工修改执行状态。${successHint}`;
+        }
+
+        if (task.status === "running") {
+          return `运行中的任务不可删除；如需收口结果，请人工修改执行状态。${successHint}`;
+        }
+
+        return `可人工修改执行状态。${successHint} 删除后自动桥接上下游，并保留删除留痕。`;
+      };
+
+      const hasPathInEdges = (startId, targetId, edges, visited = new Set()) => {
+        if (startId === targetId) {
+          return true;
+        }
+        if (visited.has(startId)) {
+          return false;
+        }
+        visited.add(startId);
+        for (const [from, to] of edges) {
+          if (from !== startId) {
+            continue;
+          }
+          if (to === targetId || hasPathInEdges(to, targetId, edges, visited)) {
+            return true;
+          }
+        }
+        return false;
+      };
+
+      const reconnectDependenciesAfterDelete = (taskId) => {
+        const upstreamIds = (upstreamMap.get(taskId) || []).filter((id) => !removedIds.has(id));
+        const downstreamIds = (downstreamMap.get(taskId) || []).filter((id) => !removedIds.has(id));
+        const nextEdges = dependencies.filter(([from, to]) => from !== taskId && to !== taskId);
+        const edgeKeys = new Set(nextEdges.map(([from, to]) => `${from}->${to}`));
+
+        for (const fromId of upstreamIds) {
+          for (const toId of downstreamIds) {
+            if (fromId === toId) {
+              continue;
+            }
+            const key = `${fromId}->${toId}`;
+            if (edgeKeys.has(key)) {
+              continue;
+            }
+            if (hasPathInEdges(toId, fromId, nextEdges)) {
+              continue;
+            }
+            nextEdges.push([fromId, toId]);
+            edgeKeys.add(key);
+          }
+        }
+
+        dependencies = nextEdges;
+        rebuildDependencyMaps();
+      };
+
+      const buildPath = (from, to) => {
+        const startY = from.y + NODE_RADIUS;
+        const endY = to.y - NODE_RADIUS;
+        const deltaY = Math.max(endY - startY, 80);
+        const curve = Math.max(deltaY * 0.42, 54);
+        return [
+          "M", from.x, startY,
+          "C", from.x, startY + curve,
+          to.x, endY - curve,
+          to.x, endY
+        ].join(" ");
+      };
+
+      const updateDetails = () => {
+        const task = selectedId ? taskMap.get(selectedId) : null;
+        if (!task) {
+          detailName.textContent = "-";
+          detailStatus.textContent = "待显示";
+          detailStatus.className = "chip future";
+          detailAgent.textContent = "-";
+          detailPriority.textContent = "-";
+          detailUpstream.textContent = "-";
+          detailDownstream.textContent = "-";
+          executionStateChip.textContent = "待显示";
+          executionStateChip.className = "chip future";
+          executionProvider.textContent = "-";
+          executionRunId.textContent = "-";
+          executionTime.textContent = "-";
+          executionWorkspace.textContent = "-";
+          executionCommand.textContent = "-";
+          executionPrompt.textContent = "-";
+          renderExecutionLog([]);
+          receiptArtifact.textContent = "-";
+          receiptResult.textContent = "-";
+          deliveryStatus.textContent = "-";
+          deliveryMode.textContent = "-";
+          deliveryReceiver.textContent = "-";
+          deliveryTime.textContent = "-";
+          deliveryPaths.textContent = "-";
+          viewArtifactButton.disabled = true;
+          deleteTaskButton.disabled = true;
+          overrideStatusButton.disabled = true;
+          retryTaskButton.disabled = true;
+          taskManageHint.textContent = "当前无可管理任务。";
+          taskManageCard.hidden = true;
+          return;
+        }
+
+        const meta = statusMeta[task.status] || statusMeta.future;
+        const delivery = getDeliveryInfo(task);
+        const execution = getExecutionInfo(task);
+        const pathLines = delivery.paths && delivery.paths.length
+          ? delivery.paths
+          : [task.status === "blocked"
+            ? "等待上游产物交付后生成路径"
+            : task.status === "future"
+              ? "任务开始后生成路径"
+              : "尚无可展示的产物路径"];
+        detailName.textContent = `${task.id} ${task.label}`;
+        detailStatus.textContent = meta.label;
+        detailStatus.className = `chip ${meta.chipClass}`;
+        detailAgent.textContent = task.agent || "-";
+        detailPriority.textContent = "P0";
+        detailUpstream.textContent = (upstreamMap.get(task.id) || []).filter(isTaskVisibleById).join(" / ") || "-";
+        detailDownstream.textContent = (downstreamMap.get(task.id) || []).filter(isTaskVisibleById).join(" / ") || "-";
+        executionStateChip.textContent = execution.stateLabel;
+        executionStateChip.className = `chip ${execution.stateChipClass}`;
+        executionProvider.textContent = execution.provider;
+        executionRunId.textContent = execution.runId;
+        executionTime.textContent = execution.time;
+        executionWorkspace.textContent = execution.workspace;
+        executionCommand.textContent = execution.command;
+        executionPrompt.textContent = execution.prompt;
+        renderExecutionLog(execution.logs);
+        receiptArtifact.textContent = task.artifact || "-";
+        receiptResult.textContent = task.result || "-";
+        deliveryStatus.textContent = delivery.status || "-";
+        deliveryMode.textContent = delivery.mode || "-";
+        deliveryReceiver.textContent = delivery.mode === "指定交付人"
+          ? (delivery.receiver || "-")
+          : "无交付人";
+        deliveryTime.textContent = delivery.deliveredAt || "-";
+        deliveryPaths.textContent = pathLines.join("\n");
+        viewArtifactButton.disabled = !delivery.canView;
+        taskManageCard.hidden = false;
+        overrideStatusButton.disabled = false;
+        retryTaskButton.disabled = task.status !== "fail";
+        taskManageHint.textContent = getTaskManageHint(task, delivery);
+
+        if (task.status === "running") {
+          deleteTaskButton.disabled = true;
+        } else {
+          deleteTaskButton.disabled = false;
+        }
+      };
+
+      const render = (preserveScroll = false) => {
+        const previousHeight = graphScroll.scrollHeight;
+        const previousTop = graphScroll.scrollTop;
+        const visibleTasks = getVisibleTasks();
+        const positions = new Map();
+
+        const stageHeight = visibleTasks.length
+          ? Math.max(...visibleTasks.map((task) => resolveY(task))) + BOTTOM_PAD
+          : 420;
+
+        graphStage.style.height = `${stageHeight}px`;
+        timeColumn.innerHTML = "";
+        graphSvg.innerHTML = "";
+
+        if (!visibleTasks.length) {
+          setHistoryChip("loaded", "当前无任务");
+        } else if (!historyLoaded && !loading) {
+          setHistoryChip("idle", "上滑 2 次加载历史");
+        }
+
+        for (const task of visibleTasks) {
+          const y = resolveY(task);
+          const stamp = document.createElement("div");
+          stamp.className = `time-entry${task.completedAt ? "" : " pending"}`;
+          stamp.style.top = `${y}px`;
+
+          const [dateText, timeText] = task.completedAt
+            ? task.completedAt.split(" ")
+            : ["待完成", "--:--:--"];
+
+          const dateLine = document.createElement("span");
+          dateLine.className = "time-date";
+          dateLine.textContent = dateText || "待完成";
+
+          const timeLine = document.createElement("span");
+          timeLine.className = "time-clock";
+          timeLine.textContent = timeText || "--:--:--";
+
+          stamp.appendChild(dateLine);
+          stamp.appendChild(timeLine);
+          timeColumn.appendChild(stamp);
+        }
+
+        syncTimeColumnWidth();
+
+        const canvasWidth = Math.max(canvasColumn.clientWidth - (2 * 16), 760);
+        graphSvg.setAttribute("width", `${canvasWidth}`);
+        graphSvg.setAttribute("height", `${stageHeight}`);
+        graphSvg.setAttribute("viewBox", `0 0 ${canvasWidth} ${stageHeight}`);
+        graphSvg.setAttribute("preserveAspectRatio", "xMinYMin meet");
+
+        for (const task of visibleTasks) {
+          const y = resolveY(task);
+          const preferredX = TOP_PAD + task.lane * (canvasWidth - TOP_PAD - (2 * TOP_PAD));
+          const x = Math.min(preferredX, canvasWidth - LABEL_RIGHT_SPACE);
+          positions.set(task.id, { x, y });
+        }
+
+        const defs = createSvg("defs");
+        Object.entries(markerIds).forEach(([status, id]) => {
+          const marker = createSvg("marker", {
+            id,
+            markerWidth: "8",
+            markerHeight: "7",
+            refX: "7",
+            refY: "3.5",
+            orient: "auto",
+            markerUnits: "strokeWidth"
+          });
+          const arrow = createSvg("path", {
+            d: "M1,1 L7,3.5 L1,6 C2.1,4.7 2.1,2.3 1,1 z",
+            fill: "#c6ccd6"
+          });
+          marker.appendChild(arrow);
+          defs.appendChild(marker);
+        });
+        graphSvg.appendChild(defs);
+
+        for (const [fromId, toId] of dependencies) {
+          if (!positions.has(fromId) || !positions.has(toId)) {
+            continue;
+          }
+
+          const fromTask = taskMap.get(fromId);
+          const toTask = taskMap.get(toId);
+          const from = positions.get(fromId);
+          const to = positions.get(toId);
+          const path = buildPath(from, to);
+          const lineStatus = getVisualStatus(toTask) || getVisualStatus(fromTask) || "future";
+
+          const back = createSvg("path", {
+            class: `graph-line back ${lineStatus}`,
+            d: path
+          });
+          const front = createSvg("path", {
+            class: `graph-line ${lineStatus}`,
+            d: path,
+            "marker-end": `url(#${markerIds[lineStatus] || markerIds.future})`
+          });
+
+          graphSvg.appendChild(back);
+          graphSvg.appendChild(front);
+        }
+
+        for (const task of visibleTasks) {
+          const pos = positions.get(task.id);
+          const labelPosX = pos.x + NODE_RADIUS + 14;
+
+          const group = createSvg("g", {
+            class: `task-node${selectedId === task.id ? " selected" : ""}`,
+            "data-id": task.id
+          });
+
+          const hit = createSvg("circle", {
+            cx: `${pos.x}`,
+            cy: `${pos.y}`,
+            r: `${NODE_RADIUS + 9}`,
+            fill: "transparent"
+          });
+
+          const circle = createSvg("circle", {
+            class: `graph-node ${getVisualStatus(task)}`,
+            cx: `${pos.x}`,
+            cy: `${pos.y}`,
+            r: `${NODE_RADIUS}`
+          });
+
+          const label = createSvg("text", {
+            class: "graph-label",
+            x: `${labelPosX}`,
+            y: `${pos.y + 1}`,
+            "text-anchor": "start"
+          });
+          label.textContent = `${task.id} ${task.label}`;
+
+          group.appendChild(hit);
+          group.appendChild(circle);
+          group.appendChild(label);
+          group.addEventListener("click", () => {
+            selectedId = task.id;
+            render();
+          });
+          graphSvg.appendChild(group);
+        }
+
+        updateDetails();
+
+        if (!preserveScroll) {
+          graphScroll.scrollTop = graphScroll.scrollHeight;
+          return;
+        }
+
+        const addedHeight = graphScroll.scrollHeight - previousHeight;
+        graphScroll.scrollTop = Math.max(previousTop + addedHeight, 0);
+      };
+
+      const loadHistory = () => {
+        if (historyLoaded || loading) {
+          return;
+        }
+
+        loading = true;
+        setHistoryChip("counting", "正在查询历史任务...");
+
+        window.setTimeout(() => {
+          historyLoaded = true;
+          loading = false;
+          wheelCount = 0;
+          render(true);
+          setHistoryChip("loaded", "已加载 1 批历史任务");
+        }, 260);
+      };
+
+      graphScroll.addEventListener("wheel", (event) => {
+        if (historyLoaded || loading) {
+          return;
+        }
+
+        const nearTop = graphScroll.scrollTop <= 8;
+        if (nearTop && event.deltaY < -2) {
+          wheelCount += 1;
+          if (wheelCount >= 2) {
+            loadHistory();
+          } else {
+            setHistoryChip("counting", "继续上滑以加载历史 1/2");
+          }
+          return;
+        }
+
+        if (event.deltaY > 2) {
+          wheelCount = 0;
+          setHistoryChip("idle", "上滑 2 次加载历史");
+        }
+      }, { passive: true });
+
+      pauseDispatchButton.addEventListener("click", () => {
+        schedulerState = "pause_pending";
+        updateSchedulerControls();
+        render(historyLoaded);
+      });
+
+      resumeDispatchButton.addEventListener("click", () => {
+        schedulerState = "running";
+        updateSchedulerControls();
+        render(historyLoaded);
+      });
+
+      clearTasksButton.addEventListener("click", () => {
+        if (clearTasksButton.disabled) {
+          return;
+        }
+        graphCleared = true;
+        selectedId = null;
+        updateSchedulerControls();
+        render(historyLoaded);
+      });
+
+      createTaskButton.addEventListener("click", openCreateTaskSheet);
+      taskTab.addEventListener("click", () => {
+        pageView = "task";
+        syncPageView();
+        render(historyLoaded);
+      });
+      settingsTab.addEventListener("click", () => {
+        pageView = "settings";
+        syncPageView();
+      });
+      closeCreateTaskButton.addEventListener("click", closeCreateTaskSheet);
+      cancelCreateTaskButton.addEventListener("click", closeCreateTaskSheet);
+      submitCreateTaskButton.addEventListener("click", closeCreateTaskSheet);
+      createTaskNameInput.addEventListener("input", syncCreateTaskDeliveryFields);
+      createExecutorAgent.addEventListener("change", syncCreateTaskDeliveryFields);
+      createDeliveryMode.addEventListener("change", syncCreateTaskDeliveryFields);
+      createDeliveryReceiver.addEventListener("change", syncCreateTaskDeliveryFields);
+      deleteTaskButton.addEventListener("click", () => {
+        const task = selectedId ? taskMap.get(selectedId) : null;
+        if (!task || task.status === "running") {
+          return;
+        }
+        reconnectDependenciesAfterDelete(task.id);
+        removedIds.add(task.id);
+        const nextVisible = getVisibleTasks();
+        selectedId = nextVisible.length ? nextVisible[nextVisible.length - 1].id : null;
+        updateSchedulerControls();
+        render(historyLoaded);
+      });
+      createTaskSheet.addEventListener("click", (event) => {
+        if (event.target === createTaskSheet) {
+          closeCreateTaskSheet();
+        }
+      });
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && createTaskOpen) {
+          closeCreateTaskSheet();
+        }
+      });
+
+      settingsPathValue.textContent = ARTIFACT_ROOT_PATH;
+      settingsWorkspacePath.textContent = WORKSPACE_RECORD_ROOT;
+      settingsExecutionProvider.value = EXECUTION_PROVIDER;
+      settingsExecutionBinary.textContent = EXECUTION_BINARY_PATH;
+      settingsExecutionCommand.textContent = EXECUTION_COMMAND_TEMPLATE;
+      settingsConcurrencyLimit.textContent = `${GLOBAL_AGENT_CONCURRENCY}`;
+
+      window.addEventListener("resize", () => {
+        if (pageView === "task") {
+          render(historyLoaded);
+        }
+      });
+      window.addEventListener("load", () => {
+        updateSchedulerControls();
+        syncPageView();
+        syncCreateTaskSheet();
+        syncCreateTaskDeliveryFields();
+        render();
+      });
+    })();
+  </script>
+</body>
+</html>
