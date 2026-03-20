@@ -215,11 +215,12 @@
     updateShowTestDataMeta();
     updateClearPolicyCacheButton();
     setWorkflowQueueMode('records');
+    const runtimeUpgradeReady = refreshRuntimeUpgradeStatus({ silent: true }).catch(() => {});
     await refreshAgents(false);
     await refreshSessions();
     await refreshWorkflows();
     await refreshDashboard();
-    await refreshRuntimeUpgradeStatus({ silent: true });
+    await runtimeUpgradeReady;
     const cachedSession = localStorage.getItem(sessionCacheKey) || '';
     if (cachedSession && state.sessionsById[cachedSession]) {
       await selectSession(cachedSession);

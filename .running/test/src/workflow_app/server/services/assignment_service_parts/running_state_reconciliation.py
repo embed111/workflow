@@ -11,6 +11,26 @@ def _parse_assignment_iso_datetime(raw: Any) -> Any:
         return None
 
 
+def _assignment_process_pid_is_live(raw_pid: Any) -> bool:
+    try:
+        pid = int(raw_pid or 0)
+    except Exception:
+        return False
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except PermissionError:
+        return True
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return False
+    except Exception:
+        return False
+
+
 def _assignment_run_row_is_live(
     row: sqlite3.Row | dict[str, Any],
     *,
@@ -20,6 +40,9 @@ def _assignment_run_row_is_live(
 ) -> bool:
     run_id = str((row["run_id"] if isinstance(row, sqlite3.Row) else row.get("run_id")) or "").strip()
     if run_id and run_id in active_run_ids:
+        return True
+    raw_pid = row["provider_pid"] if isinstance(row, sqlite3.Row) else row.get("provider_pid")
+    if _assignment_process_pid_is_live(raw_pid):
         return True
     for field in ("latest_event_at", "updated_at", "started_at", "created_at"):
         raw_value = row[field] if isinstance(row, sqlite3.Row) else row.get(field)
@@ -52,7 +75,7 @@ def _live_assignment_run_keys(
     now_dt = now_local()
     rows = conn.execute(
         """
-        SELECT run_id,ticket_id,node_id,status,latest_event_at,updated_at,started_at,created_at
+        SELECT run_id,ticket_id,node_id,status,latest_event_at,updated_at,started_at,created_at,provider_pid
         FROM assignment_execution_runs
         WHERE status IN ('starting','running')
           AND (?='' OR ticket_id=?)

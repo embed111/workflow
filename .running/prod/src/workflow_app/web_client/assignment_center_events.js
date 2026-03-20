@@ -158,6 +158,7 @@
       running_circle_count: 0,
       selected_node_id: '',
       selected_node_name: '',
+      status_line: '',
       header_note: '',
       graph_meta: '',
       detail_meta: '',
@@ -268,6 +269,31 @@
     setAssignmentCreateOpen(true);
   }
 
+  async function prepareAssignmentCreateSubmitProbe(output) {
+    const expectedName = '提交创建验证任务';
+    const expectedGoal = '验证提交创建后应立即选中新节点，并从空闲图进入调度。';
+    clearAssignmentCreateDraft();
+    resetAssignmentCreateForm({ clearDraft: true });
+    state.assignmentCreateDraftLoaded = false;
+    state.assignmentSelectedNodeId = '';
+    switchTab('task-center');
+    await refreshAssignmentGraphs({ preserveSelection: true });
+    await ensureAssignmentAgentPool(false);
+    setAssignmentCreateOpen(true);
+    await assignmentProbeWait(80);
+    if ($('assignmentTaskNameInput')) {
+      $('assignmentTaskNameInput').value = expectedName;
+    }
+    if ($('assignmentGoalInput')) {
+      $('assignmentGoalInput').value = expectedGoal;
+    }
+    if ($('assignmentPrioritySelect')) {
+      $('assignmentPrioritySelect').value = 'P0';
+    }
+    syncAssignmentCreateFormFromInputs();
+    await submitAssignmentCreate();
+  }
+
   async function probeAssignmentDetailSection(output) {
     const sectionKey = safe(queryParam('assignment_probe_section')).trim() || 'execution-chain';
     const selectedNodeId = safe((assignmentDetailPayload().selected_node || {}).node_id || state.assignmentSelectedNodeId).trim();
@@ -333,6 +359,7 @@
     output.running_circle_count = document.querySelectorAll('#assignmentGraphSvg .assignment-node-circle.running').length;
     output.selected_node_id = safe(selected.node_id).trim();
     output.selected_node_name = safe(selected.node_name).trim();
+    output.status_line = safe($('statusLine') ? $('statusLine').textContent : '').trim();
     output.header_note = safe($('assignmentHeaderNote') ? $('assignmentHeaderNote').textContent : '').trim();
     output.graph_meta = safe($('assignmentGraphMeta') ? $('assignmentGraphMeta').textContent : '').trim();
     output.detail_meta = safe($('assignmentDetailMeta') ? $('assignmentDetailMeta').textContent : '').trim();
@@ -465,6 +492,16 @@
       output.draft_upstream_search === 'cache-check';
   }
 
+  function assignmentCreateSubmitProbePass(output) {
+    return output.active_tab === 'task-center' &&
+      !!output.ticket_id &&
+      output.total_nodes === 1 &&
+      !!output.selected_node_id &&
+      output.selected_node_name === '提交创建验证任务' &&
+      output.scheduler_state === 'running' &&
+      output.status_line.includes('任务已创建');
+  }
+
   function createAssignmentTaskCenterProbeStrategy(evaluate, options) {
     const opts = options && typeof options === 'object' ? options : {};
     return {
@@ -493,6 +530,11 @@
         prepare: prepareAssignmentDraftPersistProbe,
         collect: collectAssignmentDraftPersistProbe,
         evaluate: assignmentDraftPersistProbePass,
+      },
+      create_submit: {
+        prepare: prepareAssignmentCreateSubmitProbe,
+        collect: collectAssignmentTaskCenterProbe,
+        evaluate: assignmentCreateSubmitProbePass,
       },
       default: createAssignmentTaskCenterProbeStrategy(assignmentDefaultTaskCenterProbePass),
     },
@@ -670,6 +712,17 @@
         try {
           await withButtonLock('assignmentLoadHistoryBtn', async () => {
             await loadMoreAssignmentHistory();
+          });
+        } catch (err) {
+          setAssignmentError(err.message || String(err));
+        }
+      };
+    }
+    if ($('assignmentLoadMoreTasksBtn')) {
+      $('assignmentLoadMoreTasksBtn').onclick = async () => {
+        try {
+          await withButtonLock('assignmentLoadMoreTasksBtn', async () => {
+            await loadMoreAssignmentTasks();
           });
         } catch (err) {
           setAssignmentError(err.message || String(err));

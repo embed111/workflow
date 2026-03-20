@@ -71,16 +71,46 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $url = "http://$BindHost`:$Port"
+$healthUrl = "$url/healthz"
+$browserJob = $null
 if ($OpenBrowser) {
-    Start-Process $url | Out-Null
+    $browserJob = Start-Job -ScriptBlock {
+        param(
+            [string]$TargetUrl,
+            [string]$TargetHealthUrl
+        )
+
+        $deadline = (Get-Date).AddSeconds(30)
+        while ((Get-Date) -lt $deadline) {
+            try {
+                $response = Invoke-RestMethod -Uri $TargetHealthUrl -Method Get -TimeoutSec 3
+                if ($response.ok) {
+                    Start-Process $TargetUrl | Out-Null
+                    return
+                }
+            }
+            catch {
+            }
+            Start-Sleep -Milliseconds 500
+        }
+    } -ArgumentList $url, $healthUrl
 }
 
 Write-Host "[workflow] web => $url"
 Write-Host "[workflow] press Ctrl+C to stop."
-& python scripts/bin/workflow_web_server.py --root $runtimeRootPath --entry-script $entryScriptPath --host $BindHost --port $Port --focus "Phase0: web 对话 + 训练工作流"
-if ($LASTEXITCODE -eq 73) {
+$webExitCode = 0
+try {
+    & python scripts/bin/workflow_web_server.py --root $runtimeRootPath --entry-script $entryScriptPath --host $BindHost --port $Port --focus "Phase0: web 对话 + 训练工作流"
+    $webExitCode = $LASTEXITCODE
+}
+finally {
+    if ($browserJob) {
+        Remove-Job -Job $browserJob -Force -ErrorAction SilentlyContinue
+    }
+}
+if ($webExitCode -eq 73) {
     exit 73
 }
-if ($LASTEXITCODE -ne 0) {
-    throw "web server exited with code $LASTEXITCODE"
+if ($webExitCode -ne 0) {
+    throw "web server exited with code $webExitCode"
 }

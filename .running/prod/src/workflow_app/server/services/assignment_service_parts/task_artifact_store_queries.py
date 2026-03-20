@@ -112,7 +112,7 @@ def _assignment_live_run_keys_from_files(root: Path, *, ticket_id: str = "") -> 
     }
     now_dt = now_local()
     live_keys: set[tuple[str, str]] = set()
-    for current_ticket_id in _assignment_list_ticket_ids(root):
+    for current_ticket_id in _assignment_list_ticket_ids_lightweight(root):
         if ticket_filter and current_ticket_id != ticket_filter:
             continue
         for run in _assignment_load_run_records(root, ticket_id=current_ticket_id):
@@ -130,6 +130,48 @@ def _assignment_live_run_keys_from_files(root: Path, *, ticket_id: str = "") -> 
             if node_id:
                 live_keys.add((current_ticket_id, node_id))
     return live_keys
+
+
+def _assignment_list_ticket_ids_lightweight(root: Path) -> list[str]:
+    tasks_root = _assignment_tasks_root(root)
+    if not tasks_root.exists() or not tasks_root.is_dir():
+        return []
+    return [
+        str(path.name or "").strip()
+        for path in sorted(tasks_root.iterdir(), key=lambda item: item.name.lower())
+        if path.is_dir() and str(path.name or "").strip()
+    ]
+
+
+def _assignment_load_task_record_lightweight(root: Path, ticket_id: str) -> dict[str, Any]:
+    task_record = _assignment_read_json(_assignment_graph_record_path(root, ticket_id))
+    if task_record:
+        return task_record
+    try:
+        return _assignment_load_task_record(root, ticket_id)
+    except AssignmentCenterError:
+        return {}
+
+
+def _assignment_load_active_node_records_lightweight(root: Path, ticket_id: str) -> list[dict[str, Any]]:
+    nodes_root = _assignment_ticket_workspace_dir(root, ticket_id) / "nodes"
+    if nodes_root.exists() and nodes_root.is_dir():
+        rows: list[dict[str, Any]] = []
+        for path in sorted(nodes_root.iterdir(), key=lambda item: item.name.lower()):
+            if not path.is_file() or path.suffix.lower() != ".json":
+                continue
+            payload = _assignment_read_json(path)
+            if not payload:
+                continue
+            if str(payload.get("record_state") or "active").strip().lower() == "deleted":
+                continue
+            rows.append(payload)
+        rows.sort(key=lambda item: (str(item.get("created_at") or ""), str(item.get("node_id") or "")))
+        return rows
+    try:
+        return _assignment_active_node_records(_assignment_load_node_records(root, ticket_id, include_deleted=True))
+    except AssignmentCenterError:
+        return []
 
 
 def _assignment_reconcile_stale_task_state_internal(
@@ -322,6 +364,13 @@ def _assignment_store_snapshot(root: Path, *, task_record: dict[str, Any], node_
             continue
         _assignment_write_json(_assignment_node_record_path(root, ticket_id, node_id), node_record)
     _assignment_refresh_structure_guides(root, ticket_id)
+    _assignment_publish_runtime_event(
+        ticket_id=ticket_id,
+        kind="snapshot",
+        status=str(task_record.get("record_state") or "active").strip().lower(),
+        scheduler_state=str(task_record.get("scheduler_state") or "").strip().lower(),
+        event_type="snapshot_updated",
+    )
 
 
 def _assignment_scheduler_payload(
@@ -363,36 +412,17 @@ def _assignment_scheduler_payload(
 
 
 def _assignment_system_running_counts(root: Path, *, include_test_data: bool) -> dict[str, int]:
-    running_node_count = 0
-    running_agents: set[str] = set()
-    live_keys = _assignment_live_run_keys_from_files(root)
-    for ticket_id in _assignment_list_ticket_ids(root):
-        try:
-            task_record = _assignment_load_task_record(root, ticket_id)
-        except AssignmentCenterError:
-            continue
-        if not _assignment_task_visible(task_record, include_test_data=include_test_data):
-            continue
-        node_records = _assignment_load_node_records(root, ticket_id, include_deleted=True)
-        task_record, node_records, changed = _assignment_recompute_task_state(
-            root,
-            task_record=task_record,
-            node_records=node_records,
-            reconcile_running=True,
-            live_keys=live_keys,
-        )
-        if changed:
-            _assignment_store_snapshot(root, task_record=task_record, node_records=node_records)
-        for node in _assignment_active_node_records(node_records):
-            if str(node.get("status") or "").strip().lower() != "running":
-                continue
-            running_node_count += 1
-            agent_id = str(node.get("assigned_agent_id") or "").strip()
-            if agent_id:
-                running_agents.add(agent_id)
+    try:
+        metrics = get_assignment_runtime_metrics(root, include_test_data=include_test_data)
+    except Exception:
+        metrics = {}
     return {
-        "system_running_node_count": running_node_count,
-        "system_running_agent_count": len(running_agents),
+        "system_running_node_count": int(
+            metrics.get("running_task_count")
+            or metrics.get("active_execution_count")
+            or 0
+        ),
+        "system_running_agent_count": int(metrics.get("running_agent_count") or 0),
     }
 
 
@@ -404,6 +434,7 @@ def _assignment_snapshot_from_files(
     reconcile_running: bool = True,
     sticky_node_ids: set[str] | None = None,
     include_scheduler: bool = True,
+    include_serialized_nodes: bool = True,
 ) -> dict[str, Any]:
     task_record = _assignment_load_task_record(root, ticket_id)
     if not _assignment_task_visible(task_record, include_test_data=include_test_data):
@@ -438,15 +469,17 @@ def _assignment_snapshot_from_files(
             settings_updated_at=str(settings.get("updated_at") or ""),
             system_counts=system_counts,
         )
-    serialized_nodes = [
-        _serialize_node(
-            node,
-            node_map_by_id=node_map_by_id,
-            upstream_map=upstream_map,
-            downstream_map=downstream_map,
-        )
-        for node in active_nodes
-    ]
+    serialized_nodes: list[dict[str, Any]] = []
+    if include_serialized_nodes:
+        serialized_nodes = [
+            _serialize_node(
+                node,
+                node_map_by_id=node_map_by_id,
+                upstream_map=upstream_map,
+                downstream_map=downstream_map,
+            )
+            for node in active_nodes
+        ]
     is_test_data = bool(task_record.get("is_test_data"))
     for node in serialized_nodes:
         node["is_test_data"] = is_test_data
@@ -613,6 +646,8 @@ def _assignment_status_detail_payload(
         ticket_id,
         include_test_data=include_test_data,
         reconcile_running=True,
+        include_scheduler=False,
+        include_serialized_nodes=False,
     )
     selected_node = snapshot["node_map_by_id"].get(node_id) or (snapshot["nodes"][0] if snapshot["nodes"] else {})
     selected_serialized = (
@@ -682,7 +717,7 @@ def _assignment_status_detail_payload(
         "available_actions": management_actions,
         "audit_refs": audit_refs,
         "execution_chain": {
-            "poll_mode": "short_poll",
+            "poll_mode": assignment_execution_refresh_mode(),
             "poll_interval_ms": DEFAULT_ASSIGNMENT_EXECUTION_POLL_INTERVAL_MS,
             "latest_run": run_summaries[0] if run_summaries else {},
             "recent_runs": run_summaries,
@@ -690,21 +725,102 @@ def _assignment_status_detail_payload(
     }
 
 
-def list_assignments(root: Path, *, include_test_data: bool = True) -> dict[str, Any]:
+def _assignment_node_status_text(row: dict[str, Any]) -> str:
+    return str(row.get("status") or "").strip().lower()
+
+
+def _assignment_active_node_group(row: dict[str, Any]) -> int:
+    status = _assignment_node_status_text(row)
+    if status == "running":
+        return 0
+    if status == "ready":
+        return 1
+    if status == "pending":
+        return 2
+    if status == "blocked":
+        return 3
+    return 4
+
+
+def _assignment_sort_active_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    items = [dict(row) for row in list(rows or [])]
+    items.sort(
+        key=lambda row: (
+            str(row.get("updated_at") or ""),
+            str(row.get("created_at") or ""),
+            str(row.get("node_id") or ""),
+        ),
+        reverse=True,
+    )
+    items.sort(
+        key=lambda row: (
+            _assignment_active_node_group(row),
+            int(row.get("priority") or 0),
+        )
+    )
+    return items
+
+
+def _assignment_sort_completed_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    items = [dict(row) for row in list(rows or [])]
+    items.sort(
+        key=lambda row: (
+            str(row.get("completed_at") or ""),
+            str(row.get("created_at") or ""),
+            str(row.get("node_id") or ""),
+        ),
+        reverse=True,
+    )
+    return items
+
+
+def _assignment_build_node_catalog(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "node_id": str(row.get("node_id") or "").strip(),
+            "node_name": str(row.get("node_name") or "").strip(),
+            "status": _assignment_node_status_text(row),
+            "priority": int(row.get("priority") or 0),
+            "priority_label": assignment_priority_label(row.get("priority")),
+        }
+        for row in list(rows or [])
+        if str(row.get("node_id") or "").strip()
+    ]
+
+
+def list_assignments(
+    root: Path,
+    *,
+    include_test_data: bool = True,
+    source_workflow: Any = "",
+    external_request_id: Any = "",
+    offset: Any = 0,
+    limit: Any = 0,
+) -> dict[str, Any]:
+    source_filter = str(source_workflow or "").strip()
+    request_filter = str(external_request_id or "").strip()
+    page_offset = _normalize_history_loaded(offset)
+    try:
+        page_limit = int(limit or 0)
+    except Exception:
+        page_limit = 0
+    if page_limit > 0:
+        page_limit = max(1, min(200, page_limit))
+    else:
+        page_limit = 0
     items: list[dict[str, Any]] = []
-    for ticket_id in _assignment_list_ticket_ids(root):
-        try:
-            snapshot = _assignment_snapshot_from_files(
-                root,
-                ticket_id,
-                include_test_data=include_test_data,
-                reconcile_running=True,
-                include_scheduler=False,
-            )
-        except AssignmentCenterError:
+    for ticket_id in _assignment_list_ticket_ids_lightweight(root):
+        graph_row = _assignment_load_task_record_lightweight(root, ticket_id)
+        if not graph_row:
             continue
-        graph_row = snapshot["graph_row"]
-        metrics_summary = snapshot["metrics_summary"]
+        if not _assignment_task_visible(graph_row, include_test_data=include_test_data):
+            continue
+        if source_filter and str(graph_row.get("source_workflow") or "").strip() != source_filter:
+            continue
+        if request_filter and str(graph_row.get("external_request_id") or "").strip() != request_filter:
+            continue
+        node_records = _assignment_load_active_node_records_lightweight(root, ticket_id)
+        metrics_summary = _graph_metrics(node_records)
         items.append(
             {
                 "ticket_id": str(graph_row.get("ticket_id") or "").strip(),
@@ -722,9 +838,13 @@ def list_assignments(root: Path, *, include_test_data: bool = True) -> dict[str,
                 "updated_at": str(graph_row.get("updated_at") or "").strip(),
                 "metrics_summary": {
                     "total_nodes": int(metrics_summary.get("total_nodes") or 0),
+                    "pending_nodes": int((metrics_summary.get("status_counts") or {}).get("pending") or 0),
+                    "ready_nodes": int((metrics_summary.get("status_counts") or {}).get("ready") or 0),
                     "running_nodes": int((metrics_summary.get("status_counts") or {}).get("running") or 0),
                     "failed_nodes": int((metrics_summary.get("status_counts") or {}).get("failed") or 0),
                     "blocked_nodes": int((metrics_summary.get("status_counts") or {}).get("blocked") or 0),
+                    "executed_count": int(metrics_summary.get("executed_count") or 0),
+                    "unexecuted_count": int(metrics_summary.get("unexecuted_count") or 0),
                 },
             }
         )
@@ -736,9 +856,29 @@ def list_assignments(root: Path, *, include_test_data: bool = True) -> dict[str,
         ),
         reverse=True,
     )
+    items.sort(
+        key=lambda item: (
+            0 if int((item.get("metrics_summary") or {}).get("running_nodes") or 0) > 0 else
+            1 if int((item.get("metrics_summary") or {}).get("unexecuted_count") or 0) > 0 else
+            2,
+            -int((item.get("metrics_summary") or {}).get("running_nodes") or 0),
+            -int((item.get("metrics_summary") or {}).get("unexecuted_count") or 0),
+        )
+    )
+    total_items = len(items)
+    if page_offset > 0 or page_limit > 0:
+        end = page_offset + page_limit if page_limit > 0 else None
+        items = items[page_offset:end]
     settings = get_assignment_concurrency_settings(root)
     return {
         "items": items,
+        "pagination": {
+            "offset": page_offset,
+            "limit": page_limit,
+            "returned": len(items),
+            "total_items": total_items,
+            "has_more": (page_offset + len(items)) < total_items,
+        },
         "settings": {
             "global_concurrency_limit": int(settings.get("global_concurrency_limit") or DEFAULT_ASSIGNMENT_CONCURRENCY_LIMIT),
             "updated_at": str(settings.get("updated_at") or ""),
@@ -755,6 +895,7 @@ def get_assignment_overview(root: Path, ticket_id_text: str, *, include_test_dat
         ticket_id,
         include_test_data=include_test_data,
         reconcile_running=True,
+        include_serialized_nodes=False,
     )
     return {
         "graph_overview": _graph_overview_payload(
@@ -775,6 +916,8 @@ def get_assignment_graph(
     root: Path,
     ticket_id_text: str,
     *,
+    active_loaded: Any = 0,
+    active_batch_size: Any = 24,
     history_loaded: Any = 0,
     history_batch_size: Any = 12,
     include_test_data: bool = True,
@@ -782,6 +925,14 @@ def get_assignment_graph(
     ticket_id = safe_token(str(ticket_id_text or ""), "", 160)
     if not ticket_id:
         raise AssignmentCenterError(400, "ticket_id required", "ticket_id_required")
+    extra_active_loaded = _normalize_history_loaded(active_loaded)
+    active_batch = _normalize_positive_int(
+        active_batch_size,
+        field="active_batch_size",
+        default=24,
+        minimum=1,
+        maximum=200,
+    )
     extra_loaded = _normalize_history_loaded(history_loaded)
     batch_size = _normalize_positive_int(
         history_batch_size,
@@ -795,32 +946,31 @@ def get_assignment_graph(
         ticket_id,
         include_test_data=include_test_data,
         reconcile_running=True,
+        include_serialized_nodes=False,
     )
-    nodes = list(snapshot["serialized_nodes"] or [])
-    completed_nodes = [
-        node
-        for node in nodes
-        if str(node.get("status") or "").strip().lower() in {"succeeded", "failed"}
-    ]
-    completed_nodes.sort(
-        key=lambda item: (
-            str(item.get("completed_at") or ""),
-            str(item.get("created_at") or ""),
-            str(item.get("node_id") or ""),
-        ),
-        reverse=True,
+    raw_nodes = list(snapshot["nodes"] or [])
+    completed_rows = _assignment_sort_completed_rows(
+        [
+            row
+            for row in raw_nodes
+            if _assignment_node_status_text(row) in {"succeeded", "failed"}
+        ]
     )
-    non_completed_nodes = [
-        node
-        for node in nodes
-        if str(node.get("status") or "").strip().lower() not in {"succeeded", "failed"}
-    ]
+    active_rows = _assignment_sort_active_rows(
+        [
+            row
+            for row in raw_nodes
+            if _assignment_node_status_text(row) not in {"succeeded", "failed"}
+        ]
+    )
+    base_active = active_batch
     base_recent = 12
-    visible_completed = completed_nodes[: min(len(completed_nodes), base_recent + extra_loaded)]
+    visible_active = active_rows[: min(len(active_rows), base_active + extra_active_loaded)]
+    visible_completed = completed_rows[: min(len(completed_rows), base_recent + extra_loaded)]
     visible_ids = {
-        str(node.get("node_id") or "").strip()
-        for node in non_completed_nodes + visible_completed
-        if str(node.get("node_id") or "").strip()
+        str(row.get("node_id") or "").strip()
+        for row in visible_active + visible_completed
+        if str(row.get("node_id") or "").strip()
     }
     visible_edges = [
         edge
@@ -828,19 +978,21 @@ def get_assignment_graph(
         if str(edge.get("from_node_id") or "").strip() in visible_ids
         and str(edge.get("to_node_id") or "").strip() in visible_ids
     ]
-    remaining = max(0, len(completed_nodes) - len(visible_completed))
-    visible_nodes = non_completed_nodes + visible_completed
-    visible_nodes.sort(
-        key=lambda item: (
-            0
-            if str(item.get("status") or "").strip().lower() in {"running", "succeeded", "failed"}
-            else 1,
-            int(item.get("priority") or 0),
-            str(item.get("completed_at") or ""),
-            str(item.get("created_at") or ""),
-            str(item.get("node_id") or ""),
+    remaining_active = max(0, len(active_rows) - len(visible_active))
+    remaining_completed = max(0, len(completed_rows) - len(visible_completed))
+    visible_nodes = [
+        _serialize_node(
+            row,
+            node_map_by_id=snapshot["node_map_by_id"],
+            upstream_map=snapshot["upstream_map"],
+            downstream_map=snapshot["downstream_map"],
         )
-    )
+        for row in visible_active + visible_completed
+    ]
+    is_test_data = bool(snapshot["graph_row"].get("is_test_data"))
+    for node in visible_nodes:
+        node["is_test_data"] = is_test_data
+    ordered_catalog_rows = active_rows + completed_rows
     return {
         "ticket_id": ticket_id,
         "graph": _graph_overview_payload(
@@ -850,16 +1002,7 @@ def get_assignment_graph(
         ),
         "nodes": visible_nodes,
         "edges": visible_edges,
-        "node_catalog": [
-            {
-                "node_id": str(node.get("node_id") or "").strip(),
-                "node_name": str(node.get("node_name") or "").strip(),
-                "status": str(node.get("status") or "").strip().lower(),
-                "priority": int(node.get("priority") or 0),
-                "priority_label": assignment_priority_label(node.get("priority")),
-            }
-            for node in nodes
-        ],
+        "node_catalog": _assignment_build_node_catalog(ordered_catalog_rows),
         "metrics_summary": snapshot["metrics_summary"],
         "priority_rules": {
             "ui_levels": ["P0", "P1", "P2", "P3"],
@@ -867,12 +1010,22 @@ def get_assignment_graph(
             "highest_first": True,
             "tie_breaker": "created_at_asc",
         },
+        "active": {
+            "base_visible_count": min(base_active, len(active_rows)),
+            "loaded_extra_count": max(0, len(visible_active) - min(base_active, len(active_rows))),
+            "next_active_loaded": extra_active_loaded + active_batch,
+            "remaining_count": remaining_active,
+            "has_more": remaining_active > 0,
+            "batch_size": active_batch,
+            "visible_count": len(visible_active),
+            "total_count": len(active_rows),
+        },
         "history": {
-            "base_recent_count": min(base_recent, len(completed_nodes)),
-            "loaded_extra_count": max(0, len(visible_completed) - min(base_recent, len(completed_nodes))),
+            "base_recent_count": min(base_recent, len(completed_rows)),
+            "loaded_extra_count": max(0, len(visible_completed) - min(base_recent, len(completed_rows))),
             "next_history_loaded": extra_loaded + batch_size,
-            "remaining_completed_count": remaining,
-            "has_more": remaining > 0,
+            "remaining_completed_count": remaining_completed,
+            "has_more": remaining_completed > 0,
             "batch_size": batch_size,
         },
     }
@@ -887,6 +1040,7 @@ def get_assignment_scheduler_state(root: Path, ticket_id_text: str, *, include_t
         ticket_id,
         include_test_data=include_test_data,
         reconcile_running=True,
+        include_serialized_nodes=False,
     )
     scheduler = snapshot["scheduler"]
     return {

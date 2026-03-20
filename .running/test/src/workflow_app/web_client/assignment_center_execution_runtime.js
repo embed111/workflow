@@ -53,6 +53,47 @@
     return nodeId && runId && key ? nodeId + '::' + runId + '::' + key : '';
   }
 
+  function assignmentExecutionScrollStateKey(panelKey, runIdOverride) {
+    return assignmentExecutionPanelStateKey(panelKey, runIdOverride);
+  }
+
+  function assignmentExecutionScrollAttr(panelKey, runIdOverride) {
+    const key = assignmentExecutionScrollStateKey(panelKey, runIdOverride);
+    return key ? " data-assignment-scroll-key='" + escapeHtml(key) + "'" : '';
+  }
+
+  function captureAssignmentExecutionScrollState(container) {
+    const root = container || $('assignmentDetailBody');
+    if (!root) return;
+    root.querySelectorAll('[data-assignment-scroll-key]').forEach((node) => {
+      const key = safe(node.getAttribute('data-assignment-scroll-key')).trim();
+      if (!key) return;
+      const maxTop = Math.max(0, Number(node.scrollHeight || 0) - Number(node.clientHeight || 0));
+      const top = Math.max(0, Math.min(maxTop, Number(node.scrollTop || 0)));
+      state.assignmentExecutionScrollState[key] = {
+        top: top,
+        stickBottom: maxTop > 0 && (maxTop - top) <= 12,
+      };
+    });
+  }
+
+  function restoreAssignmentExecutionScrollState(container) {
+    const root = container || $('assignmentDetailBody');
+    if (!root) return;
+    root.querySelectorAll('[data-assignment-scroll-key]').forEach((node) => {
+      const key = safe(node.getAttribute('data-assignment-scroll-key')).trim();
+      if (!key) return;
+      const saved = state.assignmentExecutionScrollState[key];
+      if (!saved || typeof saved !== 'object') return;
+      const maxTop = Math.max(0, Number(node.scrollHeight || 0) - Number(node.clientHeight || 0));
+      if (saved.stickBottom) {
+        node.scrollTop = maxTop;
+        return;
+      }
+      node.scrollTop = Math.max(0, Math.min(maxTop, Number(saved.top || 0)));
+    });
+  }
+
   function bindAssignmentDetailToggleState(container) {
     const root = container || $('assignmentDetailBody');
     if (!root) return;
@@ -139,9 +180,10 @@
     const content = safe(text);
     const refText = safe(ref).trim();
     const scrollName = 'assignment-run-scrollbox' + (safe(scrollClass).trim() ? ' ' + safe(scrollClass).trim() : '');
+    const scrollAttr = assignmentExecutionScrollAttr(title);
     return assignmentExecutionPanelHtml(
       title,
-      "<div class='" + scrollName + "'>" +
+      "<div class='" + scrollName + "'" + scrollAttr + '>' +
       (content
         ? "<pre class='assignment-run-pre'>" + escapeHtml(content) + '</pre>'
         : "<div class='assignment-run-empty'>暂无内容</div>") +
@@ -199,9 +241,10 @@
   function assignmentExecutionHistoryHtml(runs) {
     const rows = Array.isArray(runs) ? runs.slice(1) : [];
     if (!rows.length) return '';
+    const scrollAttr = assignmentExecutionScrollAttr('history');
     return assignmentExecutionPanelHtml(
       '历史运行批次',
-      "<div class='assignment-run-history-list'>" +
+      "<div class='assignment-run-history-list'" + scrollAttr + '>' +
       rows.map((run) => (
         "<div class='assignment-run-history-item'>" +
         "<div class='assignment-run-history-top'>" +
@@ -230,16 +273,17 @@
     const latestRun = assignmentExecutionLatestRun(chain);
     const recentRuns = Array.isArray(chain.recent_runs) ? chain.recent_runs : [];
     const latestRunId = safe(latestRun.run_id).trim();
-    const pollMode = safe(chain.poll_mode).trim() || safe(assignmentExecutionSettingsPayload().poll_mode).trim() || 'short_poll';
+    const pollMode = safe(chain.poll_mode).trim() || safe(assignmentExecutionSettingsPayload().poll_mode).trim() || 'event_stream';
     const pollIntervalMs = Math.max(
       250,
-      Number(chain.poll_interval_ms || assignmentExecutionSettingsPayload().poll_interval_ms || 800),
+      Number(chain.poll_interval_ms || assignmentExecutionSettingsPayload().poll_interval_ms || 450),
     );
+    const refreshModeText = assignmentExecutionRefreshModeText(pollMode);
     if (!latestRunId) {
       return assignmentDetailSectionHtml(
         '执行链路',
         "<div class='hint'>当前任务尚未产生真实运行批次。若任务已失败且没有 run_id，请优先查看调度留痕或工作区映射错误。</div>" +
-        "<div class='assignment-run-note'>刷新方式: " + escapeHtml(pollMode) + ' · ' + escapeHtml(String(pollIntervalMs)) + "ms</div>" +
+        "<div class='assignment-run-note'>刷新方式: " + escapeHtml(refreshModeText) + ' · 断线兜底 ' + escapeHtml(String(pollIntervalMs)) + "ms</div>" +
         '',
         {
           open: true,
@@ -274,7 +318,7 @@
       assignmentExecutionContentBlockHtml('完整提示词', latestRun.prompt_text, latestRun.prompt_ref, false, 'assignment-run-details-scroll assignment-run-details-prompt', 'assignment-run-scrollbox-prompt') +
       assignmentExecutionPanelHtml(
         '执行过程',
-        "<div class='assignment-run-scrollbox assignment-run-scrollbox-events'>" +
+        "<div class='assignment-run-scrollbox assignment-run-scrollbox-events'" + assignmentExecutionScrollAttr('events', latestRunId) + '>' +
         assignmentExecutionEventsHtml(latestRun.events) +
         '</div>',
         eventsOpen,
@@ -299,9 +343,17 @@
           "<span class='assignment-chip " + escapeHtml(assignmentRunTone(latestRun.status)) + "'>" +
           escapeHtml(assignmentRunStatusText(latestRun)) +
           '</span>' +
-          assignmentSectionMetaTextHtml('刷新 ' + pollMode + ' · ' + String(pollIntervalMs) + 'ms'),
+          assignmentSectionMetaTextHtml('刷新 ' + refreshModeText + ' · 兜底 ' + String(pollIntervalMs) + 'ms'),
       }
     );
+  }
+
+  function assignmentExecutionMode(detailOverride) {
+    const detail = detailOverride && typeof detailOverride === 'object' ? detailOverride : assignmentDetailPayload();
+    const chain = detail.execution_chain && typeof detail.execution_chain === 'object'
+      ? detail.execution_chain
+      : {};
+    return safe(chain.poll_mode || assignmentExecutionSettingsPayload().poll_mode).trim().toLowerCase() || 'event_stream';
   }
 
   function assignmentExecutionShouldPoll(detailOverride) {
@@ -316,6 +368,23 @@
       (status === 'starting' || status === 'running');
   }
 
+  function assignmentExecutionStatusSignature(detailOverride) {
+    const detail = detailOverride && typeof detailOverride === 'object' ? detailOverride : assignmentDetailPayload();
+    const selectedNode = detail.selected_node && typeof detail.selected_node === 'object'
+      ? detail.selected_node
+      : {};
+    const chain = detail.execution_chain && typeof detail.execution_chain === 'object'
+      ? detail.execution_chain
+      : {};
+    const latestRun = assignmentExecutionLatestRun(chain);
+    return [
+      safe(selectedNode.node_id).trim(),
+      safe(selectedNode.status).trim().toLowerCase(),
+      safe(latestRun.run_id).trim(),
+      safe(latestRun.status).trim().toLowerCase(),
+    ].join('::');
+  }
+
   function assignmentExecutionPollInterval(detailOverride) {
     const detail = detailOverride && typeof detailOverride === 'object' ? detailOverride : assignmentDetailPayload();
     const chain = detail.execution_chain && typeof detail.execution_chain === 'object'
@@ -325,7 +394,7 @@
       250,
       Math.min(
         1000,
-        Number(chain.poll_interval_ms || assignmentExecutionSettingsPayload().poll_interval_ms || 800),
+        Number(chain.poll_interval_ms || assignmentExecutionSettingsPayload().poll_interval_ms || 450),
       ),
     );
   }
@@ -338,7 +407,197 @@
     state.assignmentExecutionPollBusy = false;
   }
 
+  function stopAssignmentExecutionEventStream() {
+    const source = state.assignmentExecutionEventSource;
+    state.assignmentExecutionEventSource = null;
+    state.assignmentExecutionEventSourceTicketId = '';
+    state.assignmentExecutionEventSourceConnected = false;
+    state.assignmentExecutionEventSourceSeq = 0;
+    if (source && typeof source.close === 'function') {
+      try {
+        source.close();
+      } catch (_) {
+        // ignore close errors
+      }
+    }
+  }
+
+  function stopAssignmentExecutionRealtime() {
+    stopAssignmentExecutionEventStream();
+    stopAssignmentExecutionPoller();
+    if (state.assignmentExecutionRealtimeRefreshTimer) {
+      window.clearTimeout(state.assignmentExecutionRealtimeRefreshTimer);
+      state.assignmentExecutionRealtimeRefreshTimer = 0;
+    }
+    state.assignmentExecutionRealtimeRefreshBusy = false;
+    state.assignmentExecutionRealtimeRefreshPending = false;
+    state.assignmentExecutionRealtimeRefreshGraph = false;
+    state.assignmentExecutionRealtimeRefreshDetail = false;
+  }
+
+  function assignmentExecutionShouldStream(detailOverride) {
+    const activeTab = document.querySelector('.tab.active');
+    const activeTabName = safe(activeTab && activeTab.getAttribute('data-tab')).trim();
+    return activeTabName === 'task-center' &&
+      assignmentExecutionMode(detailOverride) === 'event_stream' &&
+      !!selectedAssignmentTicketId() &&
+      typeof window.EventSource === 'function';
+  }
+
+  function assignmentExecutionStreamUrl(ticketId) {
+    return withTestDataQuery('/api/assignments/' + encodeURIComponent(ticketId) + '/events');
+  }
+
+  function assignmentExecutionParseStreamEvent(rawEvent) {
+    try {
+      const payload = JSON.parse(safe(rawEvent && rawEvent.data));
+      return payload && typeof payload === 'object' ? payload : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  async function flushAssignmentExecutionRealtimeRefresh() {
+    if (state.assignmentExecutionRealtimeRefreshBusy) {
+      state.assignmentExecutionRealtimeRefreshPending = true;
+      return;
+    }
+    const ticketId = selectedAssignmentTicketId();
+    const selectedNodeId = safe(state.assignmentSelectedNodeId).trim();
+    const shouldRefreshGraph = !!state.assignmentExecutionRealtimeRefreshGraph;
+    const shouldRefreshDetail = !!state.assignmentExecutionRealtimeRefreshDetail;
+    state.assignmentExecutionRealtimeRefreshGraph = false;
+    state.assignmentExecutionRealtimeRefreshDetail = false;
+    state.assignmentExecutionRealtimeRefreshBusy = true;
+    state.assignmentExecutionRealtimeRefreshPending = false;
+    try {
+      if (!ticketId) return;
+      if (shouldRefreshGraph) {
+        await refreshAssignmentGraphData({
+          ticketId: ticketId,
+          silent: true,
+          skipDetail: !shouldRefreshDetail,
+        });
+        return;
+      }
+      if (shouldRefreshDetail && selectedNodeId) {
+        await refreshAssignmentDetail(selectedNodeId, { skipGraphRender: true });
+        return;
+      }
+      if (shouldRefreshDetail) {
+        await refreshAssignmentGraphData({ ticketId: ticketId, silent: true });
+      }
+    } catch (_) {
+      // keep realtime refresh best-effort
+    } finally {
+      state.assignmentExecutionRealtimeRefreshBusy = false;
+      if (
+        state.assignmentExecutionRealtimeRefreshPending ||
+        state.assignmentExecutionRealtimeRefreshGraph ||
+        state.assignmentExecutionRealtimeRefreshDetail
+      ) {
+        state.assignmentExecutionRealtimeRefreshPending = false;
+        void flushAssignmentExecutionRealtimeRefresh();
+      }
+    }
+  }
+
+  function scheduleAssignmentExecutionRealtimeRefresh(options) {
+    const opts = options && typeof options === 'object' ? options : {};
+    state.assignmentExecutionRealtimeRefreshGraph = !!state.assignmentExecutionRealtimeRefreshGraph || !!opts.graph;
+    state.assignmentExecutionRealtimeRefreshDetail = !!state.assignmentExecutionRealtimeRefreshDetail || !!opts.detail;
+    if (state.assignmentExecutionRealtimeRefreshTimer) {
+      return;
+    }
+    state.assignmentExecutionRealtimeRefreshTimer = window.setTimeout(() => {
+      state.assignmentExecutionRealtimeRefreshTimer = 0;
+      void flushAssignmentExecutionRealtimeRefresh();
+    }, Math.max(40, Number(opts.delayMs || 80)));
+  }
+
+  function syncAssignmentExecutionEventStream(detailOverride) {
+    const shouldStream = assignmentExecutionShouldStream(detailOverride);
+    if (!shouldStream) {
+      stopAssignmentExecutionEventStream();
+      return false;
+    }
+    const ticketId = selectedAssignmentTicketId();
+    if (
+      state.assignmentExecutionEventSource &&
+      safe(state.assignmentExecutionEventSourceTicketId).trim() === ticketId
+    ) {
+      return !!state.assignmentExecutionEventSourceConnected;
+    }
+    stopAssignmentExecutionEventStream();
+    const source = new window.EventSource(assignmentExecutionStreamUrl(ticketId));
+    state.assignmentExecutionEventSource = source;
+    state.assignmentExecutionEventSourceTicketId = ticketId;
+    state.assignmentExecutionEventSourceConnected = false;
+    source.onopen = () => {
+      if (state.assignmentExecutionEventSource !== source) return;
+      state.assignmentExecutionEventSourceConnected = true;
+      stopAssignmentExecutionPoller();
+    };
+    source.onerror = () => {
+      if (state.assignmentExecutionEventSource !== source) return;
+      state.assignmentExecutionEventSourceConnected = false;
+      if (source.readyState === window.EventSource.CLOSED) {
+        stopAssignmentExecutionEventStream();
+      }
+      syncAssignmentExecutionPoller(detailOverride);
+    };
+    source.addEventListener('ready', (event) => {
+      if (state.assignmentExecutionEventSource !== source) return;
+      const payload = assignmentExecutionParseStreamEvent(event);
+      state.assignmentExecutionEventSourceSeq = Number(payload.current_seq || payload.seq || 0);
+      scheduleAssignmentExecutionRealtimeRefresh({ graph: true, detail: true, delayMs: 0 });
+    });
+    source.addEventListener('reset', (event) => {
+      if (state.assignmentExecutionEventSource !== source) return;
+      const payload = assignmentExecutionParseStreamEvent(event);
+      state.assignmentExecutionEventSourceSeq = Number(payload.current_seq || payload.seq || 0);
+      scheduleAssignmentExecutionRealtimeRefresh({ graph: true, detail: true });
+    });
+    source.addEventListener('snapshot', (event) => {
+      if (state.assignmentExecutionEventSource !== source) return;
+      const payload = assignmentExecutionParseStreamEvent(event);
+      state.assignmentExecutionEventSourceSeq = Number(payload.seq || state.assignmentExecutionEventSourceSeq || 0);
+      if (safe(payload.ticket_id).trim() !== selectedAssignmentTicketId()) return;
+      scheduleAssignmentExecutionRealtimeRefresh({ graph: true, detail: true });
+    });
+    source.addEventListener('run', (event) => {
+      if (state.assignmentExecutionEventSource !== source) return;
+      const payload = assignmentExecutionParseStreamEvent(event);
+      state.assignmentExecutionEventSourceSeq = Number(payload.seq || state.assignmentExecutionEventSourceSeq || 0);
+      if (safe(payload.ticket_id).trim() !== selectedAssignmentTicketId()) return;
+      const payloadNodeId = safe(payload.node_id).trim();
+      const selectedNodeId = safe(state.assignmentSelectedNodeId).trim();
+      if (payloadNodeId && selectedNodeId && payloadNodeId !== selectedNodeId) {
+        return;
+      }
+      scheduleAssignmentExecutionRealtimeRefresh({ detail: true });
+    });
+    return true;
+  }
+
+  function syncAssignmentExecutionRealtime(detailOverride) {
+    const streamActive = syncAssignmentExecutionEventStream(detailOverride);
+    if (streamActive) {
+      stopAssignmentExecutionPoller();
+      return;
+    }
+    syncAssignmentExecutionPoller(detailOverride);
+  }
+
   function syncAssignmentExecutionPoller(detailOverride) {
+    if (
+      assignmentExecutionMode(detailOverride) === 'event_stream' &&
+      !!state.assignmentExecutionEventSource &&
+      !!state.assignmentExecutionEventSourceConnected
+    ) {
+      stopAssignmentExecutionPoller();
+      return;
+    }
     const activeTab = document.querySelector('.tab.active');
     const activeTabName = safe(activeTab && activeTab.getAttribute('data-tab')).trim();
     const shouldPoll = activeTabName === 'task-center' && assignmentExecutionShouldPoll(detailOverride);
@@ -359,11 +618,17 @@
         stopAssignmentExecutionPoller();
         return;
       }
+      const previousSignature = assignmentExecutionStatusSignature();
       state.assignmentExecutionPollBusy = true;
       refreshAssignmentDetail(state.assignmentSelectedNodeId, { skipGraphRender: true })
         .then((detail) => {
-          if (!detail || assignmentExecutionShouldPoll(detail)) return null;
-          return refreshAssignmentGraphData({ ticketId: ticketId });
+          if (!detail) return null;
+          const nextSignature = assignmentExecutionStatusSignature(detail);
+          if (nextSignature && previousSignature !== nextSignature) {
+            return refreshAssignmentGraphData({ ticketId: ticketId, silent: true, skipDetail: true });
+          }
+          if (assignmentExecutionShouldPoll(detail)) return null;
+          return refreshAssignmentGraphData({ ticketId: ticketId, silent: true, skipDetail: true });
         })
         .catch(() => {})
         .finally(() => {

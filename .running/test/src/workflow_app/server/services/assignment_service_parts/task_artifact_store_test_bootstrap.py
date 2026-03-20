@@ -109,6 +109,7 @@ def bootstrap_assignment_test_graph(cfg: Any, *, operator: str) -> dict[str, Any
     delivered_node = next((item for item in node_records if str(item.get("node_id") or "").strip() == "T8"), {})
     if delivered_node:
         delivered_paths = [path.as_posix() for path in _node_artifact_file_paths(cfg.root, delivered_node)]
+        delivered_inbox_paths = [path.as_posix() for path in _node_delivery_inbox_file_paths(cfg.root, delivered_node)]
         delivered_payload = _artifact_delivery_markdown(
             delivered_node,
             delivered_at=_assignment_test_iso("2026-03-14 12:02:07"),
@@ -120,6 +121,20 @@ def bootstrap_assignment_test_graph(cfg: Any, *, operator: str) -> dict[str, Any
             path = Path(raw_path).resolve(strict=False)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(delivered_payload, encoding="utf-8")
+        for raw_path in delivered_inbox_paths:
+            path = Path(raw_path).resolve(strict=False)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(delivered_payload, encoding="utf-8")
+        _write_assignment_delivery_info_file(
+            cfg.root,
+            node=delivered_node,
+            delivered_at=_assignment_test_iso("2026-03-14 12:02:07"),
+            operator=operator_text,
+            artifact_label=str(delivered_node.get("expected_artifact") or delivered_node.get("node_name") or "依赖关系图"),
+            delivery_note="任务中心原型测试数据预置交付产物。",
+            canonical_artifact_paths=delivered_paths,
+            delivery_inbox_paths=delivered_inbox_paths,
+        )
         delivered_node["artifact_delivery_status"] = "delivered"
         delivered_node["artifact_delivery_status_text"] = _artifact_delivery_status_text("delivered")
         delivered_node["artifact_delivered_at"] = _assignment_test_iso("2026-03-14 12:02:07")

@@ -415,6 +415,13 @@
     return safe(url);
   }
 
+  function assignmentExecutionRefreshModeText(mode) {
+    const key = safe(mode).trim().toLowerCase();
+    if (key === 'event_stream') return '事件推送';
+    if (key === 'short_poll') return '短轮询';
+    return key || '短轮询';
+  }
+
   function cleanupLegacyTestDataCaches() {
     try {
       localStorage.removeItem(showSystemAgentsLegacyCacheKey);
@@ -519,8 +526,8 @@
       command_template: safe(data.command_template),
       global_concurrency_limit: Math.max(1, Number(data.global_concurrency_limit || 5)),
       updated_at: safe(data.updated_at).trim(),
-      poll_mode: safe(data.poll_mode).trim() || 'short_poll',
-      poll_interval_ms: Math.max(250, Number(data.poll_interval_ms || 800)),
+      poll_mode: safe(data.poll_mode).trim() || 'event_stream',
+      poll_interval_ms: Math.max(250, Number(data.poll_interval_ms || 450)),
     };
     updateAssignmentExecutionSettingsMeta();
     return state.assignmentExecutionSettings;
@@ -559,9 +566,9 @@
         '最近更新 ' +
         updatedAt +
         ' · 刷新方式 ' +
-        (safe(settings.poll_mode).trim() || 'short_poll') +
-        ' · 详情轮询 ' +
-        String(Math.max(250, Number(settings.poll_interval_ms || 800))) +
+        assignmentExecutionRefreshModeText(safe(settings.poll_mode).trim() || 'event_stream') +
+        ' · 断线兜底 ' +
+        String(Math.max(250, Number(settings.poll_interval_ms || 450))) +
         'ms';
     }
   }

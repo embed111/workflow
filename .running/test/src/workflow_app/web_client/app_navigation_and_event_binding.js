@@ -5,7 +5,9 @@
     document.querySelectorAll('.pane').forEach((node) => {
       node.classList.toggle('active', safe(node.id) === 'pane-' + name);
     });
-    if (name !== 'task-center' && typeof stopAssignmentExecutionPoller === 'function') {
+    if (name !== 'task-center' && typeof stopAssignmentExecutionRealtime === 'function') {
+      stopAssignmentExecutionRealtime();
+    } else if (name !== 'task-center' && typeof stopAssignmentExecutionPoller === 'function') {
       stopAssignmentExecutionPoller();
     }
     if (name === 'training-center') {
@@ -66,7 +68,7 @@
       try {
         await withButtonLock('loadAgentsBtn', async () => {
           setStatus('正在刷新角色...');
-          await refreshAgents(true);
+          await refreshAgents(true, { forceRefresh: true });
           await refreshDashboard();
           setStatus('就绪');
         });
@@ -583,7 +585,7 @@
     $('refreshSettingsBtn').onclick = async () => {
       try {
         await withButtonLock('refreshSettingsBtn', async () => {
-          await refreshAgents(true);
+          await refreshAgents(true, { forceRefresh: true });
           await refreshAssignmentExecutionSettings();
           await refreshSessions();
           await refreshWorkflows();

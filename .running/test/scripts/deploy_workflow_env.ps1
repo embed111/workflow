@@ -16,7 +16,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'workflow_env_common.ps1')
 
 function New-VersionId {
-    return (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
+    return Get-WorkflowVersionTimestamp
 }
 
 function Test-RunningProcess {

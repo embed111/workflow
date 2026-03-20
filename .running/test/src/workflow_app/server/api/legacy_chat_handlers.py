@@ -96,7 +96,8 @@ def handle_get_legacy(self, cfg, state) -> None:
                 },
             )
             return
-        agents = list_available_agents(cfg) if root_ready else []
+        force_refresh = parse_query_bool(query, "force_refresh", default=False)
+        agents = list_available_agents(cfg, force_refresh=force_refresh) if root_ready else []
         self.send_json(
             200,
             {

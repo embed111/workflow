@@ -389,7 +389,7 @@ def get_assignment_status_detail(
         "available_actions": available_actions,
         "audit_refs": audit_refs,
         "execution_chain": {
-            "poll_mode": "short_poll",
+            "poll_mode": assignment_execution_refresh_mode(),
             "poll_interval_ms": DEFAULT_ASSIGNMENT_EXECUTION_POLL_INTERVAL_MS,
             "latest_run": latest_run,
             "recent_runs": run_summaries,

@@ -411,6 +411,10 @@ def artifact_root_structure_file_path(artifact_root: Path) -> Path:
     return Path(artifact_root).resolve(strict=False) / "TASKS_STRUCTURE.md"
 
 
+def assignment_delivery_root(artifact_root: Path) -> Path:
+    return (Path(artifact_root).resolve(strict=False) / "delivery").resolve(strict=False)
+
+
 def _artifact_root_structure_markdown(artifact_root: Path, tasks_root: Path) -> str:
     lines = [
         "# 任务产物目录结构说明",
@@ -429,6 +433,7 @@ def _artifact_root_structure_markdown(artifact_root: Path, tasks_root: Path) -> 
         "- `<任务产物路径>/tasks/<ticket_id>/runs/<run_id>/...`: 完整提示词、stdout/stderr、结果与事件链路。",
         "- `<任务产物路径>/tasks/<ticket_id>/artifacts/<node_id>/output/...`: 当前节点自留产物。",
         "- `<任务产物路径>/tasks/<ticket_id>/artifacts/<node_id>/delivery/<receiver_agent_id>/...`: 指定交付对象时的交付副本。",
+        "- `<任务产物路径>/delivery/<agent_name>/<task_name>/...`: 面向 agent 的顶层交付收件箱投影，系统会在这里写入最终交付件与交付标记。",
         "- `<任务产物路径>/tasks/<ticket_id>/TASK_STRUCTURE.md`: 单任务目录结构说明。",
         "",
         "## 维护规则",
@@ -457,6 +462,7 @@ def ensure_artifact_root_dirs(path: Path) -> tuple[Path, Path]:
     artifact_root.mkdir(parents=True, exist_ok=True)
     tasks_root = artifact_root / "tasks"
     tasks_root.mkdir(parents=True, exist_ok=True)
+    assignment_delivery_root(artifact_root).mkdir(parents=True, exist_ok=True)
     write_artifact_root_structure_file(artifact_root, tasks_root)
     return artifact_root, tasks_root
 
@@ -479,6 +485,7 @@ def get_artifact_root_settings(root: Path) -> dict[str, Any]:
     return {
         "artifact_root": artifact_root.as_posix(),
         "task_artifact_root": artifact_root.as_posix(),
+        "delivery_root": assignment_delivery_root(artifact_root).as_posix(),
         "workspace_root": tasks_root.as_posix(),
         "task_records_root": tasks_root.as_posix(),
         "tasks_root": tasks_root.as_posix(),

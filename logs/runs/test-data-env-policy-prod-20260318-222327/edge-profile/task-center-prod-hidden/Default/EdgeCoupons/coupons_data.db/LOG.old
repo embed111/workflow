@@ -1,5 +1,0 @@
-2026/03/18-22:24:18.352 9b58 Creating DB D:\code\AI\J-Agents\workflow\logs\runs\test-data-env-policy-prod-20260318-222327\edge-profile\task-center-prod-hidden\Default\EdgeCoupons/coupons_data.db since it was missing.
-2026/03/18-22:24:18.356 9b58 Reusing MANIFEST D:\code\AI\J-Agents\workflow\logs\runs\test-data-env-policy-prod-20260318-222327\edge-profile\task-center-prod-hidden\Default\EdgeCoupons/coupons_data.db/MANIFEST-000001
-2026/03/18-22:24:19.402 8c4c Level-0 table #5: started
-2026/03/18-22:24:19.405 8c4c Level-0 table #5: 681616 bytes OK
-2026/03/18-22:24:19.406 8c4c Delete type=0 #3

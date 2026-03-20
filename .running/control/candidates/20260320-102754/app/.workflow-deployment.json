@@ -1,0 +1,8 @@
+{
+    "control_root":  "C:\\work\\J-Agents\\workflow\\.running\\control",
+    "manifest_path":  "C:\\work\\J-Agents\\workflow\\.running\\control\\envs\\test.json",
+    "environment":  "test",
+    "version":  "20260320-102754",
+    "deployed_at":  "2026-03-20T02:27:54.9541045Z",
+    "source_root":  "C:\\work\\J-Agents\\workflow"
+}

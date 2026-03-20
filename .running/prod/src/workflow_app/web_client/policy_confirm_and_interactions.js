@@ -405,7 +405,11 @@
   async function refreshAgents(manual, options) {
     const opts = options && typeof options === 'object' ? options : {};
     const autoAnalyze = opts.autoAnalyze !== false;
-    const agentsPath = safe(opts.agentsPath).trim() || '/api/agents';
+    const forceRefresh = !!opts.forceRefresh;
+    let agentsPath = safe(opts.agentsPath).trim() || '/api/agents';
+    if (forceRefresh) {
+      agentsPath += (agentsPath.includes('?') ? '&' : '?') + 'force_refresh=1';
+    }
     const data = await getJSON(agentsPath);
     const rootReadyRaw =
       data.agent_search_root_ready !== undefined

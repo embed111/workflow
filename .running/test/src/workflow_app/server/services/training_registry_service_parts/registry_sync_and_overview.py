@@ -6,9 +6,12 @@ import threading
 import time
 
 _REGISTRY_SYNC_LOCK = threading.Lock()
-_REGISTRY_SYNC_CACHE_TTL_S = 3.0
+_REGISTRY_SYNC_CACHE_TTL_S = 8.0
 _REGISTRY_SYNC_LAST_AT_S = 0.0
 _REGISTRY_SYNC_LAST_ROOT = ""
+_WORKSPACE_LOCAL_SKILLS_CACHE_TTL_S = 20.0
+_WORKSPACE_LOCAL_SKILLS_CACHE_LOCK = threading.Lock()
+_WORKSPACE_LOCAL_SKILLS_CACHE: dict[str, tuple[float, float, list[str]]] = {}
 
 
 def _is_db_locked_error(exc: BaseException) -> bool:
@@ -79,6 +82,24 @@ def _list_workspace_local_skills(workspace_path_raw: Any) -> list[str]:
     skills_root = workspace_path / ".codex" / "skills"
     if not skills_root.exists() or not skills_root.is_dir():
         return []
+    try:
+        cache_key = str(skills_root.resolve(strict=False))
+    except Exception:
+        cache_key = skills_root.as_posix()
+    try:
+        cache_stamp = float(skills_root.stat().st_mtime_ns)
+    except Exception:
+        cache_stamp = 0.0
+    cached_payload = None
+    now_mono = time.monotonic()
+    with _WORKSPACE_LOCAL_SKILLS_CACHE_LOCK:
+        cached_payload = _WORKSPACE_LOCAL_SKILLS_CACHE.get(cache_key)
+        if (
+            cached_payload is not None
+            and now_mono < float(cached_payload[0])
+            and float(cached_payload[1]) == cache_stamp
+        ):
+            return list(cached_payload[2])
     items: list[str] = []
     for child in skills_root.iterdir():
         name = str(child.name or "").strip()
@@ -90,6 +111,12 @@ def _list_workspace_local_skills(workspace_path_raw: Any) -> list[str]:
             continue
         items.append(name)
     items.sort(key=lambda value: value.lower())
+    with _WORKSPACE_LOCAL_SKILLS_CACHE_LOCK:
+        _WORKSPACE_LOCAL_SKILLS_CACHE[cache_key] = (
+            now_mono + _WORKSPACE_LOCAL_SKILLS_CACHE_TTL_S,
+            cache_stamp,
+            list(items),
+        )
     return items
 
 

@@ -344,23 +344,27 @@ def resume_assignment_scheduler(
         include_test_data=include_test_data,
         reconcile_running=False,
     )
-    dispatch_result: dict[str, Any] | None = None
-    try:
-        dispatch_result = dispatch_assignment_next(
-            root,
-            ticket_id_text=ticket_id,
-            operator=operator_text,
-            include_test_data=include_test_data,
-        )
-    except Exception:
-        dispatch_result = None
+    def _dispatch_after_resume() -> None:
+        try:
+            dispatch_assignment_next(
+                root,
+                ticket_id_text=ticket_id,
+                operator=operator_text,
+                include_test_data=include_test_data,
+            )
+        except Exception:
+            return
+
+    dispatch_thread = threading.Thread(
+        target=_dispatch_after_resume,
+        daemon=True,
+    )
+    dispatch_thread.start()
     graph_overview = _graph_overview_payload(
         snapshot["graph_row"],
         metrics_summary=snapshot["metrics_summary"],
         scheduler_state_payload=snapshot["scheduler"],
     )
-    if isinstance(dispatch_result, dict) and isinstance(dispatch_result.get("graph_overview"), dict):
-        graph_overview = dict(dispatch_result["graph_overview"])
     return {
         "ticket_id": ticket_id,
         "state": "running",
@@ -368,7 +372,10 @@ def resume_assignment_scheduler(
         "pause_note": note_text,
         "audit_id": audit_id,
         "graph_overview": graph_overview,
-        "dispatch_result": dispatch_result or {},
+        "dispatch_result": {
+            "mode": "async",
+            "pending": True,
+        },
     }
 
 

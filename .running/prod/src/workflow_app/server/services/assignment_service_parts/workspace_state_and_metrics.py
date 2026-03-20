@@ -313,12 +313,35 @@ def _write_assignment_run_text(path: Path, text: str) -> None:
     path.write_text(str(text or ""), encoding="utf-8")
 
 
+def _timestamp_assignment_run_log_text(text: str) -> str:
+    raw = str(text or "")
+    if not raw:
+        return ""
+    chunks: list[str] = []
+    for line in raw.splitlines(keepends=True):
+        body = line
+        newline = ""
+        if line.endswith("\r\n"):
+            body = line[:-2]
+            newline = "\r\n"
+        elif line.endswith("\n") or line.endswith("\r"):
+            body = line[:-1]
+            newline = line[-1]
+        if not body:
+            chunks.append(line)
+            continue
+        chunks.append(f"[{iso_ts(now_local())}] {body}{newline}")
+    if not chunks and raw:
+        return f"[{iso_ts(now_local())}] {raw}"
+    return "".join(chunks)
+
+
 def _append_assignment_run_text(path: Path, text: str) -> None:
     if not text:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
-        handle.write(text)
+        handle.write(_timestamp_assignment_run_log_text(text))
 
 
 def _write_assignment_run_json(path: Path, payload: Any) -> None:

@@ -36,6 +36,10 @@ def _serialize_node(
     upstream_ids = list(upstream_map.get(node_id) or [])
     downstream_ids = list(downstream_map.get(node_id) or [])
     status = str(node.get("status") or "").strip().lower()
+    artifact_paths = list(node.get("artifact_paths") or [])
+    delivery_target_agent_id = _node_delivery_target_agent_id(node)
+    delivery_target_agent_name = _node_delivery_target_agent_name(node)
+    delivery_inbox_relative_path = _node_delivery_inbox_relative_path(node)
     return {
         "node_id": node_id,
         "ticket_id": str(node.get("ticket_id") or "").strip(),
@@ -50,12 +54,17 @@ def _serialize_node(
         "delivery_mode_text": _delivery_mode_text(node.get("delivery_mode") or "none"),
         "delivery_receiver_agent_id": str(node.get("delivery_receiver_agent_id") or "").strip(),
         "delivery_receiver_agent_name": str(node.get("delivery_receiver_agent_name") or "").strip(),
+        "delivery_target_agent_id": delivery_target_agent_id,
+        "delivery_target_agent_name": delivery_target_agent_name,
+        "delivery_inbox_relative_path": delivery_inbox_relative_path,
+        "delivery_info_relative_path": _node_delivery_info_relative_path(node),
+        "delivery_inbox_relative_paths": _node_delivery_inbox_relative_paths(node, artifact_paths),
         "artifact_delivery_status": str(node.get("artifact_delivery_status") or "pending").strip().lower() or "pending",
         "artifact_delivery_status_text": _artifact_delivery_status_text(
             node.get("artifact_delivery_status") or "pending"
         ),
         "artifact_delivered_at": str(node.get("artifact_delivered_at") or "").strip(),
-        "artifact_paths": list(node.get("artifact_paths") or []),
+        "artifact_paths": artifact_paths,
         "status": status,
         "status_text": _node_status_text(status),
         "priority": int(node.get("priority") or 0),
@@ -667,6 +676,22 @@ def _normalize_assignment_execution_result(raw_payload: dict[str, Any], *, fallb
         for item in list(payload.get("warnings") or [])
         if str(item or "").strip()
     ]
+    artifact_files_raw = payload.get("artifact_files")
+    if artifact_files_raw in (None, ""):
+        artifact_files_raw = payload.get("artifact_paths")
+    if artifact_files_raw in (None, ""):
+        artifact_files_raw = payload.get("files")
+    artifact_files: list[str] = []
+    seen_artifact_files: set[str] = set()
+    for item in _safe_json_list(artifact_files_raw):
+        text = _normalize_text(item, field="artifact_files", required=False, max_len=1000)
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen_artifact_files:
+            continue
+        seen_artifact_files.add(key)
+        artifact_files.append(text)
     if not artifact_label:
         artifact_label = (
             str(node.get("expected_artifact") or "").strip()
@@ -680,6 +705,7 @@ def _normalize_assignment_execution_result(raw_payload: dict[str, Any], *, fallb
         "result_summary": summary,
         "artifact_label": artifact_label,
         "artifact_markdown": artifact_markdown,
+        "artifact_files": artifact_files,
         "warnings": warnings,
     }
 
@@ -690,6 +716,7 @@ def _build_assignment_execution_prompt(
     node: dict[str, Any],
     upstream_nodes: list[dict[str, Any]],
     workspace_path: Path,
+    delivery_inbox_path: Path | None = None,
 ) -> str:
     upstream_lines: list[str] = []
     for item in upstream_nodes:
@@ -706,6 +733,25 @@ def _build_assignment_execution_prompt(
     expected_artifact = str(node.get("expected_artifact") or "").strip() or "未指定"
     delivery_mode = _delivery_mode_text(node.get("delivery_mode") or "none")
     receiver = str(node.get("delivery_receiver_agent_name") or node.get("delivery_receiver_agent_id") or "-").strip() or "-"
+    delivery_target = str(
+        node.get("delivery_target_agent_name")
+        or node.get("delivery_target_agent_id")
+        or _node_delivery_target_agent_name(node)
+        or receiver
+        or "-"
+    ).strip() or "-"
+    delivery_inbox_path_text = (
+        delivery_inbox_path.as_posix()
+        if isinstance(delivery_inbox_path, Path)
+        else str(node.get("delivery_inbox_relative_path") or _node_delivery_inbox_relative_path(node) or "-").strip()
+        or "-"
+    )
+    delivery_info_path_text = (
+        (delivery_inbox_path / ASSIGNMENT_DELIVERY_INFO_FILE_NAME).as_posix()
+        if isinstance(delivery_inbox_path, Path)
+        else str(node.get("delivery_info_relative_path") or _node_delivery_info_relative_path(node) or "-").strip()
+        or "-"
+    )
     lines = [
         "你是 workflow 任务中心的真实执行 worker。",
         "当前任务已经由调度器真实派发，必须在目标工作区内完成任务，并遵守该工作区的 AGENTS.md / 本地规则。",
@@ -722,6 +768,9 @@ def _build_assignment_execution_prompt(
         f"- expected_artifact: {expected_artifact}",
         f"- delivery_mode: {delivery_mode}",
         f"- delivery_receiver: {receiver}",
+        f"- effective_delivery_target: {delivery_target}",
+        f"- delivery_inbox_path: {delivery_inbox_path_text}",
+        f"- delivery_info_path: {delivery_info_path_text}",
         "",
         "上游任务结果：",
         *upstream_lines,
@@ -734,9 +783,13 @@ def _build_assignment_execution_prompt(
         '  "result_summary": "",',
         '  "artifact_label": "",',
         '  "artifact_markdown": "",',
+        '  "artifact_files": [],',
         '  "warnings": []',
         "}",
-        "4. artifact_markdown 必须给出可直接交付的完整正文；若你还写了工作区文件，也要在结果摘要中说明落点。",
+        "4. 如果最终产物是 workspace_path 内的真实文件，artifact_label 优先填写最终文件名，artifact_files 必须返回相对 workspace_path 的文件路径列表。",
+        "5. artifact_markdown 必须给出可直接交付的完整正文；若同时写了工作区文件，artifact_markdown 应与最终文件内容保持一致。",
+        "6. 系统在收集 artifact_files 后会自动清理这些源文件；若某个文件必须继续保留在 workspace_path，就不要把它放进 artifact_files。",
+        "7. 系统会在收集结果后把最终交付件投影到 delivery_inbox_path，并在同目录写入 DELIVERY_INFO.json 标记交付者与接收者；你自己仍然只能写 workspace_path。",
     ]
     return "\n".join(lines).strip() + "\n"
 

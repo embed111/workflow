@@ -1,6 +1,7 @@
   function renderAssignmentDetail() {
     const body = $('assignmentDetailBody');
     if (!body) return;
+    captureAssignmentExecutionScrollState(body);
     const detail = assignmentDetailPayload();
     const selected = selectedAssignmentNode();
     const metaNode = $('assignmentDetailMeta');
@@ -11,7 +12,7 @@
         "<div class='assignment-empty-title'>暂无任务详情</div>" +
         "<div class='hint'>点击任务图中的节点后，在这里查看执行主体、执行链路、回执、产物与任务管理动作。</div>" +
         '</div>';
-      syncAssignmentExecutionPoller({});
+      syncAssignmentExecutionRealtime({});
       return;
     }
     if (metaNode) metaNode.textContent = '当前选中 ' + safe(selected.node_name || selected.node_id);
@@ -187,7 +188,10 @@
         )
         : '');
     bindAssignmentDetailToggleState(body);
-    syncAssignmentExecutionPoller(detail);
+    window.requestAnimationFrame(() => {
+      restoreAssignmentExecutionScrollState(body);
+    });
+    syncAssignmentExecutionRealtime(detail);
   }
 
   function renderAssignmentAgentOptions() {
@@ -367,20 +371,61 @@
     return state.tcAgents;
   }
 
+  const ASSIGNMENT_UI_SOURCE_WORKFLOW = 'workflow-ui';
+  const ASSIGNMENT_UI_GLOBAL_GRAPH_REQUEST_ID = 'workflow-ui-global-graph-v1';
+  const ASSIGNMENT_UI_GLOBAL_GRAPH_NAME = '任务中心全局主图';
+
+  function isAssignmentUiGlobalGraph(item) {
+    const row = item && typeof item === 'object' ? item : {};
+    return !row.is_test_data &&
+      safe(row.source_workflow).trim() === ASSIGNMENT_UI_SOURCE_WORKFLOW &&
+      safe(row.external_request_id).trim() === ASSIGNMENT_UI_GLOBAL_GRAPH_REQUEST_ID;
+  }
+
+  function globalAssignmentGraph() {
+    const items = Array.isArray(state.assignmentGraphs) ? state.assignmentGraphs : [];
+    return items.find((item) => isAssignmentUiGlobalGraph(item)) || null;
+  }
+
+  function globalAssignmentTicketId() {
+    const row = globalAssignmentGraph();
+    return safe(row && row.ticket_id).trim();
+  }
+
+  function fallbackWorkflowUiGraph() {
+    const items = Array.isArray(state.assignmentGraphs) ? state.assignmentGraphs : [];
+    return items.find((item) => !item.is_test_data && safe(item && item.source_workflow).trim() === ASSIGNMENT_UI_SOURCE_WORKFLOW) || null;
+  }
+
+  function preferredAssignmentTicketId() {
+    const row = globalAssignmentGraph() || fallbackWorkflowUiGraph();
+    return safe(row && row.ticket_id).trim();
+  }
+
   function assignmentDefaultCreatePayload() {
     return {
-      graph_name: '任务中心主图',
-      source_workflow: 'workflow-ui',
-      summary: '任务中心手动创建',
+      graph_name: ASSIGNMENT_UI_GLOBAL_GRAPH_NAME,
+      source_workflow: ASSIGNMENT_UI_SOURCE_WORKFLOW,
+      summary: '任务中心手动创建（全局主图）',
       review_mode: 'none',
+      external_request_id: ASSIGNMENT_UI_GLOBAL_GRAPH_REQUEST_ID,
     };
   }
 
   async function ensureAssignmentGraphExists() {
+    if (!Array.isArray(state.assignmentGraphs) || !state.assignmentGraphs.length) {
+      await refreshAssignmentGraphs({ preserveSelection: true });
+    }
+    const preferredTicketId = preferredAssignmentTicketId();
+    if (preferredTicketId) {
+      state.assignmentSelectedTicketId = preferredTicketId;
+      return preferredTicketId;
+    }
     const existing = selectedAssignmentTicketId();
     if (existing) return existing;
     const created = await postJSON('/api/assignments', assignmentDefaultCreatePayload());
     state.assignmentSelectedTicketId = safe(created.ticket_id).trim();
+    state.assignmentActiveLoaded = 0;
     state.assignmentHistoryLoaded = 0;
     await refreshAssignmentGraphs({ preserveSelection: true });
     return selectedAssignmentTicketId();
@@ -394,8 +439,21 @@
 
   function assignmentGraphUrl(ticketId) {
     return withTestDataQuery('/api/assignments/' + encodeURIComponent(ticketId) +
-      '/graph?history_loaded=' + encodeURIComponent(String(Number(state.assignmentHistoryLoaded || 0))) +
+      '/graph?active_loaded=' + encodeURIComponent(String(Number(state.assignmentActiveLoaded || 0))) +
+      '&active_batch_size=' + encodeURIComponent(String(ASSIGNMENT_ACTIVE_BATCH)) +
+      '&history_loaded=' + encodeURIComponent(String(Number(state.assignmentHistoryLoaded || 0))) +
       '&history_batch_size=' + encodeURIComponent(String(ASSIGNMENT_HISTORY_BATCH)));
+  }
+
+  function assignmentGraphsUrl() {
+    return withTestDataQuery(
+      '/api/assignments?source_workflow=' + encodeURIComponent(ASSIGNMENT_UI_SOURCE_WORKFLOW) +
+      '&limit=12',
+    );
+  }
+
+  function assignmentDelay(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, Math.max(0, Number(ms) || 0)));
   }
 
   function pickAssignmentDefaultNode(graphData) {
@@ -412,7 +470,7 @@
     if (!ticketId) {
       state.assignmentDetail = null;
       state.assignmentSelectedNodeId = '';
-      stopAssignmentExecutionPoller();
+      stopAssignmentExecutionRealtime();
       renderAssignmentDetail();
       return null;
     }
@@ -436,17 +494,22 @@
   async function refreshAssignmentGraphData(options) {
     const opts = options || {};
     const ticketId = safe(opts.ticketId || state.assignmentSelectedTicketId).trim();
+    const silent = !!opts.silent;
+    const skipDetail = !!opts.skipDetail;
     if (!ticketId) {
       state.assignmentGraphData = null;
       state.assignmentScheduler = null;
-      stopAssignmentExecutionPoller();
+      state.assignmentActiveLoaded = 0;
+      stopAssignmentExecutionRealtime();
       renderAssignmentCenter();
       return null;
     }
     const seq = Number(state.assignmentGraphRequestSeq || 0) + 1;
     state.assignmentGraphRequestSeq = seq;
-    state.assignmentLoading = true;
-    renderAssignmentCenter();
+    if (!silent) {
+      state.assignmentLoading = true;
+      renderAssignmentCenter();
+    }
     try {
       const data = await getJSON(assignmentGraphUrl(ticketId));
       if (seq !== state.assignmentGraphRequestSeq) return null;
@@ -465,7 +528,9 @@
       }
       setAssignmentError('');
       renderAssignmentCenter();
-      await refreshAssignmentDetail(state.assignmentSelectedNodeId);
+      if (!skipDetail) {
+        await refreshAssignmentDetail(state.assignmentSelectedNodeId);
+      }
       return data;
     } finally {
       state.assignmentLoading = false;
@@ -481,14 +546,15 @@
       state.assignmentSelectedTicketId = '';
       state.assignmentSelectedNodeId = '';
       state.assignmentScheduler = null;
+      state.assignmentActiveLoaded = 0;
       state.assignmentHistoryLoaded = 0;
-      stopAssignmentExecutionPoller();
+      stopAssignmentExecutionRealtime();
       renderAssignmentCenter();
       return { items: [] };
     }
     const opts = options || {};
     const previous = safe(state.assignmentSelectedTicketId).trim();
-    const data = await getJSON(withTestDataQuery('/api/assignments'));
+    const data = await getJSON(assignmentGraphsUrl());
     state.assignmentGraphs = Array.isArray(data.items) ? data.items : [];
     const emptyPrototypeGraph = state.assignmentGraphs.find((item) => {
       const metrics = item && item.metrics_summary && typeof item.metrics_summary === 'object'
@@ -510,12 +576,36 @@
       });
     }
     const selectedExists = state.assignmentGraphs.some((item) => safe(item && item.ticket_id).trim() === previous);
-    if (opts.preserveSelection && previous && selectedExists) {
+    const globalTicketId = globalAssignmentTicketId();
+    const preferredTicketId = preferredAssignmentTicketId();
+    if (globalTicketId) {
+      state.assignmentSelectedTicketId = globalTicketId;
+      if (previous !== globalTicketId) {
+        state.assignmentActiveLoaded = 0;
+        state.assignmentHistoryLoaded = 0;
+      }
+    } else if (previous && selectedExists) {
       state.assignmentSelectedTicketId = previous;
     } else if (!selectedExists) {
+      state.assignmentSelectedTicketId = preferredTicketId ||
+        (state.assignmentGraphs.length
+          ? safe(state.assignmentGraphs[0].ticket_id).trim()
+          : '');
+      state.assignmentActiveLoaded = 0;
+      state.assignmentHistoryLoaded = 0;
+    } else if (!opts.preserveSelection && !previous && preferredTicketId) {
+      state.assignmentSelectedTicketId = preferredTicketId;
+      state.assignmentActiveLoaded = 0;
+      state.assignmentHistoryLoaded = 0;
+    }
+    if (!state.assignmentSelectedTicketId && preferredTicketId) {
+      state.assignmentSelectedTicketId = preferredTicketId;
+    }
+    if (!state.assignmentSelectedTicketId) {
       state.assignmentSelectedTicketId = state.assignmentGraphs.length
         ? safe(state.assignmentGraphs[0].ticket_id).trim()
         : '';
+      state.assignmentActiveLoaded = 0;
       state.assignmentHistoryLoaded = 0;
     }
     if (selectedAssignmentTicketId()) {
@@ -524,18 +614,89 @@
     state.assignmentGraphData = null;
     state.assignmentDetail = null;
     state.assignmentSelectedNodeId = '';
-    stopAssignmentExecutionPoller();
+    stopAssignmentExecutionRealtime();
     renderAssignmentCenter();
     return data;
   }
 
-  async function maybeDispatchAssignmentTicket(ticketId) {
+  async function dispatchAssignmentTicket(ticketId) {
     const tid = safe(ticketId || selectedAssignmentTicketId()).trim();
-    if (!tid || !state.agentSearchRootReady) return null;
-    await postJSON('/api/assignments/' + encodeURIComponent(tid) + '/dispatch-next', {
+    if (!tid || !state.agentSearchRootReady) {
+      return { dispatchResult: null, graphData: null };
+    }
+    const dispatchResult = await postJSON('/api/assignments/' + encodeURIComponent(tid) + '/dispatch-next', {
       operator: 'web-user',
     });
-    return refreshAssignmentGraphData({ ticketId: tid });
+    const graphData = await refreshAssignmentGraphData({ ticketId: tid });
+    return { dispatchResult: dispatchResult, graphData: graphData };
+  }
+
+  async function maybeDispatchAssignmentTicket(ticketId) {
+    const result = await dispatchAssignmentTicket(ticketId);
+    return result.graphData;
+  }
+
+  async function resumeAssignmentTicket(ticketId) {
+    const tid = safe(ticketId || selectedAssignmentTicketId()).trim();
+    if (!tid || !state.agentSearchRootReady) {
+      return { resumeResult: null, graphData: null };
+    }
+    const resumeResult = await postJSON('/api/assignments/' + encodeURIComponent(tid) + '/resume', {
+      operator: 'web-user',
+    });
+    const graphData = await refreshAssignmentGraphData({ ticketId: tid });
+    return { resumeResult: resumeResult, graphData: graphData };
+  }
+
+  async function waitForAssignmentDispatch(ticketId, options) {
+    const tid = safe(ticketId || selectedAssignmentTicketId()).trim();
+    if (!tid || !state.agentSearchRootReady) return null;
+    const opts = options && typeof options === 'object' ? options : {};
+    const attempts = Math.max(1, Number(opts.attempts || 6));
+    const intervalMs = Math.max(120, Number(opts.intervalMs || 300));
+    for (let index = 0; index < attempts; index += 1) {
+      await assignmentDelay(intervalMs);
+      const data = await refreshAssignmentGraphData({ ticketId: tid });
+      const nodes = Array.isArray(data && data.nodes) ? data.nodes : [];
+      const runningNode = nodes.find((item) => safe(item && item.status).trim().toLowerCase() === 'running');
+      if (runningNode) {
+        return data;
+      }
+      const schedulerState = safe(data && data.graph && data.graph.scheduler_state).trim().toLowerCase();
+      if (schedulerState === 'paused' || schedulerState === 'idle') {
+        return data;
+      }
+    }
+    return state.assignmentGraphData;
+  }
+
+  function assignmentResumeStatusMessage(graphData) {
+    const data = graphData && typeof graphData === 'object' ? graphData : {};
+    const nodes = Array.isArray(data && data.nodes) ? data.nodes : [];
+    if (nodes.some((item) => safe(item && item.status).trim().toLowerCase() === 'running')) {
+      return '任务调度已恢复并开始执行';
+    }
+    if (nodes.some((item) => safe(item && item.status).trim().toLowerCase() === 'ready')) {
+      return '任务调度已恢复，任务仍在队列中';
+    }
+    return '任务调度已恢复';
+  }
+
+  function assignmentCreateStatusMessage(createdNodeId) {
+    const nodeId = safe(createdNodeId).trim();
+    const selected = selectedAssignmentNode();
+    const current = nodeId && safe(selected.node_id).trim() === nodeId ? selected : {};
+    const nodeStatus = safe(current.status).trim().toLowerCase();
+    const upstreamNodes = Array.isArray(current.upstream_nodes) ? current.upstream_nodes : [];
+    const schedulerState = safe(state.assignmentScheduler && state.assignmentScheduler.state).trim().toLowerCase();
+    if (nodeStatus === 'running') return '任务已创建并开始执行';
+    if (nodeStatus === 'ready') return '任务已创建并进入调度队列';
+    if (nodeStatus === 'pending' && upstreamNodes.length) return '任务已创建，等待上游完成';
+    if (nodeStatus === 'pending' && schedulerState === 'running') return '任务已创建，等待调度';
+    if (nodeStatus === 'pending') return '任务已创建';
+    if (nodeStatus === 'blocked') return '任务已创建，但被上游失败阻塞';
+    if (schedulerState === 'paused' || schedulerState === 'pause_pending') return '任务已创建，当前调度已暂停';
+    return '任务已创建';
   }
 
   function setAssignmentCreateOpen(nextOpen, options) {
@@ -598,12 +759,21 @@
         : [],
       operator: 'web-user',
     };
-    await postJSON('/api/assignments/' + encodeURIComponent(ticketId) + '/nodes', payload);
+    const created = await postJSON('/api/assignments/' + encodeURIComponent(ticketId) + '/nodes', payload);
+    const createdNodeId = safe(created && created.node && created.node.node_id).trim();
+    if (createdNodeId) {
+      state.assignmentSelectedNodeId = createdNodeId;
+    }
     resetAssignmentCreateForm({ clearDraft: true });
     setAssignmentCreateOpen(false, { clearDraft: true });
     await refreshAssignmentGraphs({ preserveSelection: true });
-    await maybeDispatchAssignmentTicket(ticketId);
-    setStatus('任务已创建');
+    const schedulerState = safe(state.assignmentScheduler && state.assignmentScheduler.state).trim().toLowerCase();
+    if (schedulerState === 'idle') {
+      await resumeAssignmentTicket(ticketId);
+    } else if (schedulerState === 'running') {
+      await dispatchAssignmentTicket(ticketId);
+    }
+    setStatus(assignmentCreateStatusMessage(createdNodeId));
   }
 
   async function pauseAssignmentSchedulerAction() {
@@ -619,14 +789,15 @@
   async function resumeAssignmentSchedulerAction() {
     const ticketId = selectedAssignmentTicketId();
     if (!ticketId) return;
-    await postJSON('/api/assignments/' + encodeURIComponent(ticketId) + '/resume', {
-      operator: 'web-user',
-    });
-    const dispatchResult = await maybeDispatchAssignmentTicket(ticketId);
-    if (!dispatchResult) {
-      await refreshAssignmentGraphData({ ticketId: ticketId });
-    }
-    setStatus('任务调度已恢复');
+    await resumeAssignmentTicket(ticketId);
+    setStatus('任务调度恢复中');
+    void waitForAssignmentDispatch(ticketId, { attempts: 8, intervalMs: 250 })
+      .then((graphData) => {
+        setStatus(assignmentResumeStatusMessage(graphData));
+      })
+      .catch(() => {
+        setStatus('任务调度已恢复');
+      });
   }
 
   async function clearAssignmentGraphAction() {
@@ -653,5 +824,17 @@
       : {};
     if (!history.has_more) return;
     state.assignmentHistoryLoaded = Number(history.next_history_loaded || state.assignmentHistoryLoaded || 0);
+    await refreshAssignmentGraphData({ ticketId: selectedAssignmentTicketId() });
+  }
+
+  async function loadMoreAssignmentTasks() {
+    const graphData = state.assignmentGraphData && typeof state.assignmentGraphData === 'object'
+      ? state.assignmentGraphData
+      : {};
+    const active = graphData.active && typeof graphData.active === 'object'
+      ? graphData.active
+      : {};
+    if (!active.has_more) return;
+    state.assignmentActiveLoaded = Number(active.next_active_loaded || state.assignmentActiveLoaded || 0);
     await refreshAssignmentGraphData({ ticketId: selectedAssignmentTicketId() });
   }

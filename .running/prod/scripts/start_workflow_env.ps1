@@ -218,6 +218,18 @@ function Start-EnvironmentLauncher {
     }
 }
 
+function Open-WorkflowBrowser {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BindHost,
+        [Parameter(Mandatory = $true)]
+        [int]$Port
+    )
+
+    $url = "http://$BindHost`:$Port"
+    Start-Process $url | Out-Null
+}
+
 function Stop-WorkflowServerFromDescriptor {
     param(
         [Parameter(Mandatory = $true)]
@@ -290,7 +302,7 @@ function Prepare-ProdUpgrade {
 
     $currentManifest = Read-WorkflowJson -Path ([string]$Descriptor.manifest_path) -Default @{}
     $currentVersion = [string]$currentManifest['current_version']
-    $stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
+    $stamp = Get-WorkflowVersionTimestamp
     $backupRoot = Join-Path (Join-Path ([string]$Descriptor.control_root) 'backups') ('prod-' + $stamp)
     $backupAppRoot = Join-Path $backupRoot 'app'
     New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
@@ -386,9 +398,7 @@ $pendingUpgrade = $null
 $openedBrowser = $false
 
 while ($true) {
-    $openNow = $OpenBrowser -and (-not $openedBrowser)
-    $launcher = Start-EnvironmentLauncher -Descriptor $descriptor -SkipBackfill:$SkipBackfill -OpenBrowser:$openNow
-    $openedBrowser = $true
+    $launcher = Start-EnvironmentLauncher -Descriptor $descriptor -SkipBackfill:$SkipBackfill -OpenBrowser:$false
     $healthTimeoutSeconds = if ($pendingUpgrade -and $Environment -eq 'prod') { 60 } else { 30 }
     $health = Wait-WorkflowHealth -BindHost ([string]$descriptor.host) -Port ([int]$descriptor.port) -LauncherProcess $launcher -TimeoutSeconds $healthTimeoutSeconds
 
@@ -418,6 +428,11 @@ while ($true) {
             continue
         }
         throw "环境 $Environment 启动失败：$($health.reason) exit_code=$($health.exit_code)"
+    }
+
+    if ($OpenBrowser -and (-not $openedBrowser)) {
+        Open-WorkflowBrowser -BindHost ([string]$descriptor.host) -Port ([int]$descriptor.port)
+        $openedBrowser = $true
     }
 
     Write-Host "[workflow-start] environment: $Environment"

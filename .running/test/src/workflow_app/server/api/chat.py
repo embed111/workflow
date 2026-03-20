@@ -21,7 +21,8 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                 },
             )
             return True
-        agents = ws.list_available_agents(cfg) if root_ready else []
+        force_refresh = ws.parse_query_bool(query, "force_refresh", default=False)
+        agents = ws.list_available_agents(cfg, force_refresh=force_refresh) if root_ready else []
         artifact_settings = ws.get_artifact_root_settings(cfg.root)
         execution_settings = ws.get_assignment_execution_settings(cfg.root)
         policy_fields = ws.show_test_data_policy_fields(cfg, state)

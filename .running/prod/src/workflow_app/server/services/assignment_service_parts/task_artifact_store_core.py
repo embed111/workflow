@@ -10,6 +10,8 @@ ASSIGNMENT_TASK_SCHEMA_VERSION = 1
 ASSIGNMENT_AUDIT_FILE_NAME = "audit.jsonl"
 ASSIGNMENT_TASK_FILE_NAME = "task.json"
 ASSIGNMENT_TASK_STRUCTURE_FILE_NAME = "TASK_STRUCTURE.md"
+ASSIGNMENT_DELIVERY_INFO_FILE_NAME = "DELIVERY_INFO.json"
+ASSIGNMENT_DELIVERY_ROOT_DIRNAME = "delivery"
 ASSIGNMENT_HISTORICAL_RUN_SUMMARY = "历史运行导入自任务产物目录"
 _ASSIGNMENT_REPAIRABLE_SUFFIXES = {".json", ".jsonl", ".log", ".md", ".txt"}
 _ASSIGNMENT_ANY_TASK_PATH_RE = re.compile(
@@ -94,33 +96,208 @@ def _normalize_path_segment(raw: Any, fallback: str) -> str:
     return text[:96] or "item"
 
 
-def _artifact_label_file_name(node: dict[str, Any]) -> str:
-    label = (
+def _artifact_label_text(node: dict[str, Any]) -> str:
+    return (
         str(node.get("expected_artifact") or "").strip()
         or str(node.get("node_name") or "").strip()
         or str(node.get("node_id") or "").strip()
         or "artifact"
     )
-    return _normalize_path_segment(label, "artifact") + ".md"
 
 
-def _node_artifact_file_paths(root: Path, node: dict[str, Any]) -> list[Path]:
+def _normalize_artifact_extension(raw: Any, fallback: str = ".md") -> str:
+    text = str(raw or "").strip()
+    if text and not text.startswith("."):
+        text = "." + text
+    if text and re.fullmatch(r"\.[A-Za-z0-9_-]{1,16}", text):
+        return text
+    return fallback
+
+
+def _artifact_file_extension_from_body(raw: Any) -> str:
+    text = str(raw or "").lstrip()
+    if not text:
+        return ".md"
+    head = text[:512].lower()
+    if head.startswith("<!doctype html") or head.startswith("<html"):
+        return ".html"
+    return ".md"
+
+
+def _normalize_artifact_file_name(raw: Any, *, fallback: str, default_extension: str = ".md") -> str:
+    candidate = Path(str(raw or "").strip().replace("\\", "/")).name.strip().strip(".")
+    if not candidate:
+        candidate = str(fallback or "").strip()
+    suffixes = [part for part in Path(candidate).suffixes if re.fullmatch(r"\.[A-Za-z0-9_-]{1,16}", part)]
+    stem_source = candidate[:-sum(len(part) for part in suffixes)] if suffixes else candidate
+    stem = _normalize_path_segment(stem_source, fallback)
+    suffix = "".join(suffixes) or _normalize_artifact_extension(default_extension)
+    return stem + suffix
+
+
+def _artifact_label_file_name(
+    node: dict[str, Any],
+    *,
+    source_name: str = "",
+    preferred_extension: str = ".md",
+) -> str:
+    label = _artifact_label_text(node)
+    return _normalize_artifact_file_name(
+        source_name or label,
+        fallback=label,
+        default_extension=preferred_extension,
+    )
+
+
+def _node_artifact_base_dir(root: Path, node: dict[str, Any]) -> Path:
+    return _assignment_artifacts_root(root, str(node.get("ticket_id") or "").strip()) / str(node.get("node_id") or "").strip()
+
+
+def _node_artifact_output_dir(root: Path, node: dict[str, Any]) -> Path:
+    return _node_artifact_base_dir(root, node) / "output"
+
+
+def _node_artifact_delivery_dir(root: Path, node: dict[str, Any]) -> Path | None:
+    if str(node.get("delivery_mode") or "").strip().lower() != "specified":
+        return None
+    receiver = _normalize_path_segment(
+        str(node.get("delivery_receiver_agent_id") or "").strip() or "receiver",
+        "receiver",
+    )
+    return _node_artifact_base_dir(root, node) / "delivery" / receiver
+
+
+def _node_artifact_file_paths(
+    root: Path,
+    node: dict[str, Any],
+    *,
+    file_name: str = "",
+    preferred_extension: str = ".md",
+) -> list[Path]:
     ticket_id = str(node.get("ticket_id") or "").strip()
     node_id = str(node.get("node_id") or "").strip()
     if not ticket_id or not node_id:
         return []
-    file_name = _artifact_label_file_name(node)
-    base = _assignment_artifacts_root(root, ticket_id) / node_id
-    paths = [base / "output" / file_name]
-    if str(node.get("delivery_mode") or "").strip().lower() == "specified":
-        receiver = _normalize_path_segment(
-            str(node.get("delivery_receiver_agent_id") or "").strip() or "receiver",
-            "receiver",
-        )
-        delivery_path = base / "delivery" / receiver / file_name
+    target_name = _artifact_label_file_name(
+        node,
+        source_name=file_name,
+        preferred_extension=preferred_extension,
+    )
+    paths = [_node_artifact_output_dir(root, node) / target_name]
+    delivery_dir = _node_artifact_delivery_dir(root, node)
+    if isinstance(delivery_dir, Path):
+        delivery_path = delivery_dir / target_name
         if delivery_path not in paths:
             paths.append(delivery_path)
     return paths
+
+
+def _node_delivery_target_agent_id(node: dict[str, Any]) -> str:
+    if str(node.get("delivery_mode") or "").strip().lower() == "specified":
+        receiver_agent_id = str(node.get("delivery_receiver_agent_id") or "").strip()
+        if receiver_agent_id:
+            return receiver_agent_id
+    return str(node.get("assigned_agent_id") or "").strip()
+
+
+def _node_delivery_target_agent_name(node: dict[str, Any]) -> str:
+    if str(node.get("delivery_mode") or "").strip().lower() == "specified":
+        receiver_agent_name = str(
+            node.get("delivery_receiver_agent_name") or node.get("delivery_receiver_agent_id") or ""
+        ).strip()
+        if receiver_agent_name:
+            return receiver_agent_name
+    return str(node.get("assigned_agent_name") or node.get("assigned_agent_id") or "").strip()
+
+
+def _node_delivery_target_dir_name(node: dict[str, Any]) -> str:
+    return _normalize_path_segment(
+        _node_delivery_target_agent_name(node) or _node_delivery_target_agent_id(node) or "agent",
+        "agent",
+    )
+
+
+def _node_delivery_task_dir_name(node: dict[str, Any]) -> str:
+    return _normalize_path_segment(
+        str(node.get("node_name") or "").strip() or str(node.get("node_id") or "").strip() or "task",
+        "task",
+    )
+
+
+def _node_delivery_inbox_relative_path(node: dict[str, Any]) -> str:
+    return (
+        Path(ASSIGNMENT_DELIVERY_ROOT_DIRNAME)
+        / _node_delivery_target_dir_name(node)
+        / _node_delivery_task_dir_name(node)
+    ).as_posix()
+
+
+def _node_delivery_info_relative_path(node: dict[str, Any]) -> str:
+    return (Path(_node_delivery_inbox_relative_path(node)) / ASSIGNMENT_DELIVERY_INFO_FILE_NAME).as_posix()
+
+
+def _assignment_delivery_root(root: Path) -> Path:
+    return (_assignment_artifact_root(root) / ASSIGNMENT_DELIVERY_ROOT_DIRNAME).resolve(strict=False)
+
+
+def _node_delivery_inbox_dir(root: Path, node: dict[str, Any]) -> Path:
+    return (
+        _assignment_delivery_root(root)
+        / _node_delivery_target_dir_name(node)
+        / _node_delivery_task_dir_name(node)
+    ).resolve(strict=False)
+
+
+def _node_delivery_info_path(root: Path, node: dict[str, Any]) -> Path:
+    return _node_delivery_inbox_dir(root, node) / ASSIGNMENT_DELIVERY_INFO_FILE_NAME
+
+
+def _node_delivery_inbox_file_paths(
+    root: Path,
+    node: dict[str, Any],
+    *,
+    file_name: str = "",
+    preferred_extension: str = ".md",
+) -> list[Path]:
+    ticket_id = str(node.get("ticket_id") or "").strip()
+    node_id = str(node.get("node_id") or "").strip()
+    if not ticket_id or not node_id:
+        return []
+    target_name = _artifact_label_file_name(
+        node,
+        source_name=file_name,
+        preferred_extension=preferred_extension,
+    )
+    return [_node_delivery_inbox_dir(root, node) / target_name]
+
+
+def _artifact_path_file_names(paths: list[Any]) -> list[str]:
+    file_names: list[str] = []
+    seen: set[str] = set()
+    for raw in list(paths or []):
+        text = str(raw or "").strip()
+        if not text:
+            continue
+        file_name = Path(text.replace("\\", "/")).name.strip()
+        if not file_name:
+            continue
+        key = file_name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        file_names.append(file_name)
+    return file_names
+
+
+def _node_delivery_inbox_relative_paths(
+    node: dict[str, Any],
+    artifact_paths: list[Any] | None = None,
+) -> list[str]:
+    base = Path(_node_delivery_inbox_relative_path(node))
+    names = _artifact_path_file_names(
+        list(artifact_paths if artifact_paths is not None else node.get("artifact_paths") or [])
+    )
+    return [(base / name).as_posix() for name in names]
 
 
 def _assignment_write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -460,6 +637,7 @@ def _assignment_build_run_record(
     finished_at: str,
     created_at: str,
     updated_at: str,
+    provider_pid: Any = 0,
 ) -> dict[str, Any]:
     return {
         "record_type": ASSIGNMENT_RUN_RECORD_TYPE,
@@ -482,6 +660,7 @@ def _assignment_build_run_record(
         "finished_at": str(finished_at or "").strip(),
         "created_at": str(created_at or "").strip(),
         "updated_at": str(updated_at or created_at or "").strip(),
+        "provider_pid": max(0, int(provider_pid or 0)),
     }
 
 
@@ -556,6 +735,16 @@ def _assignment_write_run_record(root: Path, *, ticket_id: str, run_record: dict
         raise AssignmentCenterError(400, "run_id required", "assignment_run_id_required")
     _assignment_write_json(_assignment_run_file_paths(root, ticket_id, run_id)["meta"], run_record)
     sync_assignment_task_bundle_index(root, ticket_id)
+    _assignment_publish_runtime_event(
+        ticket_id=ticket_id,
+        kind="run",
+        node_id=str(run_record.get("node_id") or "").strip(),
+        run_id=run_id,
+        status=str(run_record.get("status") or "").strip().lower(),
+        latest_event=str(run_record.get("latest_event") or "").strip(),
+        latest_event_at=str(run_record.get("latest_event_at") or run_record.get("updated_at") or "").strip(),
+        event_type="run_record_updated",
+    )
 
 
 def _assignment_load_run_records(root: Path, *, ticket_id: str, node_id: str = "") -> list[dict[str, Any]]:
@@ -797,6 +986,7 @@ def _assignment_refresh_structure_guides(root: Path, ticket_id: str) -> None:
         "- `runs/<run_id>/`: 完整提示词、stdout/stderr、result 与事件链路。",
         "- `artifacts/<node_id>/output/`: 节点自留产物。",
         "- `artifacts/<node_id>/delivery/<receiver_agent_id>/`: 指定交付对象时的交付副本。",
+        f"- `../../{ASSIGNMENT_DELIVERY_ROOT_DIRNAME}/<agent_name>/<task_name>/`: 面向 agent 的顶层交付收件箱投影，目录内同时保留 `{ASSIGNMENT_DELIVERY_INFO_FILE_NAME}`。",
         f"- `{ASSIGNMENT_TASK_STRUCTURE_FILE_NAME}`: 本目录结构说明。",
     ]
     path.parent.mkdir(parents=True, exist_ok=True)

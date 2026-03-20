@@ -318,7 +318,19 @@
     return results;
   }
 
-  async function refreshTrainingCenterAgents() {
+  function refreshTrainingCenterSelectedAgentContextDeferred(agentId, options) {
+    const key = safe(agentId).trim();
+    if (!key) return Promise.resolve(null);
+    return refreshTrainingCenterSelectedAgentContext(key, options).catch((err) => {
+      if (safe(state.tcSelectedAgentId).trim() === key) {
+        setTrainingCenterDetailError(err.message || String(err));
+      }
+      return null;
+    });
+  }
+
+  async function refreshTrainingCenterAgents(options) {
+    const opts = options && typeof options === 'object' ? options : {};
     const data = await getJSON(withTestDataQuery('/api/training/agents'));
     state.tcAgents = Array.isArray(data.items) ? data.items : [];
     const knownAgentIds = new Set(
@@ -379,10 +391,14 @@
     updateTrainingCenterSelectedMeta();
     renderTrainingCenterAgentList();
     if (state.tcSelectedAgentId) {
-      await refreshTrainingCenterSelectedAgentContext(state.tcSelectedAgentId);
-      return;
+      const contextPromise = refreshTrainingCenterSelectedAgentContextDeferred(state.tcSelectedAgentId);
+      if (opts.waitForSelectedContext) {
+        await contextPromise;
+      }
+      return data;
     }
     renderTrainingCenterAgentDetail();
+    return data;
   }
 
   function trainingExecutionEngineLabel(value) {

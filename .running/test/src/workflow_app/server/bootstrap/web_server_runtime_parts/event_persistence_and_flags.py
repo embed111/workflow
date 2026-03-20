@@ -8,6 +8,14 @@ from ..services.work_record_store import (
 )
 
 
+_AVAILABLE_AGENT_CACHE_TTL_S = max(
+    0.0,
+    float(os.getenv("WORKFLOW_AVAILABLE_AGENT_CACHE_TTL_S") or 30.0),
+)
+_AVAILABLE_AGENT_CACHE_LOCK = threading.Lock()
+_AVAILABLE_AGENT_CACHE: dict[tuple[str, str, str], dict[str, Any]] = {}
+
+
 def analysis_run_id() -> str:
     ts = now_local()
     return f"ar-{date_key(ts)}-{ts.strftime('%H%M%S')}-{uuid.uuid4().hex[:6]}"
@@ -226,6 +234,7 @@ def set_artifact_root(
     return {
         "ok": True,
         "artifact_root": artifact_root.as_posix(),
+        "delivery_root": assignment_delivery_root(artifact_root).as_posix(),
         "previous_artifact_root": previous.as_posix(),
         "workspace_root": workspace_root.as_posix(),
         "artifact_root_structure_path": artifact_root_structure_file_path(artifact_root).as_posix(),
@@ -255,6 +264,7 @@ def set_agent_search_root(
         old_root = cfg.agent_search_root
         save_runtime_config(cfg.root, {"agent_search_root": new_root.as_posix()})
         cfg.agent_search_root = new_root
+    invalidate_available_agents_cache(config_root=cfg.root)
     return old_root, new_root
 
 
@@ -270,20 +280,83 @@ def set_allow_manual_policy_input(
     return old_value, new_value
 
 
+def _available_agent_cache_key(cfg: AppConfig, *, target_agent_name: str = "") -> tuple[str, str, str]:
+    cfg_root_text = cfg.root.resolve(strict=False).as_posix().lower()
+    agent_root = cfg.agent_search_root
+    agent_root_text = (
+        agent_root.resolve(strict=False).as_posix().lower()
+        if isinstance(agent_root, Path)
+        else ""
+    )
+    target_name = safe_token(str(target_agent_name or ""), "", 80).lower()
+    return (cfg_root_text, agent_root_text, target_name)
+
+
+def invalidate_available_agents_cache(
+    *,
+    config_root: Path | None = None,
+    agent_root: Path | None = None,
+    target_agent_name: str = "",
+) -> int:
+    config_root_text = (
+        config_root.resolve(strict=False).as_posix().lower()
+        if isinstance(config_root, Path)
+        else ""
+    )
+    agent_root_text = (
+        agent_root.resolve(strict=False).as_posix().lower()
+        if isinstance(agent_root, Path)
+        else ""
+    )
+    target_name = safe_token(str(target_agent_name or ""), "", 80).lower()
+    deleted = 0
+    with _AVAILABLE_AGENT_CACHE_LOCK:
+        matched_keys = [
+            key
+            for key in list(_AVAILABLE_AGENT_CACHE.keys())
+            if (not config_root_text or key[0] == config_root_text)
+            and (not agent_root_text or key[1] == agent_root_text)
+            and (not target_name or key[2] == target_name)
+        ]
+        for key in matched_keys:
+            _AVAILABLE_AGENT_CACHE.pop(key, None)
+            deleted += 1
+    return deleted
+
+
 def list_available_agents(
     cfg: AppConfig,
     *,
     analyze_policy: bool = False,
     target_agent_name: str = "",
+    force_refresh: bool = False,
 ) -> list[dict[str, Any]]:
     if cfg.agent_search_root is None:
         return []
-    return discover_agents(
+    target_name = safe_token(str(target_agent_name or ""), "", 80)
+    use_cache = not analyze_policy and not force_refresh and _AVAILABLE_AGENT_CACHE_TTL_S > 0
+    cache_key = _available_agent_cache_key(cfg, target_agent_name=target_name)
+    if use_cache:
+        now_ts = time.time()
+        with _AVAILABLE_AGENT_CACHE_LOCK:
+            cached = _AVAILABLE_AGENT_CACHE.get(cache_key)
+            if cached and float(cached.get("expires_at") or 0.0) > now_ts:
+                cached_items = cached.get("items")
+                if isinstance(cached_items, list):
+                    return cached_items
+    items = discover_agents(
         cfg.agent_search_root,
         cache_root=cfg.root,
         analyze_policy=analyze_policy,
-        target_agent_name=target_agent_name,
+        target_agent_name=target_name,
     )
+    if use_cache:
+        with _AVAILABLE_AGENT_CACHE_LOCK:
+            _AVAILABLE_AGENT_CACHE[cache_key] = {
+                "expires_at": time.time() + _AVAILABLE_AGENT_CACHE_TTL_S,
+                "items": items,
+            }
+    return items
 
 
 def load_agent_with_policy(cfg: AppConfig, agent_name: str) -> dict[str, Any] | None:

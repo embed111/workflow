@@ -8,6 +8,8 @@ $script:WorkflowEnvPorts = @{
     prod = 8090
 }
 
+$script:WorkflowVersionTimeZoneId = 'China Standard Time'
+
 $script:WorkflowCopyExcludeDirs = @(
     '.git',
     '.running',
@@ -68,6 +70,17 @@ function ConvertTo-WorkflowPlainData {
         return $items
     }
     return [string]$Value
+}
+
+function Get-WorkflowVersionTimestamp {
+    $utcNow = [DateTime]::UtcNow
+    try {
+        $tz = [System.TimeZoneInfo]::FindSystemTimeZoneById($script:WorkflowVersionTimeZoneId)
+        return [System.TimeZoneInfo]::ConvertTimeFromUtc($utcNow, $tz).ToString('yyyyMMdd-HHmmss')
+    }
+    catch {
+        return (Get-Date).ToString('yyyyMMdd-HHmmss')
+    }
 }
 
 function Read-WorkflowJson {

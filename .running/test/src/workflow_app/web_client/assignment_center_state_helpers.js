@@ -1,3 +1,4 @@
+  const ASSIGNMENT_ACTIVE_BATCH = 24;
   const ASSIGNMENT_HISTORY_BATCH = 12;
   const ASSIGNMENT_PRIORITY_LEVELS = ['P0', 'P1', 'P2', 'P3'];
   const ASSIGNMENT_BEIJING_TIMEZONE = 'Asia/Shanghai';
@@ -701,6 +702,7 @@
 
   function renderAssignmentGraphMeta() {
     const metaNode = $('assignmentGraphMeta');
+    const loadTasksBtn = $('assignmentLoadMoreTasksBtn');
     const historyChip = $('assignmentHistoryChip');
     const loadBtn = $('assignmentLoadHistoryBtn');
     const data = state.assignmentGraphData && typeof state.assignmentGraphData === 'object'
@@ -709,41 +711,80 @@
     const metrics = data.metrics_summary && typeof data.metrics_summary === 'object'
       ? data.metrics_summary
       : {};
+    const active = data.active && typeof data.active === 'object'
+      ? data.active
+      : {};
     const history = data.history && typeof data.history === 'object'
       ? data.history
       : {};
+    const activeVisible = Math.max(0, Number(active.visible_count || 0));
+    const activeTotal = Math.max(0, Number(active.total_count || 0));
+    const activeRemaining = Math.max(0, Number(active.remaining_count || 0));
+    const completedTotal =
+      Math.max(0, Number(history.base_recent_count || 0)) +
+      Math.max(0, Number(history.loaded_extra_count || 0)) +
+      Math.max(0, Number(history.remaining_completed_count || 0));
     if (metaNode) {
       if (!selectedAssignmentGraphOverview()) {
-        metaNode.textContent = '暂无任务图';
+        metaNode.textContent = '全局主图待加载';
       } else {
         metaNode.textContent =
-          '总任务 ' + String(Number(metrics.total_nodes || 0)) +
+          '全局主图 · 总任务 ' + String(Number(metrics.total_nodes || 0)) +
           ' · 已执行 ' + String(Number(metrics.executed_count || 0)) +
-          ' · 待开始 ' + String(Number(metrics.unexecuted_count || 0));
+          ' · 待开始 ' + String(Number(metrics.unexecuted_count || 0)) +
+          ' · 活跃展示 ' + String(activeVisible) + '/' + String(activeTotal);
       }
+    }
+    if (loadTasksBtn) {
+      const hasTicket = !!selectedAssignmentTicketId();
+      const hasMoreActive = !!active.has_more;
+      loadTasksBtn.disabled = !state.agentSearchRootReady || !hasTicket || !hasMoreActive;
+      if (!hasTicket) {
+        loadTasksBtn.title = '当前暂无可加载的全局主图';
+      } else if (activeTotal <= 0) {
+        loadTasksBtn.title = '当前没有未完成任务';
+      } else if (!hasMoreActive) {
+        loadTasksBtn.title = '当前未完成任务已全部显示';
+      } else {
+        loadTasksBtn.title = '继续加载更多正在运行或未开始的任务';
+      }
+      loadTasksBtn.textContent = hasMoreActive
+        ? ('加载更多任务 +' + String(activeRemaining))
+        : '加载更多任务';
     }
     if (historyChip) {
       const remaining = Number(history.remaining_completed_count || 0);
       const loaded = Number(history.loaded_extra_count || 0);
       historyChip.className = 'assignment-history-chip' +
-        (state.assignmentLoading ? ' loading' : remaining <= 0 && loaded > 0 ? ' loaded' : '');
+        (state.assignmentLoading ? ' loading' : remaining <= 0 && completedTotal > 0 ? ' loaded' : '');
       if (!selectedAssignmentGraphOverview()) {
-        historyChip.textContent = '历史未加载';
+        historyChip.textContent = '历史状态待刷新';
       } else if (state.assignmentLoading) {
         historyChip.textContent = '正在刷新任务图';
+      } else if (completedTotal <= 0) {
+        historyChip.textContent = '当前图无历史节点';
       } else if (remaining > 0) {
         historyChip.textContent = '可继续加载历史 ' + String(remaining);
-      } else if (loaded > 0) {
-        historyChip.textContent = '历史已全部加载';
+      } else if (loaded > 0 || completedTotal > 0) {
+        historyChip.textContent = '历史已全部显示';
       } else {
         historyChip.textContent = '当前无需加载历史';
       }
     }
     if (loadBtn) {
-      loadBtn.disabled = !state.agentSearchRootReady || !selectedAssignmentTicketId() || !history.has_more;
-      loadBtn.textContent = history.has_more
-        ? '加载历史'
-        : '历史已加载';
+      const hasTicket = !!selectedAssignmentTicketId();
+      const hasMore = !!history.has_more;
+      loadBtn.disabled = !state.agentSearchRootReady || !hasTicket || !hasMore;
+      loadBtn.textContent = '加载更多历史';
+      if (!hasTicket) {
+        loadBtn.title = '请先选择任务图';
+      } else if (completedTotal <= 0) {
+        loadBtn.title = '当前任务图没有可加载的历史节点';
+      } else if (!hasMore) {
+        loadBtn.title = '当前没有更多历史节点可加载';
+      } else {
+        loadBtn.title = '继续加载更早的已完成节点';
+      }
     }
   }
 

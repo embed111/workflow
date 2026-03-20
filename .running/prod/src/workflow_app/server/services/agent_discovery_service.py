@@ -1,5 +1,23 @@
 from __future__ import annotations
 
+
+_AGENT_CACHE_MTIME_TOLERANCE_S = 0.001
+
+
+def _cached_hash_if_agents_mtime_matches(cache_row: dict[str, Any] | None, agents_mtime: float) -> str:
+    if not isinstance(cache_row, dict):
+        return ""
+    try:
+        cached_agents_mtime = float(cache_row.get("agents_mtime") or 0.0)
+    except Exception:
+        return ""
+    if cached_agents_mtime <= 0:
+        return ""
+    if abs(cached_agents_mtime - agents_mtime) > _AGENT_CACHE_MTIME_TOLERANCE_S:
+        return ""
+    return str(cache_row.get("agents_hash") or "").strip()
+
+
 def bind_runtime_symbols(symbols: dict[str, object]) -> None:
     if not isinstance(symbols, dict):
         return
@@ -56,14 +74,20 @@ def discover_agents(
             continue
         if target_name and agent_name != target_name:
             continue
+        cache_row = cache_probe_rows.get(agents_file.as_posix()) if not analyze_policy else None
         try:
             stat = agents_file.stat()
-            raw = agents_file.read_bytes()
-            digest = hashlib.sha256(raw).hexdigest()
             agents_mtime = float(stat.st_mtime or 0.0)
             loaded_at = datetime.fromtimestamp(agents_mtime).astimezone()
         except Exception:
             continue
+        digest = _cached_hash_if_agents_mtime_matches(cache_row, agents_mtime)
+        if not digest:
+            try:
+                raw = agents_file.read_bytes()
+                digest = hashlib.sha256(raw).hexdigest()
+            except Exception:
+                continue
         if not analyze_policy:
             cache_hit = False
             cache_status = "pending"
@@ -71,7 +95,6 @@ def discover_agents(
             cache_cached_at = ""
             cache_trace: list[dict[str, str]] = []
             payload: dict[str, Any] = {}
-            cache_row = cache_probe_rows.get(agents_file.as_posix())
 
             def push_cache_trace(step: str, status: str, detail: str) -> None:
                 cache_trace.append(

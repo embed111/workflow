@@ -251,6 +251,7 @@
       state.assignmentGraphData = null;
       state.assignmentSelectedNodeId = '';
       state.assignmentScheduler = null;
+      state.assignmentActiveLoaded = 0;
       state.assignmentHistoryLoaded = 0;
       state.assignmentCreateOpen = false;
       state.assignmentDetail = null;

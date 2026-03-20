@@ -108,6 +108,10 @@ def _handle_policy_cache_clear(handler, cfg, _state, body: dict[str, Any], _matc
         clear_all=clear_all,
         agent_path=resolved_agent_path,
     )
+    invalidate_available_agents_cache(
+        config_root=cfg.root,
+        target_agent_name="" if clear_all else requested_agent_name,
+    )
     append_change_log(
         cfg.root,
         "policy cache clear",

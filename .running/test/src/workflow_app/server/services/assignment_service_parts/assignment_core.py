@@ -10,6 +10,7 @@ import subprocess
 import threading
 import time
 import uuid
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -30,12 +31,20 @@ def bind_runtime_symbols(symbols: dict[str, object]) -> None:
 
 DEFAULT_ASSIGNMENT_CONCURRENCY_LIMIT = 5
 DEFAULT_ASSIGNMENT_EXECUTION_PROVIDER = "codex"
-DEFAULT_ASSIGNMENT_EXECUTION_POLL_INTERVAL_MS = 800
+DEFAULT_ASSIGNMENT_EXECUTION_REFRESH_MODE = "event_stream"
+DEFAULT_ASSIGNMENT_EXECUTION_POLL_INTERVAL_MS = 450
 DEFAULT_ASSIGNMENT_EXECUTION_TIMEOUT_S = 1200
 DEFAULT_ASSIGNMENT_FINAL_RESULT_EXIT_GRACE_SECONDS = 15
 DEFAULT_ASSIGNMENT_STALE_RUN_GRACE_SECONDS = 15
-DEFAULT_ASSIGNMENT_CODEX_COMMAND_TEMPLATE = (
+DEFAULT_ASSIGNMENT_EVENT_STREAM_RETRY_MS = 1500
+DEFAULT_ASSIGNMENT_EVENT_STREAM_KEEPALIVE_S = 15
+DEFAULT_ASSIGNMENT_EVENT_HISTORY_LIMIT = 512
+LEGACY_ASSIGNMENT_CODEX_COMMAND_TEMPLATE = (
     '"{codex_path}" exec --json --skip-git-repo-check --sandbox workspace-write '
+    '--add-dir "{workspace_path}" -C "{workspace_path}" -'
+)
+DEFAULT_ASSIGNMENT_CODEX_COMMAND_TEMPLATE = (
+    '"{codex_path}" exec --dangerously-bypass-approvals-and-sandbox --json --skip-git-repo-check '
     '--add-dir "{workspace_path}" -C "{workspace_path}" -'
 )
 ASSIGNMENT_REVIEW_MODES = {"none", "partial", "full"}
@@ -55,6 +64,9 @@ ASSIGNMENT_TEST_GRAPH_UPDATED_AT = "2026-03-14T12:20:30+08:00"
 
 _ASSIGNMENT_ACTIVE_RUN_LOCK = threading.Lock()
 _ASSIGNMENT_ACTIVE_RUN_PROCESSES: dict[str, subprocess.Popen[str]] = {}
+_ASSIGNMENT_EVENT_CONDITION = threading.Condition()
+_ASSIGNMENT_EVENT_SEQ = 0
+_ASSIGNMENT_EVENT_HISTORY: deque[dict[str, Any]] = deque(maxlen=DEFAULT_ASSIGNMENT_EVENT_HISTORY_LIMIT)
 
 
 def _assignment_execution_timeout_s() -> int:
@@ -109,6 +121,86 @@ def assignment_audit_id() -> str:
 def assignment_run_id() -> str:
     ts = now_local()
     return f"arun-{date_key(ts)}-{ts.strftime('%H%M%S')}-{uuid.uuid4().hex[:6]}"
+
+
+def assignment_execution_refresh_mode() -> str:
+    return str(DEFAULT_ASSIGNMENT_EXECUTION_REFRESH_MODE or "event_stream").strip().lower() or "event_stream"
+
+
+def assignment_event_stream_retry_ms() -> int:
+    return max(500, int(DEFAULT_ASSIGNMENT_EVENT_STREAM_RETRY_MS))
+
+
+def assignment_event_stream_keepalive_s() -> int:
+    return max(5, int(DEFAULT_ASSIGNMENT_EVENT_STREAM_KEEPALIVE_S))
+
+
+def assignment_current_event_seq() -> int:
+    with _ASSIGNMENT_EVENT_CONDITION:
+        return int(_ASSIGNMENT_EVENT_SEQ)
+
+
+def _assignment_publish_runtime_event(
+    *,
+    ticket_id: str,
+    kind: str,
+    node_id: str = "",
+    run_id: str = "",
+    status: str = "",
+    latest_event: str = "",
+    latest_event_at: str = "",
+    scheduler_state: str = "",
+    event_type: str = "",
+) -> dict[str, Any]:
+    ticket_text = str(ticket_id or "").strip()
+    if not ticket_text:
+        return {}
+    payload = {
+        "ticket_id": ticket_text,
+        "kind": str(kind or "").strip().lower() or "snapshot",
+        "node_id": str(node_id or "").strip(),
+        "run_id": str(run_id or "").strip(),
+        "status": str(status or "").strip().lower(),
+        "latest_event": _short_assignment_text(str(latest_event or "").strip(), 1000),
+        "latest_event_at": str(latest_event_at or "").strip(),
+        "scheduler_state": str(scheduler_state or "").strip().lower(),
+        "event_type": str(event_type or "").strip().lower(),
+        "emitted_at": iso_ts(now_local()),
+    }
+    with _ASSIGNMENT_EVENT_CONDITION:
+        global _ASSIGNMENT_EVENT_SEQ
+        _ASSIGNMENT_EVENT_SEQ += 1
+        payload["seq"] = int(_ASSIGNMENT_EVENT_SEQ)
+        _ASSIGNMENT_EVENT_HISTORY.append(dict(payload))
+        _ASSIGNMENT_EVENT_CONDITION.notify_all()
+    return dict(payload)
+
+
+def assignment_wait_runtime_events(after_seq: int, *, timeout_s: float | int | None = None) -> dict[str, Any]:
+    wait_s = max(1.0, float(timeout_s or assignment_event_stream_keepalive_s()))
+    with _ASSIGNMENT_EVENT_CONDITION:
+        target_seq = max(0, int(after_seq or 0))
+        if _ASSIGNMENT_EVENT_SEQ <= target_seq:
+            _ASSIGNMENT_EVENT_CONDITION.wait(wait_s)
+        current_seq = int(_ASSIGNMENT_EVENT_SEQ)
+        history = [dict(item) for item in list(_ASSIGNMENT_EVENT_HISTORY)]
+    if current_seq <= target_seq:
+        return {
+            "current_seq": current_seq,
+            "reset_required": False,
+            "events": [],
+        }
+    if history and target_seq < (int(history[0].get("seq") or 0) - 1):
+        return {
+            "current_seq": current_seq,
+            "reset_required": True,
+            "events": history,
+        }
+    return {
+        "current_seq": current_seq,
+        "reset_required": False,
+        "events": [item for item in history if int(item.get("seq") or 0) > target_seq],
+    }
 
 
 def _db_ref(audit_id: str) -> str:
@@ -312,6 +404,14 @@ def _normalize_codex_command_path(raw: Any) -> str:
         cmd_path = text[:-4] + ".cmd"
         if Path(cmd_path).exists():
             return cmd_path
+    resolved = shutil.which(text)
+    if resolved:
+        return str(resolved).strip() or text
+    if not Path(text).suffix:
+        for suffix in (".cmd", ".bat", ".exe"):
+            candidate = text + suffix
+            if Path(candidate).exists():
+                return candidate
     return text
 
 
@@ -320,6 +420,16 @@ def _default_assignment_command_template(provider: str) -> str:
     if provider_text == DEFAULT_ASSIGNMENT_EXECUTION_PROVIDER:
         return DEFAULT_ASSIGNMENT_CODEX_COMMAND_TEMPLATE
     return DEFAULT_ASSIGNMENT_CODEX_COMMAND_TEMPLATE
+
+
+def _normalize_assignment_command_template_value(value: Any, provider: str) -> str:
+    text = str(value or "").strip()
+    default_template = _default_assignment_command_template(provider)
+    if not text:
+        return default_template
+    if text == LEGACY_ASSIGNMENT_CODEX_COMMAND_TEMPLATE:
+        return default_template
+    return text
 
 
 def _normalize_status(raw: Any, *, field: str = "status") -> str:
@@ -564,6 +674,16 @@ def _assignment_execution_settings_from_conn(conn: sqlite3.Connection) -> dict[s
         default_value=_default_assignment_command_template(provider),
         now_text=now_text,
     )
+    normalized_template = _normalize_assignment_command_template_value(command_template, provider)
+    if normalized_template != str(command_template or "").strip():
+        _set_assignment_setting_text(
+            conn,
+            key="codex_command_template",
+            value=normalized_template,
+            now_text=now_text,
+        )
+        command_template_updated_at = now_text
+    command_template = normalized_template
     global_concurrency_limit, concurrency_updated_at = _get_global_concurrency_limit(conn)
     return {
         "execution_provider": provider,
@@ -571,7 +691,7 @@ def _assignment_execution_settings_from_conn(conn: sqlite3.Connection) -> dict[s
         "command_template": command_template or _default_assignment_command_template(provider),
         "global_concurrency_limit": int(global_concurrency_limit),
         "updated_at": max(provider_updated_at, codex_path_updated_at, command_template_updated_at, concurrency_updated_at),
-        "poll_mode": "short_poll",
+        "poll_mode": assignment_execution_refresh_mode(),
         "poll_interval_ms": DEFAULT_ASSIGNMENT_EXECUTION_POLL_INTERVAL_MS,
     }
 
@@ -685,6 +805,7 @@ def set_assignment_execution_settings(
         required=True,
         max_len=2000,
     )
+    template = _normalize_assignment_command_template_value(template, provider)
     if "{workspace_path}" not in template or "{codex_path}" not in template:
         raise AssignmentCenterError(
             400,

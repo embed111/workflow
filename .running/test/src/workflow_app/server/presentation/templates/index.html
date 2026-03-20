@@ -11,7 +11,11 @@
 <div id='appRoot' class='app'>
   <aside class='rail'>
     <div class='brand'>
-      <div class='title'>workflow<span id='runtimeEnvBadge' class='brand-env-badge' data-env='source' title='当前环境: source' aria-label='当前环境 source'>SOURCE</span></div>
+      <div class='title'>
+        workflow
+        <span id='runtimeEnvBadge' class='brand-env-badge' data-env='source' title='当前环境: source' aria-label='当前环境 source'>SOURCE</span>
+        <span id='runtimeVersionBadge' class='brand-version-badge' title='当前版本读取中' aria-label='当前版本读取中'>版本读取中</span>
+      </div>
       <div id='statusLine' class='meta'>就绪</div>
       <div id='metricLine' class='brand-metric-list'>指标加载中...</div>
     </div>
@@ -413,11 +417,12 @@
             <div class='assignment-panel-head'>
               <div>
                 <div class='card-title'>任务图</div>
-                <div id='assignmentGraphMeta' class='hint'>暂无任务图</div>
+                <div id='assignmentGraphMeta' class='hint'>全局主图待加载</div>
               </div>
               <div class='row'>
                 <button id='assignmentRefreshBtn' class='alt' type='button' data-assignment-root-required='1'>刷新</button>
-                <button id='assignmentLoadHistoryBtn' class='alt' type='button' data-assignment-root-required='1'>加载历史</button>
+                <button id='assignmentLoadMoreTasksBtn' class='alt' type='button' data-assignment-root-required='1'>加载更多任务</button>
+                <button id='assignmentLoadHistoryBtn' class='alt' type='button' data-assignment-root-required='1'>加载更多历史</button>
               </div>
             </div>
             <div id='assignmentGraphError' class='error'></div>
@@ -432,7 +437,7 @@
                     <span class='assignment-legend-item'><span class='assignment-legend-dot fail'></span>失败</span>
                     <span class='assignment-legend-item'><span class='assignment-legend-dot future'></span>待开始</span>
                   </div>
-                  <div id='assignmentHistoryChip' class='assignment-history-chip'>历史未加载</div>
+                  <div id='assignmentHistoryChip' class='assignment-history-chip'>历史状态待刷新</div>
                 </div>
               </div>
               <div id='assignmentEmptyState' class='assignment-empty'>

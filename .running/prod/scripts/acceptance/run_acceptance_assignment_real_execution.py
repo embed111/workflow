@@ -18,11 +18,11 @@ from urllib.parse import urlencode
 
 GOOD_CODEX_COMMAND_TEMPLATE = (
     'cmd.exe /c ping -n 4 127.0.0.1 >nul && '
-    '"{codex_path}" exec --json --skip-git-repo-check --sandbox workspace-write '
+    '"{codex_path}" exec --dangerously-bypass-approvals-and-sandbox --json --skip-git-repo-check '
     '--add-dir "{workspace_path}" -C "{workspace_path}" -'
 )
 BAD_CODEX_COMMAND_TEMPLATE = (
-    '"{codex_path}" exec --json --skip-git-repo-check --sandbox workspace-write '
+    '"{codex_path}" exec --dangerously-bypass-approvals-and-sandbox --json --skip-git-repo-check '
     '--add-dir "{workspace_path}" -C "{workspace_path}" -'
 )
 
@@ -391,7 +391,7 @@ def render_report(
         "",
         "## Risk Notes",
         "",
-        "- realtime mode is short polling (`poll_interval_ms <= 800`), not SSE/WebSocket.",
+        "- realtime mode prefers SSE event stream; `poll_interval_ms` only acts as disconnect fallback.",
         "- stdout and stderr are rendered as full text blocks; no segmented lazy loading is used in this version.",
         "",
     ]

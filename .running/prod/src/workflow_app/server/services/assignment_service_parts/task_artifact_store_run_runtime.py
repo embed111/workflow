@@ -66,6 +66,177 @@ def _assignment_cancel_active_runs(
     return cancelled
 
 
+def _resolve_assignment_artifact_source_paths(
+    workspace_path: Path | str,
+    artifact_files: list[Any],
+) -> list[Path]:
+    workspace_text = str(workspace_path or "").strip()
+    if not workspace_text:
+        return []
+    base = Path(workspace_text).resolve(strict=False)
+    if not base.exists() or not base.is_dir():
+        return []
+    resolved_paths: list[Path] = []
+    seen: set[str] = set()
+    for raw in list(artifact_files or []):
+        text = str(raw or "").strip()
+        if not text:
+            continue
+        candidate = Path(text)
+        if not candidate.is_absolute():
+            candidate = (base / text).resolve(strict=False)
+        else:
+            candidate = candidate.resolve(strict=False)
+        if not path_in_scope(candidate, base):
+            continue
+        if not candidate.exists() or not candidate.is_file():
+            continue
+        key = candidate.as_posix().lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        resolved_paths.append(candidate)
+    return resolved_paths
+
+
+def _copy_assignment_artifact_source_files(
+    root: Path,
+    *,
+    node: dict[str, Any],
+    artifact_source_paths: list[Path],
+) -> list[str]:
+    copied_paths: list[str] = []
+    seen: set[str] = set()
+    for source_path in list(artifact_source_paths or []):
+        if not isinstance(source_path, Path) or not source_path.exists() or not source_path.is_file():
+            continue
+        target_paths = _node_artifact_file_paths(
+            root,
+            node,
+            file_name=source_path.name,
+        )
+        for target_path in target_paths:
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_path, target_path)
+            text = target_path.as_posix()
+            if text in seen:
+                continue
+            seen.add(text)
+            copied_paths.append(text)
+    return copied_paths
+
+
+def _copy_assignment_delivery_inbox_source_files(
+    root: Path,
+    *,
+    node: dict[str, Any],
+    artifact_source_paths: list[Path],
+) -> list[str]:
+    copied_paths: list[str] = []
+    seen: set[str] = set()
+    for source_path in list(artifact_source_paths or []):
+        if not isinstance(source_path, Path) or not source_path.exists() or not source_path.is_file():
+            continue
+        target_paths = _node_delivery_inbox_file_paths(
+            root,
+            node,
+            file_name=source_path.name,
+        )
+        for target_path in target_paths:
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_path, target_path)
+            text = target_path.as_posix()
+            if text in seen:
+                continue
+            seen.add(text)
+            copied_paths.append(text)
+    return copied_paths
+
+
+def _write_assignment_delivery_info_file(
+    root: Path,
+    *,
+    node: dict[str, Any],
+    delivered_at: str,
+    operator: str,
+    artifact_label: str,
+    delivery_note: str,
+    canonical_artifact_paths: list[str],
+    delivery_inbox_paths: list[str],
+) -> str:
+    info_path = _node_delivery_info_path(root, node)
+    payload = {
+        "record_type": "assignment_delivery_info",
+        "schema_version": ASSIGNMENT_TASK_SCHEMA_VERSION,
+        "ticket_id": str(node.get("ticket_id") or "").strip(),
+        "node_id": str(node.get("node_id") or "").strip(),
+        "task_name": str(node.get("node_name") or "").strip(),
+        "artifact_label": str(artifact_label or "").strip(),
+        "delivery_note": str(delivery_note or "").strip(),
+        "delivered_at": str(delivered_at or "").strip(),
+        "delivery_mode": str(node.get("delivery_mode") or "none").strip().lower() or "none",
+        "delivery_receiver_agent_id": str(node.get("delivery_receiver_agent_id") or "").strip(),
+        "delivery_receiver_agent_name": str(node.get("delivery_receiver_agent_name") or "").strip(),
+        "delivery_target_agent_id": _node_delivery_target_agent_id(node),
+        "delivery_target_agent_name": _node_delivery_target_agent_name(node),
+        "delivery_inbox_relative_path": _node_delivery_inbox_relative_path(node),
+        "delivery_inbox_relative_paths": _node_delivery_inbox_relative_paths(node, delivery_inbox_paths),
+        "delivered_by_agent_id": str(node.get("assigned_agent_id") or "").strip(),
+        "delivered_by_agent_name": str(node.get("assigned_agent_name") or node.get("assigned_agent_id") or "").strip(),
+        "delivery_recorded_by": str(operator or "").strip(),
+        "canonical_artifact_paths": list(canonical_artifact_paths or []),
+        "delivery_inbox_paths": list(delivery_inbox_paths or []),
+    }
+    _assignment_write_json(info_path, payload)
+    return info_path.as_posix()
+
+
+def _cleanup_assignment_artifact_source_files(
+    workspace_path: Path | str,
+    artifact_source_paths: list[Path],
+) -> tuple[list[str], list[str]]:
+    workspace_text = str(workspace_path or "").strip()
+    if not workspace_text:
+        return [], []
+    base = Path(workspace_text).resolve(strict=False)
+    if not base.exists() or not base.is_dir():
+        return [], []
+    cleaned_paths: list[str] = []
+    cleanup_errors: list[str] = []
+    seen: set[str] = set()
+    for source_path in list(artifact_source_paths or []):
+        if not isinstance(source_path, Path):
+            continue
+        candidate = source_path.resolve(strict=False)
+        candidate_text = candidate.as_posix()
+        if candidate_text.lower() in seen:
+            continue
+        seen.add(candidate_text.lower())
+        if not path_in_scope(candidate, base):
+            continue
+        if not candidate.exists() or not candidate.is_file():
+            continue
+        try:
+            candidate.unlink()
+            cleaned_paths.append(candidate_text)
+        except Exception as exc:
+            cleanup_errors.append(f"{candidate_text}: {exc}")
+            continue
+        parent = candidate.parent
+        while parent != base:
+            try:
+                if not path_in_scope(parent, base):
+                    break
+                parent.rmdir()
+            except OSError:
+                break
+            except Exception as exc:
+                cleanup_errors.append(f"{parent.as_posix()}: {exc}")
+                break
+            parent = parent.parent
+    return cleaned_paths, cleanup_errors
+
+
 def _deliver_assignment_artifact_locked(
     root: Path,
     *,
@@ -76,6 +247,8 @@ def _deliver_assignment_artifact_locked(
     delivery_note: str,
     artifact_body: str,
     now_text: str,
+    artifact_source_paths: list[Path] | None = None,
+    source_workspace_path: Path | str = "",
 ) -> tuple[dict[str, Any], dict[str, Any], list[str], str]:
     snapshot = _assignment_snapshot_from_files(
         root,
@@ -98,6 +271,7 @@ def _deliver_assignment_artifact_locked(
         raise AssignmentCenterError(404, "assignment node not found", "assignment_node_not_found")
     artifact_file_paths = _node_artifact_file_paths(root, selected_node)
     artifact_paths: list[str] = []
+    delivery_inbox_paths: list[str] = []
     payload = artifact_body or _artifact_delivery_markdown(
         selected_node,
         delivered_at=now_text,
@@ -105,10 +279,52 @@ def _deliver_assignment_artifact_locked(
         artifact_label=artifact_label,
         delivery_note=delivery_note,
     )
-    for path in artifact_file_paths:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(payload, encoding="utf-8")
-        artifact_paths.append(path.as_posix())
+    copied_source_artifacts = _copy_assignment_artifact_source_files(
+        root,
+        node=selected_node,
+        artifact_source_paths=list(artifact_source_paths or []),
+    )
+    copied_delivery_inbox_artifacts = _copy_assignment_delivery_inbox_source_files(
+        root,
+        node=selected_node,
+        artifact_source_paths=list(artifact_source_paths or []),
+    )
+    cleaned_source_paths, cleanup_errors = _cleanup_assignment_artifact_source_files(
+        source_workspace_path,
+        list(artifact_source_paths or []),
+    )
+    artifact_paths.extend(copied_source_artifacts)
+    delivery_inbox_paths.extend(copied_delivery_inbox_artifacts)
+    if not artifact_paths:
+        artifact_file_paths = _node_artifact_file_paths(
+            root,
+            selected_node,
+            preferred_extension=_artifact_file_extension_from_body(payload),
+        )
+        for path in artifact_file_paths:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(payload, encoding="utf-8")
+            artifact_paths.append(path.as_posix())
+        for path in _node_delivery_inbox_file_paths(
+            root,
+            selected_node,
+            preferred_extension=_artifact_file_extension_from_body(payload),
+        ):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(payload, encoding="utf-8")
+            delivery_inbox_paths.append(path.as_posix())
+    else:
+        artifact_file_paths = [Path(item) for item in copied_source_artifacts]
+    delivery_info_path = _write_assignment_delivery_info_file(
+        root,
+        node=selected_node,
+        delivered_at=now_text,
+        operator=operator_text,
+        artifact_label=artifact_label,
+        delivery_note=delivery_note,
+        canonical_artifact_paths=artifact_paths,
+        delivery_inbox_paths=delivery_inbox_paths,
+    )
     artifact_structure_paths = _write_artifact_structure_files(
         root,
         node=selected_node,
@@ -139,8 +355,18 @@ def _deliver_assignment_artifact_locked(
             "artifact_label": artifact_label,
             "delivery_mode": str(selected_node.get("delivery_mode") or "none").strip().lower(),
             "delivery_receiver_agent_id": str(selected_node.get("delivery_receiver_agent_id") or "").strip(),
+            "delivery_target_agent_id": _node_delivery_target_agent_id(selected_node),
+            "delivery_target_agent_name": _node_delivery_target_agent_name(selected_node),
+            "delivery_inbox_dir": _node_delivery_inbox_dir(root, selected_node).as_posix(),
+            "delivery_inbox_relative_path": _node_delivery_inbox_relative_path(selected_node),
+            "delivery_inbox_paths": delivery_inbox_paths,
+            "delivery_info_path": delivery_info_path,
             "artifact_paths": artifact_paths,
             "artifact_structure_paths": artifact_structure_paths,
+            "source_workspace_cleanup": {
+                "cleaned_paths": cleaned_source_paths,
+                "cleanup_errors": cleanup_errors,
+            },
         },
         created_at=now_text,
     )
@@ -162,34 +388,51 @@ def _deliver_assignment_artifact_locked(
 
 
 def _assignment_system_running_state(root: Path, *, include_test_data: bool) -> dict[str, Any]:
+    active_run_ids = {
+        str(run_id or "").strip()
+        for run_id in _active_assignment_run_ids()
+        if str(run_id or "").strip()
+    }
+    if not active_run_ids:
+        return {
+            "running_agents": set(),
+            "running_node_count": 0,
+        }
+    now_dt = now_local()
     running_agents: set[str] = set()
-    running_node_count = 0
-    for ticket_id in _assignment_list_ticket_ids(root):
-        try:
-            task_record = _assignment_load_task_record(root, ticket_id)
-        except AssignmentCenterError:
+    running_node_keys: set[tuple[str, str]] = set()
+    for ticket_id in _assignment_list_ticket_ids_lightweight(root):
+        task_record = _assignment_load_task_record_lightweight(root, ticket_id)
+        if not task_record:
             continue
         if not _assignment_task_visible(task_record, include_test_data=include_test_data):
             continue
-        node_records = _assignment_load_node_records(root, ticket_id, include_deleted=True)
-        task_record, node_records, changed = _assignment_recompute_task_state(
-            root,
-            task_record=task_record,
-            node_records=node_records,
-            reconcile_running=True,
-        )
-        if changed:
-            _assignment_store_snapshot(root, task_record=task_record, node_records=node_records)
-        for node in _assignment_active_node_records(node_records):
-            if str(node.get("status") or "").strip().lower() != "running":
+        live_node_ids: set[str] = set()
+        for run in _assignment_load_run_records(root, ticket_id=ticket_id):
+            status = str(run.get("status") or "").strip().lower()
+            if status not in {"starting", "running"}:
                 continue
-            running_node_count += 1
+            if not _assignment_run_row_is_live(
+                run,
+                active_run_ids=active_run_ids,
+                now_dt=now_dt,
+                grace_seconds=DEFAULT_ASSIGNMENT_STALE_RUN_GRACE_SECONDS,
+            ):
+                continue
+            node_id = str(run.get("node_id") or "").strip()
+            if node_id:
+                live_node_ids.add(node_id)
+                running_node_keys.add((ticket_id, node_id))
+        if not live_node_ids:
+            continue
+        for node_id in live_node_ids:
+            node = _assignment_read_json(_assignment_node_record_path(root, ticket_id, node_id))
             agent_id = str(node.get("assigned_agent_id") or "").strip()
             if agent_id:
                 running_agents.add(agent_id)
     return {
         "running_agents": running_agents,
-        "running_node_count": running_node_count,
+        "running_node_count": len(running_node_keys),
     }
 
 
@@ -255,6 +498,7 @@ def _prepare_assignment_execution_run(
         node=serialized_node,
         upstream_nodes=upstream_nodes,
         workspace_path=workspace_path,
+        delivery_inbox_path=_node_delivery_inbox_dir(root, serialized_node),
     )
     command, command_summary = _build_assignment_execution_command(
         provider=provider,
@@ -347,6 +591,7 @@ def _finalize_assignment_execution_run(
     if not run_record:
         return
     result_ref = str(run_record.get("result_ref") or "").strip()
+    workspace_path_text = str(run_record.get("workspace_path") or "").strip()
     current_run_status = str(run_record.get("status") or "").strip().lower()
     if current_run_status == "cancelled":
         run_record["latest_event"] = _assignment_cancelled_run_final_message(run_record)
@@ -359,6 +604,10 @@ def _finalize_assignment_execution_run(
     success = int(exit_code or 0) == 0 and not str(failure_message or "").strip()
     if success:
         markdown_text = str(result_payload.get("artifact_markdown") or "").strip()
+        artifact_source_paths = _resolve_assignment_artifact_source_paths(
+            workspace_path_text,
+            list(result_payload.get("artifact_files") or []),
+        )
         delivered_graph, delivered_node, artifact_paths, _artifact_audit_id = _deliver_assignment_artifact_locked(
             root,
             ticket_id=ticket_id,
@@ -368,6 +617,8 @@ def _finalize_assignment_execution_run(
             delivery_note=str(result_payload.get("result_summary") or "").strip(),
             artifact_body=markdown_text,
             now_text=now_text,
+            artifact_source_paths=artifact_source_paths,
+            source_workspace_path=workspace_path_text,
         )
         task_record = dict(delivered_graph or task_record)
         node_records = _assignment_load_node_records(root, ticket_id, include_deleted=True)
@@ -584,6 +835,10 @@ def _assignment_execution_worker(
             errors="replace",
             bufsize=1,
         )
+        if run_record:
+            run_record["provider_pid"] = max(0, int(getattr(proc, "pid", 0) or 0))
+            run_record["updated_at"] = iso_ts(now_local())
+            _assignment_write_run_record(root, ticket_id=ticket_id, run_record=run_record)
         _register_assignment_run_process(run_id, proc)
         assert proc.stdin is not None
         proc.stdin.write(prompt_text)

@@ -8,21 +8,24 @@
      - `state/user-preferences.md`
      - `logs/runs/*.md`
 
-## OpenClaw 启动读取顺序
+## 启动读取顺序
 1. 顶层治理入口固定先读 `AGENTS.md`。
 2. 默认会话按以下顺序继续读取：
    - `.codex/SOUL.md`
    - `.codex/USER.md`
-   - `.codex/memory/2026-03-14.md`
-   - `.codex/memory/2026-03-13.md`
-3. 主会话额外读取 `.codex/MEMORY.md`。
-4. 日期滚动时，将近两天每日记忆路径替换为“当天 + 前一天”的 `.codex/memory/YYYY-MM-DD.md`。
+   - `.codex/MEMORY.md`
+   - `.codex/memory/全局记忆总览.md`
+   - `.codex/memory/YYYY-MM/记忆总览.md`
+   - `.codex/memory/YYYY-MM/YYYY-MM-DD.md`
+3. 当日日记缺失时，先在对应 `YYYY-MM/` 目录创建当日日记，再进入正式工作。
+4. 工作日切后的首轮工作，先检查“昨日记忆”是否已归档到对应 `.codex/memory/YYYY-MM/记忆总览.md`。
+5. 工作月切后的首轮工作，先检查“上月记忆总览”是否已归档到 `.codex/memory/全局记忆总览.md`。
 
 ## 三层职责边界
 - `.codex/`：agent 工作记忆、内部工作文档、本地技能入口（如 `.codex/skills/*/SKILL.md`）。
 - `state/`：产品运行态、运行数据库、会话快照与复盘态。
 - `logs/`：运行与审计留痕、执行记录、证据归档。
-- 禁止把 `.codex/MEMORY.md`、`.codex/memory/*.md` 当成产品运行态、配置文件或审计日志使用。
+- 禁止把 `.codex/MEMORY.md`、`.codex/memory/**/*.md` 当成产品运行态、配置文件或审计日志使用。
 
 ## Project Structure & Module Organization
 - `src/workflow_app/`：核心源码目录（服务端、CLI、运行时与前端模块源码）。
@@ -75,6 +78,12 @@
 - `Need Hypotheses` 使用固定格式：`Observation -> Inference -> Validation Action -> Confidence(High/Med/Low)`。
 - 需求揣测采用“行为心理线索 + JTBD”方法：从措辞、催促频率、验收关注点推断深层目标，再通过下一轮需求确认闭环。
 - 禁止把推测当事实；任何心理层推断都要在后续对话中显式求证并允许用户否定。
+- `.codex/MEMORY.md` 只维护记忆规范；禁止把具体轮次总结直接写进该文件。
+- `.codex/memory/全局记忆总览.md` 只归档已闭月的月度总结；当前活动月份只保留索引，不复制当月当日增量。
+- `.codex/memory/YYYY-MM/记忆总览.md` 只归档截至昨日的日级摘要；今日总结仅写入当日日记，待日切后再汇总。
+- 每轮工作结束后，都要向 `.codex/memory/YYYY-MM/YYYY-MM-DD.md` 追加一条带时间戳的本轮总结。
+- 若发生日切但月未切，先补齐“昨日 -> 月度总览”的归档检查，再继续工作。
+- 若发生月切，先补齐“昨日 -> 对应月度总览”与“上月总览 -> 全局总览”的归档检查，再继续工作。
 
 ### Snapshot Addendum Template
 ```md
@@ -82,6 +91,7 @@
 - delta_observation: <本次新增观察>
 - delta_validation: <下一轮验证动作>
 ```
-
+
+
 
 4. 在正式发布成功后同步绑定角色详情来源。

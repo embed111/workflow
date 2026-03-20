@@ -18,9 +18,11 @@
    - `.codex/MEMORY.md`
    - `.codex/TOOLS.md`
    - `.codex/HEARTBEAT.md`
-   - `.codex/memory/`
+   - `.codex/memory/全局记忆总览.md`
+   - `.codex/memory/YYYY-MM/记忆总览.md`
+   - `.codex/memory/YYYY-MM/YYYY-MM-DD.md`
    - `.codex/skills/`
-3. 更新 `AGENTS.md`，补齐 OpenClaw 风格读取顺序。
+3. 更新 `AGENTS.md`，补齐 OpenClaw 风格读取顺序与日切/月切归档规则。
 4. 明确 `.codex/*`、`state/*`、`logs/*` 的职责边界。
 5. 保证现有 `workflow` 运行链路不受损。
 
@@ -29,10 +31,14 @@
 2. 更新 `AGENTS.md`，加入：
    - `.codex/SOUL.md`
    - `.codex/USER.md`
-   - 近两天 `.codex/memory/YYYY-MM-DD.md`
-   - 主会话额外读取 `.codex/MEMORY.md`
+   - `.codex/MEMORY.md`
+   - `.codex/memory/全局记忆总览.md`
+   - `.codex/memory/YYYY-MM/记忆总览.md`
+   - `.codex/memory/YYYY-MM/YYYY-MM-DD.md`
+   - 日切与月切归档检查规则
 3. 校验当前代码与文档里所有 `.codex/skills/` 的正式入口口径与真实目录一致。
-4. 做最小运行回归，证明本轮改造未破坏启动或关键链路。
+4. 补一套 memory 校验能力，证明本轮改造不是纯文档约定。
+5. 做最小运行回归，证明本轮改造未破坏启动或关键链路。
 
 ## 禁止事项
 1. 不要重构 `src/`、`scripts/`、`docs/workflow/` 的业务结构。
@@ -44,4 +50,5 @@
 2. `AGENTS.md` 更新说明。
 3. 启动读取验证证据。
 4. 每日记忆写入验证证据。
-5. 最小运行回归结果。
+5. 日切/月切归档检查证据。
+6. 最小运行回归结果。
