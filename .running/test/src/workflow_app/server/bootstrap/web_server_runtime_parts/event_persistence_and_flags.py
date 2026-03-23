@@ -468,6 +468,7 @@ from ..services import task_orchestration as _task_orchestration
 from ..services import chat_session_runtime as _chat_session_runtime
 from ..services import training_workflow as _training_workflow
 from ..services import assignment_service as _assignment_service
+from ..services import schedule_service as _schedule_service
 from ..services import defect_service as _defect_service
 from ..infra import audit_runtime as _audit_runtime
 
@@ -479,6 +480,7 @@ _RUNTIME_DOMAIN_MODULES = (
     _chat_session_runtime,
     _training_workflow,
     _assignment_service,
+    _schedule_service,
     _defect_service,
     _audit_runtime,
 )
@@ -924,6 +926,7 @@ def main() -> None:
             append_failure_case(cfg.root, "startup_testdata_cleanup_failed", str(exc))
             append_change_log(cfg.root, "startup test-data cleanup failed", str(exc))
     scheduler = start_reconcile_scheduler(cfg, state)
+    schedule_worker = start_schedule_trigger_worker(cfg, state)
     setattr(state, "_runtime_shutdown_code", 0)
     setattr(state, "_runtime_shutdown_reason", "")
     QuietDisconnectHTTPServer.allow_reuse_address = True
@@ -938,6 +941,7 @@ def main() -> None:
     finally:
         state.stop_event.set()
         scheduler.join(timeout=3)
+        schedule_worker.join(timeout=3)
         server.server_close()
         runtime_upgrade.runtime_process_stop()
     exit_code = runtime_upgrade.requested_shutdown_code(state)

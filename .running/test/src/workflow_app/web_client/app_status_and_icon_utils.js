@@ -208,6 +208,19 @@
     assignmentDrawerError: '',
     assignmentGraphRequestSeq: 0,
     assignmentDetailRequestSeq: 0,
+    schedulePlans: [],
+    scheduleSelectedId: '',
+    scheduleDetail: null,
+    scheduleLoading: false,
+    scheduleError: '',
+    scheduleView: 'list',
+    scheduleCalendar: null,
+    scheduleCalendarMonth: '',
+    scheduleCalendarSelectedDate: '',
+    scheduleCalendarLoading: false,
+    scheduleEditorOpen: false,
+    scheduleEditorMode: 'create',
+    scheduleEditorError: '',
   };
 
   function safe(value) {
@@ -222,6 +235,7 @@
       key === 'training' ||
       key === 'training-center' ||
       key === 'task-center' ||
+      key === 'schedule-center' ||
       key === 'requirement-bug' ||
       key === 'settings'
     ) {

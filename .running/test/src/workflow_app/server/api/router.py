@@ -2,7 +2,7 @@
 
 from urllib.parse import parse_qs, urlparse
 
-from . import assignments, chat, config, dashboard, defects, legacy, policy, runtime_upgrade, training
+from . import assignments, chat, config, dashboard, defects, legacy, policy, runtime_upgrade, schedules, training
 
 
 def dispatch_get(handler, cfg, state) -> None:
@@ -30,6 +30,8 @@ def dispatch_get(handler, cfg, state) -> None:
     if training.try_handle_get(handler, cfg, state, ctx):
         return
     if assignments.try_handle_get(handler, cfg, state, ctx):
+        return
+    if schedules.try_handle_get(handler, cfg, state, ctx):
         return
     if defects.try_handle_get(handler, cfg, state, ctx):
         return
@@ -68,6 +70,8 @@ def dispatch_post(handler, cfg, state) -> None:
         return
     if assignments.try_handle_post(handler, cfg, state, ctx):
         return
+    if schedules.try_handle_post(handler, cfg, state, ctx):
+        return
     if defects.try_handle_post(handler, cfg, state, ctx):
         return
     if policy.try_handle_post(handler, cfg, state, ctx):
@@ -94,6 +98,8 @@ def dispatch_delete(handler, cfg, state) -> None:
     if training.try_handle_delete(handler, cfg, state, ctx):
         return
     if assignments.try_handle_delete(handler, cfg, state, ctx):
+        return
+    if schedules.try_handle_delete(handler, cfg, state, ctx):
         return
 
     handler.send_json(404, {"ok": False, "error": "not found"})

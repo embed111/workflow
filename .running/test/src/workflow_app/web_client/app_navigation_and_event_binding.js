@@ -36,6 +36,18 @@
         setAssignmentError(err.message || String(err));
       });
     }
+    if (tabName === 'schedule-center') {
+      if (!state.agentSearchRootReady) {
+        renderScheduleCenter();
+        return;
+      }
+      refreshSchedulePlans({ preserveSelection: true }).catch((err) => {
+        setScheduleError(err.message || String(err));
+      });
+      refreshScheduleCalendar(state.scheduleCalendarMonth || '').catch((err) => {
+        setScheduleError(err.message || String(err));
+      });
+    }
     if (tabName === 'requirement-bug') {
       renderDefectCenter();
       refreshDefectList({ preserveSelection: true }).catch((err) => {
@@ -50,6 +62,9 @@
 
   function bindEvents() {
     bindAssignmentCenterEvents();
+    if (typeof bindScheduleCenterEvents === 'function') {
+      bindScheduleCenterEvents();
+    }
     if (typeof bindDefectCenterEvents === 'function') {
       bindDefectCenterEvents();
     }

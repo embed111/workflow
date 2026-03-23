@@ -96,6 +96,35 @@ def wait_for_health(base_url: str, timeout_s: float = 45.0) -> dict[str, Any]:
     raise RuntimeError("healthz timeout")
 
 
+def wait_for_role_creation_idle(base_url: str, session_id: str, timeout_s: float = 120.0) -> dict[str, Any]:
+    deadline = time.time() + timeout_s
+    last_payload: dict[str, Any] = {}
+    while time.time() < deadline:
+        status, data = api_request(base_url, "GET", f"/api/training/role-creation/sessions/{session_id}")
+        if status == 200 and isinstance(data, dict) and data.get("ok"):
+            last_payload = data
+            session = data.get("session") or {}
+            queue_status = str(session.get("message_processing_status") or "").strip().lower()
+            try:
+                unhandled = int(session.get("unhandled_user_message_count") or 0)
+            except Exception:
+                unhandled = 0
+            if queue_status in {"", "idle"} and unhandled <= 0:
+                return data
+        time.sleep(1)
+    raise RuntimeError(
+        "role creation idle timeout: "
+        + json.dumps(
+            {
+                "session_id": session_id,
+                "last_status": (last_payload.get("session") or {}).get("message_processing_status"),
+                "last_unhandled": (last_payload.get("session") or {}).get("unhandled_user_message_count"),
+            },
+            ensure_ascii=False,
+        )
+    )
+
+
 def find_edge() -> Path:
     candidates = [
         Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
@@ -532,6 +561,17 @@ def main() -> int:
                 status=status,
                 body=main_message,
             )
+            main_message_ready = wait_for_role_creation_idle(base_url, main_session_id)
+            evidence["api"]["main_message_idle"] = record_api(
+                api_dir,
+                stage="main",
+                name="message_idle",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{main_session_id}",
+                payload=None,
+                status=200,
+                body=main_message_ready,
+            )
 
             main_start_payload = {"operator": operator}
             status, main_start = api_request(
@@ -592,13 +632,24 @@ def main() -> int:
                 status=status,
                 body=main_delegate,
             )
-            main_delegate_task_ids = sorted(set(role_task_ids(main_delegate)) - main_task_ids_before_delegate)
+            main_delegate_ready = wait_for_role_creation_idle(base_url, main_session_id)
+            evidence["api"]["main_explicit_delegate_idle"] = record_api(
+                api_dir,
+                stage="main",
+                name="explicit_delegate_idle",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{main_session_id}",
+                payload=None,
+                status=200,
+                body=main_delegate_ready,
+            )
+            main_delegate_task_ids = sorted(set(role_task_ids(main_delegate_ready)) - main_task_ids_before_delegate)
             assert_true(bool(main_delegate_task_ids), "main delegate task ids missing")
             main_delegate_task_id = main_delegate_task_ids[0]
 
             main_stage_task_ids = [
                 str(item.get("node_id") or "").strip()
-                for stage in list(main_delegate.get("stages") or [])
+                for stage in list(main_delegate_ready.get("stages") or [])
                 for item in list(stage.get("active_tasks") or [])
                 if str(item.get("node_id") or "").strip()
             ]
@@ -659,6 +710,17 @@ def main() -> int:
                 status=status,
                 body=archive_message,
             )
+            archive_message_ready = wait_for_role_creation_idle(base_url, archive_session_id)
+            evidence["api"]["archive_message_idle"] = record_api(
+                api_dir,
+                stage="archive",
+                name="message_idle",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{archive_session_id}",
+                payload=None,
+                status=200,
+                body=archive_message_ready,
+            )
 
             status, archive_start = api_request(
                 base_url,
@@ -697,8 +759,19 @@ def main() -> int:
                 status=status,
                 body=archive_delegate,
             )
-            archive_new_ids = sorted(set(role_task_ids(archive_delegate)) - archive_before_ids)
-            archive_task_id = archive_new_ids[0] if archive_new_ids else role_stage_task_ids(archive_delegate, "review_and_alignment")[0]
+            archive_delegate_ready = wait_for_role_creation_idle(base_url, archive_session_id)
+            evidence["api"]["archive_explicit_delegate_idle"] = record_api(
+                api_dir,
+                stage="archive",
+                name="explicit_delegate_idle",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{archive_session_id}",
+                payload=None,
+                status=200,
+                body=archive_delegate_ready,
+            )
+            archive_new_ids = sorted(set(role_task_ids(archive_delegate_ready)) - archive_before_ids)
+            archive_task_id = archive_new_ids[0] if archive_new_ids else role_stage_task_ids(archive_delegate_ready, "review_and_alignment")[0]
             archive_api_payload = {"close_reason": "主线方案已足够，先收口到废案", "operator": operator}
             status, archive_result = api_request(
                 base_url,
@@ -761,6 +834,17 @@ def main() -> int:
                 payload=high_message_payload,
                 status=status,
                 body=high_message,
+            )
+            high_message_ready = wait_for_role_creation_idle(base_url, high_session_id)
+            evidence["api"]["high_load_message_idle"] = record_api(
+                api_dir,
+                stage="high",
+                name="message_idle",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{high_session_id}",
+                payload=None,
+                status=200,
+                body=high_message_ready,
             )
 
             status, high_start = api_request(
@@ -892,7 +976,7 @@ def main() -> int:
             }
 
             stage_meta = dict(main_detail_started.get("stage_meta") or {})
-            main_profile = dict(main_message.get("profile") or {})
+            main_profile = dict(main_message_ready.get("profile") or {})
             evidence["assertions"]["current_stage_api"] = {
                 "session_id": main_session_id,
                 "current_stage_key": str((main_detail_started.get("session") or {}).get("current_stage_key") or ""),
@@ -902,7 +986,7 @@ def main() -> int:
                 "session_id": main_session_id,
                 "role_name": str(main_profile.get("role_name") or ""),
                 "core_capabilities": list(main_profile.get("core_capabilities") or []),
-                "message_api": evidence["api"]["main_message_with_image"],
+                "message_api": evidence["api"]["main_message_idle"],
             }
             evidence["assertions"]["delegate_task_api"] = {
                 "session_id": main_session_id,

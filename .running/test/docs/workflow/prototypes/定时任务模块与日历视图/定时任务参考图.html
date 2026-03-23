@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>定时任务参考图</title>
+  <style>
+    :root{--bg:#f5f6f8;--panel:#fff;--soft:#f7f8fa;--line:#dde1e6;--text:#1f2329;--muted:#646a73;--blue:#4f7cff;--blueSoft:#edf3ff;--green:#1f9d6a;--greenSoft:#eef8f3;--orangeSoft:#fff4e8;--redSoft:#fff3f1;--shadow:none;--rail:232px}
+    *{box-sizing:border-box} html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font:13px/1.5 "PingFang SC","Microsoft YaHei",sans-serif}
+    button,input{font:inherit} button{border:none;border-radius:7px;padding:5px 12px;background:var(--blue);color:#fff;font-size:12px;line-height:1.2;min-height:28px}
+    .header-btn{padding:2px 10px;min-height:22px;line-height:1.05;border-radius:6px}
+    .btn-secondary{background:#fff;color:#1f2329;border:1px solid var(--line)} .btn-danger{background:#fff7f6;color:#b42318;border:1px solid #f2c6c1}
+    .app{display:grid;grid-template-columns:var(--rail) minmax(0,1fr);gap:10px;height:100vh;padding:10px}
+    .rail,.window,.panel{border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:none}
+    .rail{padding:12px;display:grid;grid-template-rows:auto 1fr;gap:10px}.brand{border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px 12px;font-weight:700}
+    .nav{display:flex;flex-direction:column;gap:8px}.nav-item{border:1px solid var(--line);border-radius:8px;background:#fff;padding:8px 12px;color:#4e5969}.nav-item.active{background:var(--blueSoft);border-color:#c8d9ff;color:#245bdb;font-weight:700}
+    .workspace,.window{min-width:0;min-height:0;overflow:hidden}.window{display:flex;flex-direction:column;height:100%}
+    .head{display:flex;justify-content:space-between;gap:12px;padding:14px 16px 12px;border-bottom:1px solid var(--line)} .title{font-size:20px;font-weight:700}.note{margin-top:4px;font-size:12px;color:var(--muted)}
+    .actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}.tools{display:flex;align-items:center;gap:8px}.tag,.pill,.rule{display:inline-flex;align-items:center;border-radius:999px;padding:4px 10px;font-size:12px;white-space:nowrap}
+    .tag{border:1px solid var(--line);background:#fff;color:var(--muted)} .pill.ok{background:var(--greenSoft);color:#067647}.pill.pause{background:var(--orangeSoft);color:#b54708}.pill.fail{background:var(--redSoft);color:#b42318}.pill.wait{background:var(--blueSoft);color:#245bdb}.rule{border:1px solid #eaedf2;background:#f3f4f7;color:#445064}
+    .icon-btn{display:inline-flex;align-items:center;justify-content:center;width:24px;min-width:24px;height:24px;min-height:24px;padding:0;border:1px solid #d7e6ff;border-radius:7px;background:var(--blueSoft);color:#245bdb}
+    .icon-btn svg{width:12px;height:12px;display:block}
+    .tabs{display:flex;gap:8px;padding:10px 16px 0}.tab{border:1px solid var(--line);border-radius:999px;padding:6px 12px;background:var(--soft);color:#4e5969;font-weight:600;cursor:pointer}.tab.active{background:var(--blueSoft);border-color:#c8d9ff;color:#245bdb}
+    .view{display:none;flex:1;min-height:0;padding:10px}.view.active{display:block}
+    .list-layout{height:100%;display:grid;grid-template-columns:320px minmax(0,1fr);gap:10px}.calendar-layout{height:100%;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:10px}
+    .panel{display:flex;flex-direction:column;min-height:0}.panel-head{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)} .panel-title{font-size:15px;font-weight:700}
+    .body{flex:1;min-height:0;overflow:auto;padding:12px}.search{display:flex;gap:8px;margin-bottom:12px}.search input{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+    .cards{display:flex;flex-direction:column;gap:10px}.card{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fff}.card.active{border-color:#b9d0ff;background:#f4f7ff}
+    .top,.row{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.name{font-size:15px;font-weight:700}.desc,.muted{font-size:12px;color:var(--muted)}
+    .rules{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}.cell{border:1px solid var(--line);border-radius:8px;background:var(--soft);padding:8px 10px}.label{font-size:11px;color:var(--muted);text-transform:uppercase}.value{margin-top:4px;font-weight:600}
+    .stack{display:flex;flex-direction:column;gap:12px}.hero,.block{border:1px solid var(--line);border-radius:10px;background:#fff;padding:12px}.hero{background:#fff} .hero-main{display:grid;grid-template-columns:1.2fr 1fr;gap:10px;margin-top:12px}
+    .kv{display:grid;gap:8px}.kv-item{display:flex;justify-content:space-between;gap:12px;border-bottom:1px dashed #edf0f4;padding-bottom:7px}.kv-item:last-child{border-bottom:none;padding-bottom:0}.section{font-size:13px;font-weight:700;margin-bottom:10px}
+    .list{display:flex;flex-direction:column;gap:8px}.item{border:1px solid var(--line);border-radius:8px;background:var(--soft);padding:9px 10px}
+    .todo{margin:8px 0 0;padding-left:18px;color:var(--text)} .todo li{margin:6px 0}
+    .calendar-head{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)} .legend{display:flex;flex-wrap:wrap;gap:8px}.legend span{font-size:12px;color:var(--muted)}
+    .month-tools{display:flex;align-items:center;gap:10px}.nav-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;min-width:28px;height:28px;min-height:28px;padding:0;border:1px solid var(--line);border-radius:8px;background:#fff;color:#4e5969}
+    .nav-btn svg{width:12px;height:12px;display:block}
+    .calendar{flex:1;min-height:0;overflow:auto;padding:12px;background:var(--soft)} .week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;min-width:840px}.weekday{font-size:12px;color:var(--muted);font-weight:600;padding:4px 2px 6px}
+    .day{min-height:126px;border:1px solid var(--line);border-radius:10px;background:#fff;padding:10px;display:flex;flex-direction:column;gap:8px}.day.active{border-color:#b9d0ff;background:#f8fbff}
+    .day-top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}.date{font-size:14px;font-weight:700}.events{display:flex;flex-direction:column;gap:6px}.event{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:11px;line-height:1.35}.event.plan{border-style:dashed;color:#445064}.event.run{background:var(--blueSoft);border-color:#c9ddff;color:#245bdb}.event.ok{background:var(--greenSoft);border-color:#ccefe2;color:#067647}.event.fail{background:var(--redSoft);border-color:#f2cbc6;color:#b42318}
+    .hint{margin-top:10px;font-size:12px;color:var(--muted)}
+    @media (max-width:1180px){.list-layout,.calendar-layout,.hero-main{grid-template-columns:1fr}} @media (max-width:900px){.app{grid-template-columns:1fr}.rail{display:none}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="rail">
+      <div class="brand">workflow</div>
+      <div class="nav">
+        <div class="nav-item">对话</div>
+        <div class="nav-item">工作记录与训练</div>
+        <div class="nav-item">训练中心</div>
+        <div class="nav-item">任务中心</div>
+        <div class="nav-item active">定时任务</div>
+        <div class="nav-item">需求与缺陷</div>
+        <div class="nav-item">设置</div>
+      </div>
+    </aside>
+    <main class="workspace">
+      <section class="window">
+        <div class="head">
+          <div>
+            <div class="title">定时任务</div>
+            <div class="note">首期只负责计划配置、命中建单和结果查看。真实执行继续走任务中心，不在这里复制第二套执行链。</div>
+          </div>
+        </div>
+        <div class="tabs">
+          <div class="tab active" data-tab="list">列表视角</div>
+          <div class="tab" data-tab="calendar">日历视角</div>
+        </div>
+
+        <section class="view active" id="view-list">
+          <div class="list-layout">
+            <section class="panel">
+              <div class="panel-head"><div class="panel-title">定时任务列表</div><div class="tools"><span class="tag">4 条计划</span><button class="icon-btn" aria-label="新建定时任务"><svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 3.333v9.334M3.333 8h9.334" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></div></div>
+              <div class="body">
+                <div class="search"><input value="搜索计划名 / Agent / 发起内容" readonly><button class="btn-secondary">全部</button></div>
+                <div class="cards">
+                  <article class="card active">
+                    <div class="top"><div><div class="name">版本发布预检</div><div class="desc">核对发布前置条件，输出“可发布 / 阻塞项 / 处理建议”结论。</div></div><span class="pill ok">启用中</span></div>
+                    <div class="rules"><span class="rule">每月 1 号 09:00</span><span class="rule">每周三 09:00</span><span class="rule">每日 18:00</span><span class="rule">定时 2026-04-01 09:00</span></div>
+                    <div class="grid"><div class="cell"><div class="label">下一次触发</div><div class="value">04-01 09:00</div></div><div class="cell"><div class="label">最近结果</div><div class="value">已成功 / ASG-2981</div></div></div>
+                  </article>
+                  <article class="card">
+                    <div class="top"><div><div class="name">每日运行巡检</div><div class="desc">巡检积压任务、失败任务和异常告警，并回写处理建议。</div></div><span class="pill ok">启用中</span></div>
+                    <div class="rules"><span class="rule">每日 09:00</span><span class="rule">每日 18:00</span></div>
+                    <div class="grid"><div class="cell"><div class="label">下一次触发</div><div class="value">今天 18:00</div></div><div class="cell"><div class="label">最近结果</div><div class="value">运行中 / ASG-3017</div></div></div>
+                  </article>
+                  <article class="card">
+                    <div class="top"><div><div class="name">周报生成与归档</div><div class="desc">固定生成周报，并投递给指定交付人。</div></div><span class="pill pause">已停用</span></div>
+                    <div class="rules"><span class="rule">每周一 10:00</span><span class="rule">每周五 17:30</span></div>
+                    <div class="grid"><div class="cell"><div class="label">下一次触发</div><div class="value">停用中</div></div><div class="cell"><div class="label">最近结果</div><div class="value">已成功 / ASG-2964</div></div></div>
+                  </article>
+                  <article class="card">
+                    <div class="top"><div><div class="name">月末账单复核</div><div class="desc">月末固定复核，失败时保留完整复盘。</div></div><span class="pill fail">最近失败</span></div>
+                    <div class="rules"><span class="rule">每月 28 号 16:00</span><span class="rule">定时 2026-04-30 20:00</span></div>
+                    <div class="grid"><div class="cell"><div class="label">下一次触发</div><div class="value">04-28 16:00</div></div><div class="cell"><div class="label">最近结果</div><div class="value">已失败 / ASG-2950</div></div></div>
+                  </article>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head"><div class="panel-title">计划详情</div><span class="tag">source_schedule_id: SCH-041</span></div>
+              <div class="body stack">
+                <section class="hero">
+                  <div class="top"><div><div class="name">版本发布预检</div><div class="desc">计划命中后，发起一条带完整检查清单和交付要求的任务中心实例。</div></div><span class="pill ok">启用中</span></div>
+                  <div class="actions" style="justify-content:flex-start;margin-top:10px">
+                    <button class="btn-secondary">编辑计划</button>
+                    <button class="btn-secondary">停用计划</button>
+                    <button class="btn-secondary">查看任务中心实例</button>
+                    <button class="btn-danger">删除计划</button>
+                  </div>
+                  <div class="hero-main">
+                    <div class="kv">
+                      <div class="kv-item"><span class="muted">执行 Agent</span><strong>workflow-agent</strong></div>
+                      <div class="kv-item"><span class="muted">优先级</span><strong>P1</strong></div>
+                      <div class="kv-item"><span class="muted">任务实例名</span><strong>版本发布预检 / {{planned_at}}</strong></div>
+                      <div class="kv-item"><span class="muted">发起摘要</span><strong>核对发布前置条件，输出可发布结论并同步给发布负责人。</strong></div>
+                    </div>
+                    <div class="kv">
+                      <div class="kv-item"><span class="muted">下一次触发</span><strong>2026-04-01 09:00</strong></div>
+                      <div class="kv-item"><span class="muted">最近一次触发</span><strong>2026-03-20 09:00</strong></div>
+                      <div class="kv-item"><span class="muted">最近结果</span><strong>已成功 / ASG-2981</strong></div>
+                      <div class="kv-item"><span class="muted">规则组合</span><strong>每月 + 每周 + 每日 + 定时</strong></div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="block">
+                  <div class="section">发起任务内容预览</div>
+                  <div class="list">
+                    <div class="item"><strong>本次目标</strong><div class="muted">核对 4 月版本发布前的分支、环境、调度与回滚准备情况，给出“可发布 / 阻塞项 / 处理建议”结论。</div></div>
+                    <div class="item"><strong>执行清单</strong><ol class="todo"><li>核对发布分支、目标版本、发布时间与变更单是否一致。</li><li>检查预发 / 生产环境、数据库迁移、回滚包和关键配置是否就绪。</li><li>检查任务中心中与本次发布相关的依赖任务、失败记录和阻塞状态。</li><li>输出结论摘要、阻塞项和处理建议，并回写任务中心实例。</li></ol></div>
+                    <div class="item"><strong>完成标准</strong><div class="muted">任务中心实例中至少沉淀结论摘要、风险清单、相关链接和通知对象，发布负责人能直接据此决策。</div></div>
+                  </div>
+                </section>
+
+                <section class="block">
+                  <div class="section">触发规则</div>
+                  <div class="rules"><span class="rule">每月 1 号 09:00</span><span class="rule">每周三 09:00</span><span class="rule">每日 18:00</span><span class="rule">定时 2026-04-01 09:00</span></div>
+                  <div class="hint">规则可以混合启用，执行结果仍以任务中心为准。</div>
+                </section>
+
+                <section class="block">
+                  <div class="section">未来触发</div>
+                  <div class="list">
+                    <div class="item"><strong>2026-04-01 09:00</strong><div class="muted">命中来源：每月 + 每周 + 定时。</div></div>
+                    <div class="item"><strong>2026-04-01 18:00</strong><div class="muted">每日规则命中，创建新的晚间实例。</div></div>
+                    <div class="item"><strong>2026-04-08 09:00</strong><div class="muted">每周三规则命中。</div></div>
+                  </div>
+                </section>
+
+                <section class="block">
+                  <div class="section">最近执行结果</div>
+                  <div class="list">
+                    <div class="item"><strong>2026-03-20 09:00 · 已成功</strong><div class="muted">任务中心实例: ASG-2981 · 创建并运行成功，结果已回写。</div></div>
+                    <div class="item"><strong>2026-03-19 18:00 · 已建单待调度</strong><div class="muted">任务中心实例: ASG-2974 · 命中时目标 agent 正忙，稍后由任务中心继续调度。</div></div>
+                    <div class="item"><strong>2026-03-12 09:00 · 已失败</strong><div class="muted">任务中心实例: ASG-2890 · 运行中校验失败，完整链路保留在任务中心。</div></div>
+                  </div>
+                </section>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-calendar">
+          <div class="calendar-layout">
+            <section class="panel">
+              <div class="calendar-head">
+                <div class="month-tools">
+                  <button class="nav-btn" id="prev-month" aria-label="上个月"><svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.5 3.5 5 8l4.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                  <div><div class="panel-title" id="calendar-month-label">2026 年 4 月</div><div class="muted">日历同时展示“计划”与“实际结果”，避免只知道应该跑、不知道有没有真的跑。</div></div>
+                  <button class="nav-btn" id="next-month" aria-label="下个月"><svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6.5 3.5 11 8l-4.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                </div>
+                <div class="legend"><span>虚线: 计划</span><span>蓝色: 运行中</span><span>绿色: 成功</span><span>红色: 失败</span></div>
+              </div>
+              <div class="calendar">
+                <div class="week" id="calendar-grid"></div>
+              </div>
+            </section>
+
+            <aside class="panel">
+              <div class="panel-head"><div class="panel-title">日历侧详情</div><span class="tag" id="calendar-detail-date">2026-04-01</span></div>
+              <div class="body stack">
+                <section class="block">
+                  <div class="name" id="calendar-detail-title">04-01 · 版本发布预检</div>
+                  <div class="hint" id="calendar-detail-hint">09:00 命中后会发起一条“版本发布预检”实例，实例内会带上检查清单、交付要求和完成标准。</div>
+                  <div class="actions" style="justify-content:flex-start;margin-top:10px">
+                    <button class="btn-secondary">编辑计划</button>
+                    <button class="btn-secondary">查看任务中心实例</button>
+                  </div>
+                </section>
+                <section class="block">
+                  <div class="section">发起内容预览</div>
+                  <div class="list">
+                    <div class="item"><strong>本次目标</strong><div class="muted" id="calendar-preview-goal">核对发布前置条件并输出可发布结论。</div></div>
+                    <div class="item"><strong>关键动作</strong><div class="muted" id="calendar-preview-actions">分支核对、环境检查、阻塞任务核查、风险回写。</div></div>
+                  </div>
+                </section>
+                <section class="block">
+                  <div class="section">当日计划</div>
+                  <div class="list" id="calendar-plan-list"></div>
+                </section>
+                <section class="block">
+                  <div class="section">实际结果</div>
+                  <div class="list" id="calendar-result-list"></div>
+                </section>
+              </div>
+            </aside>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+  <script>
+    const tabs=document.querySelectorAll('.tab');const views={list:document.getElementById('view-list'),calendar:document.getElementById('view-calendar')};
+    tabs.forEach(tab=>tab.onclick=()=>{tabs.forEach(t=>t.classList.remove('active'));Object.values(views).forEach(v=>v.classList.remove('active'));tab.classList.add('active');views[tab.dataset.tab].classList.add('active')});
+
+    const calendarMonths=[
+      {
+        title:'2026 年 4 月',
+        detailDate:'2026-04-01',
+        detailTitle:'04-01 · 版本发布预检',
+        detailHint:'09:00 命中后会发起一条“版本发布预检”实例，实例内会带上检查清单、交付要求和完成标准。',
+        previewGoal:'核对发布前置条件并输出可发布结论。',
+        previewActions:'分支核对、环境检查、阻塞任务核查、风险回写。',
+        plans:[
+          {title:'09:00 · 版本发布预检',desc:'命中来源：每月 + 每周 + 定时'},
+          {title:'18:00 · 版本发布预检',desc:'命中来源：每日规则'}
+        ],
+        results:[
+          {title:'ASG-3021 · 已成功',desc:'09:00 建单并运行成功，结果已回写到任务中心。'},
+          {title:'ASG-3028 · 待晚间触发',desc:'18:00 尚未到达计划时间。'}
+        ],
+        days:[
+          {date:'30',meta:'3 月',events:[]},
+          {date:'31',meta:'3 月',events:[]},
+          {date:'1',meta:'周三',active:true,events:[{cls:'plan',text:'09:00 版本发布预检（计划）'},{cls:'ok',text:'09:00 已成功 · ASG-3021'},{cls:'plan',text:'18:00 版本发布预检（每日规则）'}]},
+          {date:'2',meta:'周四',events:[{cls:'run',text:'09:00 每日运行巡检 · 运行中'}]},
+          {date:'3',meta:'周五',events:[{cls:'plan',text:'17:30 周报生成与归档（计划）'}]},
+          {date:'4',meta:'周六',events:[]},
+          {date:'5',meta:'周日',events:[]},
+          {date:'6',meta:'周一',events:[{cls:'ok',text:'10:00 周报生成与归档 · 已成功'}]},
+          {date:'7',meta:'周二',events:[]},
+          {date:'8',meta:'周三',events:[{cls:'plan',text:'09:00 版本发布预检（计划）'}]},
+          {date:'9',meta:'周四',events:[]},
+          {date:'10',meta:'周五',events:[{cls:'fail',text:'16:00 月末账单复核 · 已失败'}]},
+          {date:'11',meta:'周六',events:[]},
+          {date:'12',meta:'周日',events:[]}
+        ]
+      },
+      {
+        title:'2026 年 5 月',
+        detailDate:'2026-05-06',
+        detailTitle:'05-06 · 月末账单复核',
+        detailHint:'切到 5 月后，日历继续按月展示计划与结果；当前选中的是一次账单复核失败记录。',
+        previewGoal:'复核 4 月账单、核对差异项，并给出是否允许结算的结论。',
+        previewActions:'账单比对、异常项定位、差异说明、结算建议回写。',
+        plans:[
+          {title:'16:00 · 月末账单复核',desc:'命中来源：每月规则'},
+          {title:'20:00 · 月末账单复核',desc:'命中来源：定时规则'}
+        ],
+        results:[
+          {title:'ASG-3091 · 已失败',desc:'16:00 发现账单差异，已阻塞结算并回写复核意见。'},
+          {title:'ASG-3098 · 待补充',desc:'20:00 定时复核待负责人补充凭证后再继续。'}
+        ],
+        days:[
+          {date:'27',meta:'4 月',events:[]},
+          {date:'28',meta:'4 月',events:[{cls:'plan',text:'16:00 月末账单复核（计划）'}]},
+          {date:'29',meta:'4 月',events:[]},
+          {date:'30',meta:'4 月',events:[{cls:'ok',text:'20:00 版本发布预检 · 已成功'}]},
+          {date:'1',meta:'周五',events:[{cls:'plan',text:'09:00 每日运行巡检（计划）'}]},
+          {date:'2',meta:'周六',events:[]},
+          {date:'3',meta:'周日',events:[]},
+          {date:'4',meta:'周一',events:[{cls:'ok',text:'10:00 周报生成与归档 · 已成功'}]},
+          {date:'5',meta:'周二',events:[{cls:'plan',text:'18:00 每日运行巡检（计划）'}]},
+          {date:'6',meta:'周三',active:true,events:[{cls:'fail',text:'16:00 月末账单复核 · 已失败'},{cls:'plan',text:'20:00 月末账单复核（定时）'}]},
+          {date:'7',meta:'周四',events:[{cls:'run',text:'09:00 每日运行巡检 · 运行中'}]},
+          {date:'8',meta:'周五',events:[]},
+          {date:'9',meta:'周六',events:[]},
+          {date:'10',meta:'周日',events:[]}
+        ]
+      }
+    ];
+
+    const calendarGrid=document.getElementById('calendar-grid');
+    const calendarMonthLabel=document.getElementById('calendar-month-label');
+    const calendarDetailDate=document.getElementById('calendar-detail-date');
+    const calendarDetailTitle=document.getElementById('calendar-detail-title');
+    const calendarDetailHint=document.getElementById('calendar-detail-hint');
+    const calendarPreviewGoal=document.getElementById('calendar-preview-goal');
+    const calendarPreviewActions=document.getElementById('calendar-preview-actions');
+    const calendarPlanList=document.getElementById('calendar-plan-list');
+    const calendarResultList=document.getElementById('calendar-result-list');
+    const prevMonthButton=document.getElementById('prev-month');
+    const nextMonthButton=document.getElementById('next-month');
+    let calendarMonthIndex=0;
+
+    function renderCalendarMonth(index){
+      const month=calendarMonths[index];
+      calendarMonthLabel.textContent=month.title;
+      calendarDetailDate.textContent=month.detailDate;
+      calendarDetailTitle.textContent=month.detailTitle;
+      calendarDetailHint.textContent=month.detailHint;
+      calendarPreviewGoal.textContent=month.previewGoal;
+      calendarPreviewActions.textContent=month.previewActions;
+
+      calendarGrid.innerHTML=[
+        '<div class="weekday">周一</div><div class="weekday">周二</div><div class="weekday">周三</div><div class="weekday">周四</div><div class="weekday">周五</div><div class="weekday">周六</div><div class="weekday">周日</div>',
+        ...month.days.map(day=>`<div class="day${day.active?' active':''}"><div class="day-top"><span class="date">${day.date}</span><span class="muted">${day.meta}</span></div><div class="events">${day.events.map(event=>`<div class="event ${event.cls}">${event.text}</div>`).join('')}</div></div>`)
+      ].join('');
+
+      calendarPlanList.innerHTML=month.plans.map(item=>`<div class="item"><strong>${item.title}</strong><div class="muted">${item.desc}</div></div>`).join('');
+      calendarResultList.innerHTML=month.results.map(item=>`<div class="item"><strong>${item.title}</strong><div class="muted">${item.desc}</div></div>`).join('');
+    }
+
+    prevMonthButton.onclick=()=>{calendarMonthIndex=(calendarMonthIndex-1+calendarMonths.length)%calendarMonths.length;renderCalendarMonth(calendarMonthIndex)};
+    nextMonthButton.onclick=()=>{calendarMonthIndex=(calendarMonthIndex+1)%calendarMonths.length;renderCalendarMonth(calendarMonthIndex)};
+    renderCalendarMonth(calendarMonthIndex);
+  </script>
+</body>
+</html>

@@ -71,6 +71,7 @@
       <button class='tab' data-tab='training'>工作记录与训练</button>
       <button class='tab' data-tab='training-center'>训练中心</button>
       <button class='tab' data-tab='task-center'>任务中心</button>
+      <button class='tab' data-tab='schedule-center'>定时任务</button>
       <button class='tab' data-tab='requirement-bug'>需求与缺陷</button>
       <button class='tab' data-tab='settings'>设置</button>
     </div>
@@ -661,6 +662,190 @@
           <div class='assignment-drawer-actions'>
             <button id='assignmentDrawerCancelBtn' class='alt' type='button'>取消</button>
             <button id='assignmentDrawerSubmitBtn' type='button' data-assignment-root-required='1'>提交创建</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id='pane-schedule-center' class='pane'>
+      <div class='panel schedule-wrap'>
+        <div class='schedule-head'>
+          <div>
+            <div class='card-title schedule-page-title'>定时任务</div>
+            <div class='hint'>首期只负责计划配置、命中建单和结果回看；真实执行继续走任务中心。</div>
+          </div>
+          <div class='schedule-head-actions'>
+            <span class='assignment-chip muted'>北京时间</span>
+            <button id='scheduleRefreshBtn' class='alt' type='button' data-assignment-root-required='1'>刷新</button>
+            <button id='scheduleScanBtn' class='alt' type='button' data-assignment-root-required='1'>立即扫描</button>
+          </div>
+        </div>
+
+        <div class='schedule-toolbar'>
+          <div class='schedule-view-tabs'>
+            <button id='scheduleViewListBtn' class='active' type='button'>列表视角</button>
+            <button id='scheduleViewCalendarBtn' type='button'>日历视角</button>
+          </div>
+          <div id='scheduleMeta' class='hint'>计划加载中...</div>
+        </div>
+        <div id='scheduleError' class='error'></div>
+
+        <div id='scheduleListView' class='schedule-view active'>
+          <div class='schedule-list-layout'>
+            <aside class='schedule-side'>
+              <div class='schedule-card schedule-side-card'>
+                <div class='schedule-panel-head'>
+                  <div class='card-title'>定时任务列表</div>
+                  <div class='row'>
+                    <span id='schedulePlanCountChip' class='assignment-chip muted'>0 条计划</span>
+                    <button id='scheduleCreateBtn' class='schedule-icon-btn' type='button' aria-label='新建定时任务'>+</button>
+                  </div>
+                </div>
+                <div id='schedulePlanList' class='schedule-plan-list'></div>
+              </div>
+            </aside>
+            <section class='schedule-detail-panel'>
+              <div class='schedule-panel-head'>
+                <div>
+                  <div class='card-title'>计划详情</div>
+                  <div id='scheduleDetailMeta' class='hint'>请选择定时计划</div>
+                </div>
+              </div>
+              <div id='scheduleDetailBody' class='schedule-detail-body'></div>
+            </section>
+          </div>
+        </div>
+
+        <div id='scheduleCalendarView' class='schedule-view'>
+          <div class='schedule-calendar-layout'>
+            <section class='schedule-card schedule-calendar-panel'>
+              <div class='schedule-calendar-head'>
+                <div class='row'>
+                  <button id='schedulePrevMonthBtn' class='alt' type='button'>上一月</button>
+                  <div>
+                    <div id='scheduleCalendarMonthLabel' class='card-title'>-</div>
+                    <div class='hint'>日历同时展示未来计划和真实执行结果。</div>
+                  </div>
+                  <button id='scheduleNextMonthBtn' class='alt' type='button'>下一月</button>
+                </div>
+                <div class='schedule-legend'>
+                  <span>虚线：计划</span>
+                  <span>蓝色：待调度/运行中</span>
+                  <span>绿色：成功</span>
+                  <span>红色：失败</span>
+                </div>
+              </div>
+              <div id='scheduleCalendarGrid' class='schedule-calendar-grid'></div>
+            </section>
+            <aside class='schedule-card schedule-calendar-detail'>
+              <div class='schedule-panel-head'>
+                <div>
+                  <div class='card-title'>日历侧详情</div>
+                  <div id='scheduleCalendarDetailMeta' class='hint'>请选择日期</div>
+                </div>
+              </div>
+              <div id='scheduleCalendarDetailBody' class='schedule-calendar-detail-body'></div>
+            </aside>
+          </div>
+        </div>
+      </div>
+
+      <div id='scheduleEditorMask' class='assignment-drawer-mask hidden'>
+        <div class='assignment-drawer-panel schedule-editor-panel'>
+          <div class='assignment-drawer-head'>
+            <div>
+              <div id='scheduleEditorTitle' class='assignment-drawer-title'>新建定时任务</div>
+              <div class='hint'>支持每月 / 每周 / 每日 / 定时 四类规则混合启用，命中后只向任务中心创建单任务实例。</div>
+            </div>
+            <button id='scheduleEditorCloseBtn' class='alt' type='button'>关闭</button>
+          </div>
+          <div class='assignment-drawer-scroll schedule-editor-scroll'>
+            <div class='assignment-form-card'>
+              <div class='assignment-form-grid'>
+                <label class='assignment-field assignment-span-2'>
+                  <span class='hint'>计划名称</span>
+                  <input id='scheduleEditorNameInput' type='text' placeholder='例如：版本发布预检' />
+                </label>
+                <label class='assignment-field'>
+                  <span class='hint'>执行 agent</span>
+                  <select id='scheduleEditorAgentSelect'></select>
+                </label>
+                <label class='assignment-field'>
+                  <span class='hint'>优先级</span>
+                  <select id='scheduleEditorPrioritySelect'>
+                    <option value='P0'>P0</option>
+                    <option value='P1' selected>P1</option>
+                    <option value='P2'>P2</option>
+                    <option value='P3'>P3</option>
+                  </select>
+                </label>
+                <label class='assignment-field assignment-span-2'>
+                  <span class='hint'>发起摘要</span>
+                  <textarea id='scheduleEditorLaunchSummaryInput' rows='3' placeholder='命中后要发起什么任务'></textarea>
+                </label>
+                <label class='assignment-field assignment-span-2'>
+                  <span class='hint'>执行清单</span>
+                  <textarea id='scheduleEditorChecklistInput' rows='5' placeholder='执行者需要完成的关键动作'></textarea>
+                </label>
+                <label class='assignment-field assignment-span-2'>
+                  <span class='hint'>完成标准</span>
+                  <textarea id='scheduleEditorDoneDefinitionInput' rows='4' placeholder='做到什么程度算完成'></textarea>
+                </label>
+                <label class='assignment-field assignment-span-2'>
+                  <span class='hint'>预期产物（选填）</span>
+                  <textarea id='scheduleEditorArtifactInput' rows='3' placeholder='可留空'></textarea>
+                </label>
+                <label class='assignment-field'>
+                  <span class='hint'>交付方式</span>
+                  <select id='scheduleEditorDeliveryModeSelect'>
+                    <option value='none'>默认交付给当前 agent</option>
+                    <option value='specified'>指定交付对象</option>
+                  </select>
+                </label>
+                <label class='assignment-field'>
+                  <span class='hint'>指定交付对象</span>
+                  <select id='scheduleEditorDeliveryReceiverSelect'></select>
+                </label>
+                <label class='assignment-field assignment-span-2 schedule-inline-check'>
+                  <input id='scheduleEditorEnabledCheck' type='checkbox' checked />
+                  <span>保存后立即启用</span>
+                </label>
+              </div>
+            </div>
+
+            <div class='schedule-rule-grid'>
+              <div class='schedule-rule-card'>
+                <label class='schedule-rule-title'><input id='scheduleRuleMonthlyEnabled' type='checkbox' /> 每月</label>
+                <input id='scheduleRuleMonthlyDays' type='text' placeholder='月内日期，逗号分隔，例如 1,15,28' />
+                <input id='scheduleRuleMonthlyTimes' type='text' placeholder='时间点，逗号分隔，例如 09:00,18:30' />
+              </div>
+              <div class='schedule-rule-card'>
+                <label class='schedule-rule-title'><input id='scheduleRuleWeeklyEnabled' type='checkbox' /> 每周</label>
+                <div class='schedule-weekday-row'>
+                  <label><input type='checkbox' data-schedule-weekday='1' />一</label>
+                  <label><input type='checkbox' data-schedule-weekday='2' />二</label>
+                  <label><input type='checkbox' data-schedule-weekday='3' />三</label>
+                  <label><input type='checkbox' data-schedule-weekday='4' />四</label>
+                  <label><input type='checkbox' data-schedule-weekday='5' />五</label>
+                  <label><input type='checkbox' data-schedule-weekday='6' />六</label>
+                  <label><input type='checkbox' data-schedule-weekday='7' />日</label>
+                </div>
+                <input id='scheduleRuleWeeklyTimes' type='text' placeholder='时间点，逗号分隔，例如 09:00,18:30' />
+              </div>
+              <div class='schedule-rule-card'>
+                <label class='schedule-rule-title'><input id='scheduleRuleDailyEnabled' type='checkbox' /> 每日</label>
+                <input id='scheduleRuleDailyTimes' type='text' placeholder='时间点，逗号分隔，例如 09:00,18:30' />
+              </div>
+              <div class='schedule-rule-card'>
+                <label class='schedule-rule-title'><input id='scheduleRuleOnceEnabled' type='checkbox' /> 定时</label>
+                <textarea id='scheduleRuleOnceDates' rows='5' placeholder='一行一个时间，例如&#10;2026-04-01 09:00&#10;2026-04-08 18:30'></textarea>
+              </div>
+            </div>
+            <div id='scheduleEditorError' class='error'></div>
+          </div>
+          <div class='assignment-drawer-actions'>
+            <button id='scheduleEditorCancelBtn' class='alt' type='button'>取消</button>
+            <button id='scheduleEditorSubmitBtn' type='button' data-assignment-root-required='1'>保存计划</button>
           </div>
         </div>
       </div>

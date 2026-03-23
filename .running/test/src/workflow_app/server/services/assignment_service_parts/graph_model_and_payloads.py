@@ -44,6 +44,10 @@ def _serialize_node(
         "node_id": node_id,
         "ticket_id": str(node.get("ticket_id") or "").strip(),
         "node_name": str(node.get("node_name") or "").strip(),
+        "source_schedule_id": str(node.get("source_schedule_id") or "").strip(),
+        "planned_trigger_at": str(node.get("planned_trigger_at") or "").strip(),
+        "trigger_instance_id": str(node.get("trigger_instance_id") or "").strip(),
+        "trigger_rule_summary": str(node.get("trigger_rule_summary") or "").strip(),
         "assigned_agent_id": str(node.get("assigned_agent_id") or "").strip(),
         "assigned_agent_name": str(
             node.get("assigned_agent_name") or node.get("assigned_agent_id") or ""
@@ -394,6 +398,10 @@ def _normalize_node_payload(
         "node_id": assigned_node_id,
         "source_workflow": source_text,
         "node_name": node_name,
+        "source_schedule_id": _normalize_text(body.get("source_schedule_id") or "", field="source_schedule_id", required=False, max_len=160),
+        "planned_trigger_at": _normalize_text(body.get("planned_trigger_at") or "", field="planned_trigger_at", required=False, max_len=64),
+        "trigger_instance_id": _normalize_text(body.get("trigger_instance_id") or "", field="trigger_instance_id", required=False, max_len=160),
+        "trigger_rule_summary": _normalize_text(body.get("trigger_rule_summary") or "", field="trigger_rule_summary", required=False, max_len=500),
         "assigned_agent_id": str(agent_meta["agent_id"] or "").strip(),
         "assigned_agent_name": str(agent_meta["agent_name"] or "").strip(),
         "node_goal": node_goal,

@@ -315,6 +315,9 @@
     if (isDefectProbeEnabled()) {
       await runDefectCenterProbe();
     }
+    if (queryParam('schedule_probe') === '1' && typeof runScheduleCenterProbe === 'function') {
+      await runScheduleCenterProbe();
+    }
     if (isTestDataToggleProbeEnabled()) {
       await runTestDataToggleProbe();
     }
