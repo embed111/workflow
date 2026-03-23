@@ -2,7 +2,7 @@
 
 from urllib.parse import parse_qs, urlparse
 
-from . import assignments, chat, config, dashboard, legacy, policy, runtime_upgrade, training
+from . import assignments, chat, config, dashboard, defects, legacy, policy, runtime_upgrade, training
 
 
 def dispatch_get(handler, cfg, state) -> None:
@@ -30,6 +30,8 @@ def dispatch_get(handler, cfg, state) -> None:
     if training.try_handle_get(handler, cfg, state, ctx):
         return
     if assignments.try_handle_get(handler, cfg, state, ctx):
+        return
+    if defects.try_handle_get(handler, cfg, state, ctx):
         return
     if policy.try_handle_get(handler, cfg, state, ctx):
         return
@@ -65,6 +67,8 @@ def dispatch_post(handler, cfg, state) -> None:
     if training.try_handle_post(handler, cfg, state, ctx):
         return
     if assignments.try_handle_post(handler, cfg, state, ctx):
+        return
+    if defects.try_handle_post(handler, cfg, state, ctx):
         return
     if policy.try_handle_post(handler, cfg, state, ctx):
         return

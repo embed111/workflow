@@ -1,0 +1,51 @@
+{
+  "workspace_root": "D:/code/AI/J-Agents/workflow/.running/test",
+  "runtime_root": "D:/code/AI/J-Agents/workflow/.running/control/runtime/test",
+  "host": "127.0.0.1",
+  "port": 8092,
+  "version": "20260320-224944",
+  "base_url": "http://127.0.0.1:8092",
+  "fixture_root": "D:/code/AI/J-Agents/workflow/.running/control/reports/20260320-224944/fixture-workspace",
+  "stdout_path": "D:/code/AI/J-Agents/workflow/.running/control/reports/test-gate-20260320-224944.stdout.log",
+  "stderr_path": "D:/code/AI/J-Agents/workflow/.running/control/reports/test-gate-20260320-224944.stderr.log",
+  "checks": {
+    "runtime_upgrade_status": {
+      "ok": true,
+      "environment": "test",
+      "current_version": "20260320-224944",
+      "current_version_rank": "20260320-224944",
+      "candidate_version": "20260320-181514",
+      "candidate_version_rank": "20260320-181514",
+      "candidate_source_environment": "test",
+      "candidate_passed_at": "2026-03-20T10:15:32.7865827Z",
+      "candidate_evidence_path": "C:\\work\\J-Agents\\workflow\\.running\\control\\reports\\test-gate-20260320-181514.json",
+      "candidate_record_path": "D:/code/AI/J-Agents/workflow/.running/control/prod-candidate.json",
+      "candidate_available": false,
+      "candidate_is_newer": false,
+      "request_pending": false,
+      "request_candidate_version": "",
+      "request_requested_at": "",
+      "running_task_count": 0,
+      "agent_call_count": 0,
+      "blocking_reason": "",
+      "blocking_reason_code": "",
+      "can_upgrade": false,
+      "banner_visible": false,
+      "last_action": {
+        "candidate_version": "20260320-181514",
+        "action": "upgrade",
+        "current_version": "20260320-181514",
+        "status": "success",
+        "previous_version": "20260320-173426",
+        "finished_at": "2026-03-20T10:17:30.0242340Z",
+        "evidence_path": "C:\\work\\J-Agents\\workflow\\.running\\control\\reports\\test-gate-20260320-181514.json"
+      }
+    }
+  },
+  "healthz": {
+    "ok": true,
+    "ts": "2026-03-20T22:49:48+08:00"
+  },
+  "result": "failed",
+  "error": "Remote end closed connection without response"
+}

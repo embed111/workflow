@@ -60,23 +60,6 @@
     return Math.max(0, dashboardMetricNumber('agent_call_count', globalRunningTaskCount()));
   }
 
-  function appendGlobalRuntimeMetricRow(container, label, value, tone) {
-    const row = document.createElement('div');
-    row.className = 'brand-metric-row' + (safe(tone).trim() ? ' ' + safe(tone).trim() : '');
-
-    const labelNode = document.createElement('span');
-    labelNode.className = 'brand-metric-label';
-    labelNode.textContent = label;
-
-    const valueNode = document.createElement('strong');
-    valueNode.className = 'brand-metric-value';
-    valueNode.textContent = String(value);
-
-    row.appendChild(labelNode);
-    row.appendChild(valueNode);
-    container.appendChild(row);
-  }
-
   function appendGlobalRuntimeMetricNote(container, text, tone) {
     const note = document.createElement('div');
     note.className = 'brand-metric-note' + (safe(tone).trim() ? ' ' + safe(tone).trim() : '');
@@ -107,9 +90,25 @@
       },
     ];
     const fragment = document.createDocumentFragment();
-    for (const item of metricRows) {
-      appendGlobalRuntimeMetricRow(fragment, item.label, item.value, item.tone);
-    }
+    const summary = document.createElement('div');
+    summary.className = 'brand-metric-summary';
+    metricRows.forEach((item) => {
+      const part = document.createElement('div');
+      part.className = 'brand-metric-summary-row' + (safe(item.tone).trim() ? ' ' + safe(item.tone).trim() : '');
+
+      const labelNode = document.createElement('span');
+      labelNode.className = 'brand-metric-label';
+      labelNode.textContent = item.label;
+
+      const valueNode = document.createElement('strong');
+      valueNode.className = 'brand-metric-value';
+      valueNode.textContent = String(item.value);
+
+      part.appendChild(labelNode);
+      part.appendChild(valueNode);
+      summary.appendChild(part);
+    });
+    fragment.appendChild(summary);
     if (locked || dashboardError) {
       const notes = document.createElement('div');
       notes.className = 'brand-metric-notes';
@@ -127,7 +126,7 @@
       metricRows.map((item) => item.label + '=' + String(item.value)).join('，')
     );
     node.title =
-      'Agent调用中/运行中任务 仅统计当前仍在执行的会话任务与任务中心活跃执行批次，不再按任务图 running 节点累计。';
+      'Agent调用中与运行中任务仅统计当前仍在执行的会话任务和任务中心活跃执行批次。';
   }
 
   function formatDateTime(text) {

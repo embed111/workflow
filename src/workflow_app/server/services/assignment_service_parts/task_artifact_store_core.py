@@ -13,7 +13,7 @@ ASSIGNMENT_TASK_STRUCTURE_FILE_NAME = "TASK_STRUCTURE.md"
 ASSIGNMENT_DELIVERY_INFO_FILE_NAME = "DELIVERY_INFO.json"
 ASSIGNMENT_DELIVERY_ROOT_DIRNAME = "delivery"
 ASSIGNMENT_HISTORICAL_RUN_SUMMARY = "历史运行导入自任务产物目录"
-_ASSIGNMENT_REPAIRABLE_SUFFIXES = {".json", ".jsonl", ".log", ".md", ".txt"}
+_ASSIGNMENT_REPAIRABLE_SUFFIXES = {".html", ".json", ".jsonl", ".log", ".md", ".txt"}
 _ASSIGNMENT_ANY_TASK_PATH_RE = re.compile(
     r"(?P<prefix>(?:[A-Za-z]:)?[^\s\"'`<>#]*?)?[\\/](?P<kind>tasks|workspace[\\/]+assignments)[\\/](?P<ticket>asg-[^\\/\s\"'`<>#]+)(?P<suffix>(?:[\\/][^\s\"'`<>#]+)*(?:#[^\s\"'`<>]+)?)"
 )
@@ -105,7 +105,7 @@ def _artifact_label_text(node: dict[str, Any]) -> str:
     )
 
 
-def _normalize_artifact_extension(raw: Any, fallback: str = ".md") -> str:
+def _normalize_artifact_extension(raw: Any, fallback: str = ".html") -> str:
     text = str(raw or "").strip()
     if text and not text.startswith("."):
         text = "." + text
@@ -117,14 +117,35 @@ def _normalize_artifact_extension(raw: Any, fallback: str = ".md") -> str:
 def _artifact_file_extension_from_body(raw: Any) -> str:
     text = str(raw or "").lstrip()
     if not text:
-        return ".md"
+        return ".html"
     head = text[:512].lower()
     if head.startswith("<!doctype html") or head.startswith("<html"):
         return ".html"
-    return ".md"
+    return ".html"
 
 
-def _normalize_artifact_file_name(raw: Any, *, fallback: str, default_extension: str = ".md") -> str:
+def _artifact_preview_content_type(path: Path) -> str:
+    suffix = str(path.suffix or "").strip().lower()
+    if suffix in {".html", ".htm"}:
+        return "text/html; charset=utf-8"
+    if suffix == ".md":
+        return "text/markdown; charset=utf-8"
+    if suffix == ".json":
+        return "application/json; charset=utf-8"
+    if suffix == ".jsonl":
+        return "application/x-ndjson; charset=utf-8"
+    if suffix == ".csv":
+        return "text/csv; charset=utf-8"
+    if suffix == ".svg":
+        return "image/svg+xml; charset=utf-8"
+    if suffix in {".xml"}:
+        return "application/xml; charset=utf-8"
+    if suffix in {".log", ".text", ".txt"}:
+        return "text/plain; charset=utf-8"
+    return "text/plain; charset=utf-8"
+
+
+def _normalize_artifact_file_name(raw: Any, *, fallback: str, default_extension: str = ".html") -> str:
     candidate = Path(str(raw or "").strip().replace("\\", "/")).name.strip().strip(".")
     if not candidate:
         candidate = str(fallback or "").strip()
@@ -139,7 +160,7 @@ def _artifact_label_file_name(
     node: dict[str, Any],
     *,
     source_name: str = "",
-    preferred_extension: str = ".md",
+    preferred_extension: str = ".html",
 ) -> str:
     label = _artifact_label_text(node)
     return _normalize_artifact_file_name(
@@ -172,7 +193,7 @@ def _node_artifact_file_paths(
     node: dict[str, Any],
     *,
     file_name: str = "",
-    preferred_extension: str = ".md",
+    preferred_extension: str = ".html",
 ) -> list[Path]:
     ticket_id = str(node.get("ticket_id") or "").strip()
     node_id = str(node.get("node_id") or "").strip()
@@ -257,7 +278,7 @@ def _node_delivery_inbox_file_paths(
     node: dict[str, Any],
     *,
     file_name: str = "",
-    preferred_extension: str = ".md",
+    preferred_extension: str = ".html",
 ) -> list[Path]:
     ticket_id = str(node.get("ticket_id") or "").strip()
     node_id = str(node.get("node_id") or "").strip()
@@ -582,6 +603,21 @@ def _assignment_build_node_record(
     record_state: str = "active",
     delete_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    normalized_delivery_mode = _normalize_delivery_mode(delivery_mode)
+    assigned_agent_id_text = str(assigned_agent_id or "").strip()
+    assigned_agent_name_text = str(assigned_agent_name or assigned_agent_id or "").strip()
+    delivery_receiver_agent_id_text = str(delivery_receiver_agent_id or "").strip()
+    delivery_receiver_agent_name_text = str(delivery_receiver_agent_name or "").strip()
+    delivery_target_agent_id = (
+        delivery_receiver_agent_id_text
+        if normalized_delivery_mode == "specified" and delivery_receiver_agent_id_text
+        else assigned_agent_id_text
+    )
+    delivery_target_agent_name = (
+        (delivery_receiver_agent_name_text or delivery_receiver_agent_id_text)
+        if normalized_delivery_mode == "specified" and (delivery_receiver_agent_name_text or delivery_receiver_agent_id_text)
+        else assigned_agent_name_text
+    )
     return {
         "record_type": "assignment_node",
         "schema_version": ASSIGNMENT_TASK_SCHEMA_VERSION,
@@ -589,14 +625,16 @@ def _assignment_build_node_record(
         "ticket_id": str(ticket_id or "").strip(),
         "node_id": str(node_id or "").strip(),
         "node_name": str(node_name or "").strip(),
-        "assigned_agent_id": str(assigned_agent_id or "").strip(),
-        "assigned_agent_name": str(assigned_agent_name or assigned_agent_id or "").strip(),
+        "assigned_agent_id": assigned_agent_id_text,
+        "assigned_agent_name": assigned_agent_name_text,
         "node_goal": str(node_goal or "").strip(),
         "expected_artifact": str(expected_artifact or "").strip(),
-        "delivery_mode": _normalize_delivery_mode(delivery_mode),
+        "delivery_mode": normalized_delivery_mode,
         "delivery_mode_text": _delivery_mode_text(delivery_mode),
-        "delivery_receiver_agent_id": str(delivery_receiver_agent_id or "").strip(),
-        "delivery_receiver_agent_name": str(delivery_receiver_agent_name or "").strip(),
+        "delivery_receiver_agent_id": delivery_receiver_agent_id_text,
+        "delivery_receiver_agent_name": delivery_receiver_agent_name_text,
+        "delivery_target_agent_id": delivery_target_agent_id,
+        "delivery_target_agent_name": delivery_target_agent_name,
         "artifact_delivery_status": _normalize_artifact_delivery_status(artifact_delivery_status),
         "artifact_delivery_status_text": _artifact_delivery_status_text(artifact_delivery_status),
         "artifact_delivered_at": str(artifact_delivered_at or "").strip(),

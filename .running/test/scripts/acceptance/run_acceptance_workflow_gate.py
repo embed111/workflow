@@ -194,9 +194,10 @@ def write_agents_fixture(runtime_root: Path) -> Path:
     return workspace_root
 
 
-def run_workspace_line_budget_gate(repo_root: Path) -> tuple[bool, dict[str, str]]:
+def run_workspace_line_budget_gate(repo_root: Path) -> tuple[bool, dict[str, object]]:
     checker = (repo_root / "scripts" / "quality" / "check_workspace_line_budget.py").resolve()
     report_path = (repo_root / ".test" / "reports" / "WORKSPACE_LINE_BUDGET_REPORT.md").resolve()
+    json_report_path = report_path.with_suffix(".json")
     proc = subprocess.run(
         [
             sys.executable,
@@ -205,19 +206,37 @@ def run_workspace_line_budget_gate(repo_root: Path) -> tuple[bool, dict[str, str
             repo_root.as_posix(),
             "--report",
             report_path.as_posix(),
+            "--json-report",
+            json_report_path.as_posix(),
         ],
         cwd=str(repo_root),
         capture_output=True,
         text=True,
     )
     report_lines = str(proc.stdout or "").strip().splitlines()
+    payload: dict[str, object] = {}
+    if json_report_path.exists():
+        try:
+            payload = json.loads(json_report_path.read_text(encoding="utf-8"))
+        except Exception:
+            payload = {}
+    hard_gate = payload.get("hard_gate") if isinstance(payload, dict) else {}
+    refactor_gate = payload.get("refactor_trigger_gate") if isinstance(payload, dict) else {}
+    guideline_gate = payload.get("guideline_gate") if isinstance(payload, dict) else {}
     detail = {
         "report_path": report_lines[-1] if report_lines else report_path.as_posix(),
-        "trigger_action": "none" if proc.returncode == 0 else "trigger_refactor_skill",
+        "json_report_path": json_report_path.as_posix(),
+        "hard_gate_pass": bool((hard_gate or {}).get("pass", proc.returncode == 0)),
+        "hard_gate_offender_count": int((hard_gate or {}).get("offender_count", 0) or 0),
+        "refactor_triggered": bool((refactor_gate or {}).get("triggered", False)),
+        "refactor_trigger_count": int((refactor_gate or {}).get("offender_count", 0) or 0),
+        "guideline_triggered": bool((guideline_gate or {}).get("triggered", False)),
+        "guideline_trigger_count": int((guideline_gate or {}).get("offender_count", 0) or 0),
+        "trigger_action": str((payload or {}).get("trigger_action") or ("none" if proc.returncode == 0 else "trigger_refactor_skill")),
     }
     if str(proc.stderr or "").strip():
         detail["stderr"] = str(proc.stderr or "").strip()
-    return proc.returncode == 0, detail
+    return bool(detail["hard_gate_pass"]), detail
 
 
 def write_gate_acceptance_report(
@@ -308,7 +327,10 @@ def main() -> int:
     quality_ok, quality_detail = run_workspace_line_budget_gate(repo_root)
     results.append(("workspace_line_budget", quality_ok, quality_detail))
     if not quality_ok:
-        errors.append("workspace line budget failed; trigger_refactor_skill")
+        errors.append("workspace hard line budget failed")
+    if bool(quality_detail.get("refactor_triggered")):
+        errors.append("workspace line budget triggered refactor_skill")
+    if errors:
         out_path = write_gate_acceptance_report(
             repo_root=repo_root,
             base=base,

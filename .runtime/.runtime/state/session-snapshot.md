@@ -1,8 +1,8 @@
 # Session Snapshot
 
-- last_update: 2026-03-17 16:49:57+0800
+- last_update: 2026-03-21 20:31:07+0800
 - current_track: runtime-baseline
-- current_focus: Phase0: web 对话 + 训练工作流
+- current_focus: Workflow web workbench and runtime orchestration
 
 ## Today
 1. Completed: chat entry active; event logs, analysis task auto-creation, decision + training execution, minimal web chat page, and per-round markdown snapshots are auto-updated.
@@ -19,7 +19,7 @@
 7. latest_training: none
 
 ## Next Start
-1. First log to check: logs/events/events-20260317.jsonl
+1. First log to check: logs/events/events-20260321.jsonl
 2. First action: continue chat rounds and keep logs complete.
 
 ## Session

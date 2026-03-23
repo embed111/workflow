@@ -55,7 +55,13 @@ def create_assignment_graph(cfg: Any, body: dict[str, Any]) -> dict[str, Any]:
     try:
         conn.execute("BEGIN")
         node_payloads = [
-            _normalize_node_payload(conn, cfg, raw if isinstance(raw, dict) else {}, node_id="")
+            _normalize_node_payload(
+                conn,
+                cfg,
+                raw if isinstance(raw, dict) else {},
+                node_id="",
+                source_workflow=graph_payload["source_workflow"],
+            )
             for raw in raw_nodes
         ]
         conn.commit()
@@ -188,7 +194,13 @@ def create_assignment_node(
     conn = connect_db(cfg.root)
     try:
         conn.execute("BEGIN")
-        node_payload = _normalize_node_payload(conn, cfg, body, node_id="")
+        node_payload = _normalize_node_payload(
+            conn,
+            cfg,
+            body,
+            node_id="",
+            source_workflow=str(snapshot["graph_row"].get("source_workflow") or "").strip(),
+        )
         conn.commit()
     finally:
         conn.close()

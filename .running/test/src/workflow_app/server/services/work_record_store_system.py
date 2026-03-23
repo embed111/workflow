@@ -56,7 +56,7 @@ def append_message_delete_audit_record(root: Path, payload: dict[str, Any]) -> i
         row["audit_id"] = audit_id
         rows.append(row)
         _write_jsonl(message_delete_audit_path(root), rows)
-        _record_index.sync_audit_and_system_indexes(root)
+        _record_index.append_message_delete_audit_index(root, row)
         return audit_id
 
 
@@ -70,7 +70,7 @@ def append_policy_confirmation_audit_record(root: Path, payload: dict[str, Any])
         row["audit_id"] = audit_id
         rows.append(row)
         _write_jsonl(policy_confirmation_audit_path(root), rows)
-        _record_index.sync_audit_and_system_indexes(root)
+        _record_index.append_policy_confirmation_audit_index(root, row)
         return audit_id
 
 
@@ -108,27 +108,7 @@ def latest_policy_patch_task_for_session(root: Path, session_id: str) -> str:
 
 
 def policy_closure_stats_record(root: Path) -> dict[str, Any]:
-    confirmations = _load_jsonl(policy_confirmation_audit_path(root))
-    patches = list_policy_patch_task_records(root, limit=20000)
-    sessions = list_session_records(root, include_test_data=True, limit=20000)
-    triggered = len(confirmations)
-    rejected = len([row for row in confirmations if str(row.get("action") or "") == "reject"])
-    manual = len([row for row in confirmations if _normalize_bool(row.get("manual_fallback"))])
-    patch_total = len(patches)
-    patch_done = len([row for row in patches if str(row.get("status") or "") == "done"])
-    denominator = max(1, len(sessions) + rejected)
-    return {
-        "fallback_triggered": triggered,
-        "fallback_trigger_rate_pct": round((triggered / denominator) * 100.0, 2),
-        "manual_fallback_triggered": manual,
-        "manual_fallback_rate_pct": round((manual / denominator) * 100.0, 2),
-        "manual_fallback_usage_alert": bool(manual / denominator >= 0.3),
-        "patch_task_total": patch_total,
-        "patch_task_done": patch_done,
-        "patch_completion_rate_pct": round((patch_done / max(1, patch_total)) * 100.0, 2) if patch_total else 0.0,
-        "created_sessions": len(sessions),
-        "rejected_confirmations": rejected,
-    }
+    return _record_index.policy_closure_stats_from_index(root)
 
 
 def append_workflow_event_log_record(root: Path, payload: dict[str, Any]) -> None:
@@ -136,7 +116,7 @@ def append_workflow_event_log_record(root: Path, payload: dict[str, Any]) -> Non
     row = dict(payload or {})
     row["ref"] = normalize_work_record_ref(root, str(row.get("ref") or ""))
     _append_jsonl(workflow_events_path(root), row)
-    _record_index.sync_audit_and_system_indexes(root)
+    _record_index.append_system_workflow_event_index(root, row)
 
 
 def list_workflow_event_log_records(root: Path) -> list[dict[str, Any]]:
@@ -166,33 +146,46 @@ def unique_system_run_path(root: Path, prefix: str) -> Path:
 
 def record_ingress_request(root: Path, payload: dict[str, Any]) -> None:
     ensure_store(root)
-    with _STORE_LOCK:
-        current = _load_json_dict(ingress_requests_path(root))
-        items = current.get("items") if isinstance(current.get("items"), dict) else {}
-        request_id = str(payload.get("request_id") or "").strip()
-        if request_id:
-            items[request_id] = dict(payload or {})
-        _write_json(ingress_requests_path(root), {"updated_at": _now_ts(), "items": items})
+    _record_index.upsert_ingress_request_index(root, dict(payload or {}))
 
 
 def mark_ingress_request_logged(root: Path, request_id: str) -> None:
     ensure_store(root)
-    with _STORE_LOCK:
-        current = _load_json_dict(ingress_requests_path(root))
-        items = current.get("items") if isinstance(current.get("items"), dict) else {}
-        row = dict(items.get(str(request_id or "").strip()) or {})
-        if row:
-            row["event_logged"] = 1
-            items[str(request_id or "").strip()] = row
-            _write_json(ingress_requests_path(root), {"updated_at": _now_ts(), "items": items})
+    _record_index.mark_ingress_request_logged_index(root, request_id)
 
 
 def list_ingress_request_records(root: Path) -> list[dict[str, Any]]:
+    indexed_rows = _record_index.list_ingress_request_records_from_index(root, limit=0)
+    if indexed_rows:
+        return indexed_rows
     current = _load_json_dict(ingress_requests_path(root))
     items = current.get("items") if isinstance(current.get("items"), dict) else {}
     rows = [dict(item) for item in items.values()]
     rows.sort(key=lambda item: str(item.get("created_at") or ""))
     return rows
+
+
+def pending_counts_indexed(root: Path, *, include_test_data: bool) -> tuple[int, int]:
+    return _record_index.pending_counts_from_index(root, include_test_data=include_test_data)
+
+
+def latest_results_indexed(root: Path, *, include_test_data: bool) -> tuple[str, str]:
+    return _record_index.latest_results_from_index(root, include_test_data=include_test_data)
+
+
+def new_sessions_24h_indexed(
+    root: Path,
+    *,
+    include_test_data: bool,
+    since: str,
+    routes: tuple[str, ...],
+) -> int:
+    return _record_index.new_sessions_24h_from_index(
+        root,
+        include_test_data=include_test_data,
+        since=since,
+        routes=routes,
+    )
 
 
 def append_reconcile_run_record(root: Path, payload: dict[str, Any]) -> None:
@@ -208,7 +201,7 @@ def append_reconcile_run_record(root: Path, payload: dict[str, Any]) -> None:
                 ref_path,
                 row,
             )
-    _record_index.sync_audit_and_system_indexes(root)
+    _record_index.append_reconcile_run_index(root, row)
 
 
 def latest_reconcile_run_record(root: Path) -> dict[str, Any] | None:

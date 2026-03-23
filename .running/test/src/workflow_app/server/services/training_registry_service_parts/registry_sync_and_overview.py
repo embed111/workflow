@@ -40,7 +40,7 @@ def _resolve_training_agent(conn: sqlite3.Connection, target: str) -> dict[str, 
         SELECT
             agent_id,agent_name,workspace_path,current_version,
             latest_release_version,bound_release_version,
-            lifecycle_state,training_gate_state,parent_agent_id,
+            lifecycle_state,training_gate_state,parent_agent_id,runtime_status,
             core_capabilities,capability_summary,knowledge_scope,skills_json,applicable_scenarios,version_notes,avatar_uri,
             vector_icon,git_available,pre_release_state,pre_release_reason,pre_release_checked_at,pre_release_git_output,
             last_release_at,status_tags_json,active_role_profile_release_id,active_role_profile_ref,updated_at
@@ -56,7 +56,7 @@ def _resolve_training_agent(conn: sqlite3.Connection, target: str) -> dict[str, 
                 SELECT
                     agent_id,agent_name,workspace_path,current_version,
                     latest_release_version,bound_release_version,
-                    lifecycle_state,training_gate_state,parent_agent_id,
+                    lifecycle_state,training_gate_state,parent_agent_id,runtime_status,
                     core_capabilities,capability_summary,knowledge_scope,skills_json,applicable_scenarios,version_notes,avatar_uri,
                     vector_icon,git_available,pre_release_state,pre_release_reason,pre_release_checked_at,pre_release_git_output,
                     last_release_at,status_tags_json,active_role_profile_release_id,active_role_profile_ref,updated_at
@@ -202,7 +202,7 @@ def sync_training_agent_registry(cfg: AppConfig) -> list[dict[str, Any]]:
                 SELECT
                     current_version,latest_release_version,bound_release_version,
                     lifecycle_state,training_gate_state,parent_agent_id,avatar_uri,last_release_at,
-                    active_role_profile_release_id,active_role_profile_ref
+                    active_role_profile_release_id,active_role_profile_ref,runtime_status
                 FROM agent_registry
                 WHERE agent_id=?
                 LIMIT 1
@@ -281,6 +281,9 @@ def sync_training_agent_registry(cfg: AppConfig) -> list[dict[str, Any]]:
             active_role_profile_ref = (
                 str(existed["active_role_profile_ref"] or "").strip() if existed is not None else ""
             )
+            runtime_status = (
+                str(existed["runtime_status"] or "").strip().lower() if existed is not None else ""
+            ) or "idle"
 
             existing_release_meta: dict[tuple[str, str, str], dict[str, str]] = {}
             existing_release_meta_loose: dict[tuple[str, str], dict[str, str]] = {}
@@ -355,11 +358,11 @@ def sync_training_agent_registry(cfg: AppConfig) -> list[dict[str, Any]]:
                 """
                 INSERT INTO agent_registry (
                     agent_id,agent_name,workspace_path,current_version,latest_release_version,bound_release_version,
-                    lifecycle_state,training_gate_state,parent_agent_id,
+                    lifecycle_state,training_gate_state,parent_agent_id,runtime_status,
                     core_capabilities,capability_summary,knowledge_scope,skills_json,applicable_scenarios,version_notes,avatar_uri,
                     vector_icon,git_available,pre_release_state,pre_release_reason,pre_release_checked_at,pre_release_git_output,
                     last_release_at,status_tags_json,active_role_profile_release_id,active_role_profile_ref,updated_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(agent_id) DO UPDATE SET
                     agent_name=excluded.agent_name,
                     workspace_path=excluded.workspace_path,
@@ -369,6 +372,7 @@ def sync_training_agent_registry(cfg: AppConfig) -> list[dict[str, Any]]:
                     lifecycle_state=excluded.lifecycle_state,
                     training_gate_state=excluded.training_gate_state,
                     parent_agent_id=excluded.parent_agent_id,
+                    runtime_status=excluded.runtime_status,
                     core_capabilities=excluded.core_capabilities,
                     capability_summary=excluded.capability_summary,
                     knowledge_scope=excluded.knowledge_scope,
@@ -398,6 +402,7 @@ def sync_training_agent_registry(cfg: AppConfig) -> list[dict[str, Any]]:
                     lifecycle_state,
                     training_gate_state,
                     parent_agent_id,
+                    runtime_status,
                     core_capabilities,
                     capability_summary,
                     knowledge_scope,
@@ -466,11 +471,19 @@ def sync_training_agent_registry(cfg: AppConfig) -> list[dict[str, Any]]:
                     )
         if keep_ids:
             marks = ",".join(["?"] * len(keep_ids))
-            conn.execute(f"DELETE FROM agent_registry WHERE agent_id NOT IN ({marks})", tuple(keep_ids))
-            conn.execute(f"DELETE FROM agent_release_history WHERE agent_id NOT IN ({marks})", tuple(keep_ids))
+            conn.execute(
+                f"DELETE FROM agent_registry WHERE agent_id NOT IN ({marks}) AND COALESCE(runtime_status,'idle')<>'creating'",
+                tuple(keep_ids),
+            )
+            conn.execute(
+                f"DELETE FROM agent_release_history WHERE agent_id NOT IN ({marks}) AND agent_id NOT IN (SELECT agent_id FROM agent_registry WHERE COALESCE(runtime_status,'idle')='creating')",
+                tuple(keep_ids),
+            )
         else:
-            conn.execute("DELETE FROM agent_registry")
-            conn.execute("DELETE FROM agent_release_history")
+            conn.execute("DELETE FROM agent_registry WHERE COALESCE(runtime_status,'idle')<>'creating'")
+            conn.execute(
+                "DELETE FROM agent_release_history WHERE agent_id NOT IN (SELECT agent_id FROM agent_registry)"
+            )
         conn.commit()
         _REGISTRY_SYNC_LAST_AT_S = time.monotonic()
         _REGISTRY_SYNC_LAST_ROOT = root_key
@@ -517,7 +530,7 @@ def list_training_agents_overview(
             SELECT
                 agent_id,agent_name,workspace_path,current_version,
                 latest_release_version,bound_release_version,
-                lifecycle_state,training_gate_state,parent_agent_id,
+                lifecycle_state,training_gate_state,parent_agent_id,runtime_status,
                 core_capabilities,capability_summary,knowledge_scope,skills_json,applicable_scenarios,version_notes,avatar_uri,
                 vector_icon,git_available,pre_release_state,pre_release_reason,pre_release_checked_at,pre_release_git_output,
                 last_release_at,status_tags_json,active_role_profile_release_id,active_role_profile_ref,updated_at
@@ -557,6 +570,7 @@ def list_training_agents_overview(
             "lifecycle_state": normalize_lifecycle_state(row["lifecycle_state"]),
             "training_gate_state": normalize_training_gate_state(row["training_gate_state"]),
             "parent_agent_id": str(row["parent_agent_id"] or ""),
+            "runtime_status": str(row["runtime_status"] or "idle").strip().lower() or "idle",
             "core_capabilities": str(row["core_capabilities"] or ""),
             "capability_summary": str(row["capability_summary"] or ""),
             "knowledge_scope": str(row["knowledge_scope"] or ""),

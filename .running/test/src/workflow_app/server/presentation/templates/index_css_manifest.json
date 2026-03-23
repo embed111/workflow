@@ -1,5 +1,7 @@
 [
   "index_training_center_layout.css",
+  "index_training_center_role_creation.css",
+  "index_defect_center.css",
   "index_runtime_upgrade_banner.css",
   "index_training_center_cards.css",
   "index_release_review.css",

@@ -1,0 +1,7 @@
+[
+  "core_and_storage.py",
+  "spec_and_reply_builder.py",
+  "workspace_and_projection.py",
+  "session_queries_and_internal_tasks.py",
+  "session_commands.py"
+]

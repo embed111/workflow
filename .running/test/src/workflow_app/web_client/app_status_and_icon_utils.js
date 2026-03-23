@@ -2,14 +2,18 @@
   'use strict';
 
   const $ = (id) => document.getElementById(id);
+  const appTabCacheKey = 'workflow.p0.tab';
   const sessionCacheKey = 'workflow.p0.session';
   const agentCacheKey = 'workflow.p0.agent';
+  const trainingCenterModuleCacheKey = 'workflow.p0.trainingCenter.module';
+  const roleCreationSessionCacheKey = 'workflow.p0.trainingCenter.roleCreation.session';
   const assignmentCreateDraftCacheKey = 'workflow.p0.assignment.createDraft';
+  const requirementBugModuleCacheKey = 'workflow.p0.requirementBug.module';
   // Legacy-only keys. They are cleaned on bootstrap and never drive runtime truth.
   const showTestDataCacheKey = 'workflow.p0.settings.showTestData';
   const showSystemAgentsLegacyCacheKey = 'workflow.p0.settings.showSystemAgents';
   const layoutKeys = {
-    rail: 'workflow.p0.layout.rail',
+    rail: 'workflow.p0.layout.rail.v2',
     chatLeft: 'workflow.p0.layout.chatLeft',
     trainLeft: 'workflow.p0.layout.trainLeft',
     trainRight: 'workflow.p0.layout.trainRight',
@@ -82,7 +86,7 @@
     policyConfirmRiskOpen: true,
     policyRecommendTraceOpen: false,
     feedRenderedSessionId: '',
-    tcModule: 'agents', // agents | ops
+    tcModule: 'agents', // agents | create-role | ops
     tcAgents: [],
     tcStats: {
       agent_total: 0,
@@ -116,6 +120,34 @@
     tcLoopServerLoading: false,
     tcLoopServerError: '',
     tcLoopServerRequestSeq: 0,
+    tcRoleCreationSessions: [],
+    tcRoleCreationTotal: 0,
+    tcRoleCreationSelectedSessionId: '',
+    tcRoleCreationDetail: null,
+    tcRoleCreationLoading: false,
+    tcRoleCreationError: '',
+    tcRoleCreationDetailTab: 'evolution',
+    tcRoleCreationDraftAttachments: [],
+    tcRoleCreationDraftCollapsed: false,
+    tcRoleCreationTaskPreview: {
+      kind: '',
+      stage_key: '',
+      node_id: '',
+      pinned: false,
+      anchor_rect: null,
+    },
+    requirementBugModule: 'defect',
+    defectList: [],
+    defectSelectedReportId: '',
+    defectDetail: null,
+    defectLoading: false,
+    defectDetailLoading: false,
+    defectError: '',
+    defectSubmitError: '',
+    defectStatusFilter: 'all',
+    defectKeyword: '',
+    defectDraftImages: [],
+    defectSupplementDraftImages: [],
     assignmentGraphs: [],
     assignmentSelectedTicketId: '',
     assignmentGraphData: null,
@@ -180,6 +212,102 @@
     return String(value);
   }
 
+  function normalizeAppTab(value) {
+    const key = safe(value).trim().toLowerCase();
+    if (
+      key === 'chat' ||
+      key === 'training' ||
+      key === 'training-center' ||
+      key === 'task-center' ||
+      key === 'requirement-bug' ||
+      key === 'settings'
+    ) {
+      return key;
+    }
+    return 'chat';
+  }
+
+  function readSavedAppTab() {
+    try {
+      return normalizeAppTab(localStorage.getItem(appTabCacheKey));
+    } catch (_) {
+      return 'chat';
+    }
+  }
+
+  function writeSavedAppTab(value) {
+    try {
+      localStorage.setItem(appTabCacheKey, normalizeAppTab(value));
+    } catch (_) {
+      // ignore localStorage errors
+    }
+  }
+
+  function normalizeTrainingCenterModule(value) {
+    const key = safe(value).trim().toLowerCase();
+    if (key === 'ops' || key === 'create-role') {
+      return key;
+    }
+    return 'agents';
+  }
+
+  function readSavedTrainingCenterModule() {
+    try {
+      return normalizeTrainingCenterModule(localStorage.getItem(trainingCenterModuleCacheKey));
+    } catch (_) {
+      return 'agents';
+    }
+  }
+
+  function writeSavedTrainingCenterModule(value) {
+    try {
+      localStorage.setItem(trainingCenterModuleCacheKey, normalizeTrainingCenterModule(value));
+    } catch (_) {
+      // ignore localStorage errors
+    }
+  }
+
+  function readSavedRoleCreationSessionId() {
+    try {
+      return safe(localStorage.getItem(roleCreationSessionCacheKey)).trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function normalizeRequirementBugModule(value) {
+    return safe(value).trim().toLowerCase() === 'requirement' ? 'requirement' : 'defect';
+  }
+
+  function readSavedRequirementBugModule() {
+    try {
+      return normalizeRequirementBugModule(localStorage.getItem(requirementBugModuleCacheKey));
+    } catch (_) {
+      return 'defect';
+    }
+  }
+
+  function writeSavedRequirementBugModule(value) {
+    try {
+      localStorage.setItem(requirementBugModuleCacheKey, normalizeRequirementBugModule(value));
+    } catch (_) {
+      // ignore localStorage errors
+    }
+  }
+
+  function writeSavedRoleCreationSessionId(value) {
+    const text = safe(value).trim();
+    try {
+      if (!text) {
+        localStorage.removeItem(roleCreationSessionCacheKey);
+        return;
+      }
+      localStorage.setItem(roleCreationSessionCacheKey, text);
+    } catch (_) {
+      // ignore localStorage errors
+    }
+  }
+
   function short(value, maxLen) {
     const text = safe(value);
     if (text.length <= maxLen) return text;
@@ -215,12 +343,20 @@
     return queryParam('assignment_probe') === '1';
   }
 
+  function isDefectProbeEnabled() {
+    return queryParam('defect_probe') === '1';
+  }
+
   function isTestDataToggleProbeEnabled() {
     return queryParam('td_probe') === '1';
   }
 
   function assignmentProbeCase() {
     return safe(queryParam('assignment_probe_case')).trim().toLowerCase() || 'visible';
+  }
+
+  function defectProbeCase() {
+    return safe(queryParam('defect_probe_case')).trim().toLowerCase() || 'main';
   }
 
   function testDataToggleProbeCase() {
@@ -251,7 +387,12 @@
   }
 
   function setStatus(text) {
-    $('statusLine').textContent = '[' + nowText() + '] ' + text;
+    const node = $('statusLine');
+    if (!node) return;
+    const content = '[' + nowText() + '] ' + text;
+    node.textContent = content;
+    node.title = content;
+    node.setAttribute('aria-label', content);
   }
 
   function setChatError(text) {

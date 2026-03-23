@@ -1,0 +1,104 @@
+{
+  "workspace_root": "D:/code/AI/J-Agents/workflow/.running/test",
+  "runtime_root": "D:/code/AI/J-Agents/workflow/.running/control/runtime/test",
+  "host": "127.0.0.1",
+  "port": 8092,
+  "version": "20260321-121116",
+  "base_url": "http://127.0.0.1:8092",
+  "fixture_root": "D:/code/AI/J-Agents/workflow/.running/control/reports/20260321-121116/fixture-workspace",
+  "stdout_path": "D:/code/AI/J-Agents/workflow/.running/control/reports/test-gate-20260321-121116.stdout.log",
+  "stderr_path": "D:/code/AI/J-Agents/workflow/.running/control/reports/test-gate-20260321-121116.stderr.log",
+  "checks": {
+    "runtime_upgrade_status": {
+      "ok": true,
+      "environment": "test",
+      "current_version": "20260321-121116",
+      "current_version_rank": "20260321-121116",
+      "candidate_version": "20260321-115438",
+      "candidate_version_rank": "20260321-115438",
+      "candidate_source_environment": "test",
+      "candidate_passed_at": "2026-03-21T03:54:41.2304127Z",
+      "candidate_evidence_path": "D:\\code\\AI\\J-Agents\\workflow\\.running\\control\\reports\\test-gate-20260321-115438.json",
+      "candidate_record_path": "D:/code/AI/J-Agents/workflow/.running/control/prod-candidate.json",
+      "candidate_available": true,
+      "candidate_is_newer": false,
+      "request_pending": false,
+      "request_candidate_version": "",
+      "request_requested_at": "",
+      "running_task_count": 0,
+      "agent_call_count": 0,
+      "blocking_reason": "",
+      "blocking_reason_code": "",
+      "can_upgrade": false,
+      "banner_visible": false,
+      "last_action": {
+        "candidate_version": "20260321-115438",
+        "action": "upgrade",
+        "current_version": "20260321-115438",
+        "status": "success",
+        "previous_version": "20260321-114432",
+        "finished_at": "2026-03-21T03:54:56.6827893Z",
+        "evidence_path": "D:\\code\\AI\\J-Agents\\workflow\\.running\\control\\reports\\test-gate-20260321-115438.json"
+      },
+      "upgrade_highlights": [
+        "正式环境已从 20260321-114432 切换到 20260321-115438，本次以稳定性和体验调整为主。"
+      ]
+    },
+    "status": {
+      "running_task_count": 0,
+      "agent_call_count": 0,
+      "available_agents": 1
+    },
+    "artifact_root": {
+      "ok": true,
+      "artifact_root": "C:/work/J-Agents/.output-test",
+      "task_artifact_root": "C:/work/J-Agents/.output-test",
+      "delivery_root": "C:/work/J-Agents/.output-test/delivery",
+      "workspace_root": "C:/work/J-Agents/.output-test/tasks",
+      "task_records_root": "C:/work/J-Agents/.output-test/tasks",
+      "tasks_root": "C:/work/J-Agents/.output-test/tasks",
+      "artifact_root_structure_path": "C:/work/J-Agents/.output-test/TASKS_STRUCTURE.md",
+      "tasks_structure_path": "C:/work/J-Agents/.output-test/TASKS_STRUCTURE.md",
+      "default_artifact_root": "D:/code/AI/J-Agents/workflow/.running/.output",
+      "default_task_artifact_root": "D:/code/AI/J-Agents/workflow/.running/.output",
+      "requested_artifact_root": "C:\\work\\J-Agents\\.output-test",
+      "requested_task_artifact_root": "C:\\work\\J-Agents\\.output-test",
+      "path_validation_status": "ok",
+      "path_validation_error": "",
+      "workspace_ready": true
+    },
+    "show_test_data_policy": {
+      "ok": true,
+      "deprecated": true,
+      "read_only": true,
+      "environment": "test",
+      "show_test_data": true,
+      "show_test_data_source": "environment_policy"
+    },
+    "assignment_test_graph": {
+      "ticket_id": "asg-20260318-230846-11b46a",
+      "metrics_summary": {
+        "total_nodes": 20,
+        "status_counts": {
+          "pending": 5,
+          "ready": 3,
+          "running": 1,
+          "succeeded": 9,
+          "failed": 1,
+          "blocked": 1
+        },
+        "executed_count": 11,
+        "unexecuted_count": 9
+      }
+    },
+    "agents": {
+      "agent_search_root": "D:/code/AI/J-Agents/workflow/.running/control/reports/20260321-121116/fixture-workspace",
+      "agent_count": 1
+    }
+  },
+  "healthz": {
+    "ok": true,
+    "ts": "2026-03-21T12:11:19+08:00"
+  },
+  "result": "passed"
+}

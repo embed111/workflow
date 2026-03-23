@@ -318,6 +318,140 @@
     }
   }
 
+  function roleCreationProbeSessionId() {
+    return safe(queryParam('tc_probe_session')).trim();
+  }
+
+  function roleCreationProbeNodeId() {
+    return safe(queryParam('tc_probe_node')).trim();
+  }
+
+  function roleCreationProbeDelayMs() {
+    return Math.max(0, Number(queryParam('tc_probe_delay_ms') || '180') || 180);
+  }
+
+  function roleCreationProbeTaskCardNodes() {
+    return Array.from(document.querySelectorAll('#rcStageFlow .rc-task-card'));
+  }
+
+  function roleCreationProbeArchivePocketNodes() {
+    return Array.from(document.querySelectorAll('#rcStageFlow .archive-pocket'));
+  }
+
+  async function prepareRoleCreationProbe(caseId, output) {
+    const probeCase = safe(caseId).trim().toLowerCase();
+    if (!probeCase.startsWith('rc_')) return;
+    setTrainingCenterModule('create-role');
+    await refreshRoleCreationSessions({ skipRender: true });
+    let sessionId = roleCreationProbeSessionId();
+    if (!sessionId) {
+      const sessions = Array.isArray(state.tcRoleCreationSessions) ? state.tcRoleCreationSessions : [];
+      sessionId = safe((sessions[0] || {}).session_id).trim();
+    }
+    if (!sessionId) {
+      throw new Error('role creation probe session missing');
+    }
+    await selectRoleCreationSession(sessionId, { force: true, skipRender: true });
+    setRoleCreationDetailTab(probeCase === 'rc_profile_tab' ? 'profile' : 'evolution');
+    if (typeof clearRoleCreationTaskPreview === 'function') {
+      clearRoleCreationTaskPreview();
+    }
+    renderRoleCreationWorkbench();
+    await new Promise((resolve) => window.setTimeout(resolve, roleCreationProbeDelayMs()));
+    if (probeCase === 'rc_task_hover' || probeCase === 'rc_task_pinned') {
+      const requestedNodeId = roleCreationProbeNodeId();
+      const targetNode = roleCreationProbeTaskCardNodes().find((node) => {
+        return !requestedNodeId || safe(node.getAttribute('data-node-id')).trim() === requestedNodeId;
+      }) || roleCreationProbeTaskCardNodes()[0] || null;
+      if (!targetNode) {
+        throw new Error('role creation probe task missing');
+      }
+      showRoleCreationTaskPreviewFromNode(targetNode, { pinned: probeCase === 'rc_task_pinned' });
+      await new Promise((resolve) => window.setTimeout(resolve, 180));
+    }
+    output.rc_selected_session_id = sessionId;
+  }
+
+  function collectRoleCreationProbeState(output) {
+    if (!safe(output.case).trim().toLowerCase().startsWith('rc_')) return;
+    const detail = roleCreationCurrentDetail();
+    const session = roleCreationCurrentSession();
+    const profile = roleCreationCurrentProfile();
+    const stages = roleCreationCurrentStages();
+    const messages = roleCreationCurrentMessages();
+    const preview = state.tcRoleCreationTaskPreview && typeof state.tcRoleCreationTaskPreview === 'object'
+      ? state.tcRoleCreationTaskPreview
+      : {};
+    const floatNode = $('rcTaskHoverFloat');
+    const taskCards = roleCreationProbeTaskCardNodes();
+    const archivePockets = roleCreationProbeArchivePocketNodes();
+    const taskRefIds = Array.isArray(detail.task_refs)
+      ? detail.task_refs.map((item) => safe(item && item.node_id).trim()).filter(Boolean)
+      : [];
+    const activeTaskIds = [];
+    const archivedTaskIds = [];
+    const statusSet = new Set();
+    stages.forEach((stage) => {
+      const activeTasks = Array.isArray(stage && stage.active_tasks) ? stage.active_tasks : [];
+      const archivedTasks = Array.isArray(stage && stage.archived_tasks) ? stage.archived_tasks : [];
+      activeTasks.forEach((task) => {
+        const nodeId = safe(task && task.node_id).trim();
+        if (nodeId) activeTaskIds.push(nodeId);
+        const status = safe(task && task.status).trim().toLowerCase();
+        if (status) statusSet.add(status);
+      });
+      archivedTasks.forEach((task) => {
+        const nodeId = safe(task && task.node_id).trim();
+        if (nodeId) archivedTaskIds.push(nodeId);
+        statusSet.add('archived');
+      });
+    });
+    output.rc_module = safe(state.tcModule).trim();
+    output.rc_detail_tab = safe(state.tcRoleCreationDetailTab).trim();
+    output.rc_session_id = safe(session.session_id).trim();
+    output.rc_session_status = safe(session.status).trim().toLowerCase();
+    output.rc_current_stage_key = safe(session.current_stage_key || (detail.stage_meta && detail.stage_meta.current_stage_key)).trim();
+    output.rc_current_stage_title = safe(session.current_stage_title || (detail.stage_meta && detail.stage_meta.current_stage_title)).trim();
+    output.rc_ticket_id = safe((detail.stage_meta && detail.stage_meta.ticket_id) || session.assignment_ticket_id).trim();
+    output.rc_workspace_init_ref = safe(session.workspace_init_ref).trim();
+    output.rc_role_name = safe(profile.role_name).trim();
+    output.rc_role_goal = safe(profile.role_goal).trim();
+    output.rc_core_capability_count = Array.isArray(profile.core_capabilities) ? profile.core_capabilities.length : 0;
+    output.rc_missing_field_count = Array.isArray(profile.missing_fields) ? profile.missing_fields.length : 0;
+    output.rc_stage_count = stages.length;
+    output.rc_message_count = messages.length;
+    output.rc_message_attachment_count = messages.reduce((total, message) => {
+      const attachments = Array.isArray(message && message.attachments) ? message.attachments : [];
+      return total + attachments.length;
+    }, 0);
+    output.rc_user_image_message_count = messages.filter((message) => {
+      const role = safe(message && message.role).trim().toLowerCase();
+      const attachments = Array.isArray(message && message.attachments) ? message.attachments : [];
+      return role === 'user' && attachments.length >= 1;
+    }).length;
+    output.rc_system_task_update_count = messages.filter((message) => {
+      return safe(message && message.message_type).trim().toLowerCase() === 'system_task_update';
+    }).length;
+    output.rc_profile_card_count = document.querySelectorAll('#rcDetailPaneProfile .rc-profile-card').length;
+    output.rc_profile_visible = !!($('rcDetailPaneProfile') && $('rcDetailPaneProfile').classList.contains('active'));
+    output.rc_message_image_count = document.querySelectorAll('#rcMessages .rc-message-asset img').length;
+    output.rc_task_card_count = taskCards.length;
+    output.rc_task_card_ids = taskCards.map((node) => safe(node.getAttribute('data-node-id')).trim()).filter(Boolean);
+    output.rc_active_task_ids = activeTaskIds;
+    output.rc_archived_task_ids = archivedTaskIds;
+    output.rc_archive_pocket_count = archivePockets.length;
+    output.rc_archive_total = Number((detail.stage_meta && detail.stage_meta.archive_total) || archivedTaskIds.length || 0);
+    output.rc_active_total = Number((detail.stage_meta && detail.stage_meta.active_total) || activeTaskIds.length || 0);
+    output.rc_task_ids_match_refs = output.rc_task_card_ids.every((nodeId) => taskRefIds.includes(nodeId));
+    output.rc_task_statuses = Array.from(statusSet);
+    output.rc_preview_visible = !!(floatNode && floatNode.classList.contains('visible'));
+    output.rc_preview_kind = safe(preview.kind).trim();
+    output.rc_preview_pinned = !!preview.pinned;
+    output.rc_preview_node_id = safe(preview.node_id).trim();
+    output.rc_preview_has_task_center_button = !!document.querySelector('#rcTaskHoverFloat [data-rc-open-task-center]');
+    output.rc_preview_text = safe(floatNode && floatNode.textContent).trim().slice(0, 1200);
+  }
+
   async function runTrainingCenterProbe() {
     const output = {
       ts: new Date().toISOString(),
@@ -372,6 +506,42 @@
       role_profile_source_release_id: '',
       role_profile_first_person_summary: '',
       active_role_profile_ref: '',
+      rc_module: '',
+      rc_detail_tab: '',
+      rc_selected_session_id: '',
+      rc_session_id: '',
+      rc_session_status: '',
+      rc_current_stage_key: '',
+      rc_current_stage_title: '',
+      rc_ticket_id: '',
+      rc_workspace_init_ref: '',
+      rc_role_name: '',
+      rc_role_goal: '',
+      rc_core_capability_count: 0,
+      rc_missing_field_count: 0,
+      rc_stage_count: 0,
+      rc_message_count: 0,
+      rc_message_attachment_count: 0,
+      rc_user_image_message_count: 0,
+      rc_system_task_update_count: 0,
+      rc_profile_card_count: 0,
+      rc_profile_visible: false,
+      rc_message_image_count: 0,
+      rc_task_card_count: 0,
+      rc_task_card_ids: [],
+      rc_active_task_ids: [],
+      rc_archived_task_ids: [],
+      rc_archive_pocket_count: 0,
+      rc_archive_total: 0,
+      rc_active_total: 0,
+      rc_task_ids_match_refs: false,
+      rc_task_statuses: [],
+      rc_preview_visible: false,
+      rc_preview_kind: '',
+      rc_preview_pinned: false,
+      rc_preview_node_id: '',
+      rc_preview_has_task_center_button: false,
+      rc_preview_text: '',
     };
     const errorPayload = (err) => ({
       ok: false,
@@ -433,7 +603,9 @@
       output.selected_agent_id = selectedId;
       output.selected_agent_name = selectedName;
 
-      if (probeCase === 'ac_uo_01') {
+      if (probeCase.startsWith('rc_')) {
+        await prepareRoleCreationProbe(probeCase, output);
+      } else if (probeCase === 'ac_uo_01') {
         setTrainingCenterModule('agents');
       } else if (probeCase === 'ac_uo_02' || probeCase === 'ac_uo_03' || probeCase === 'ac_uo_04') {
         setTrainingCenterModule('agents');
@@ -771,6 +943,7 @@
       output.role_profile_source_release_id = safe(roleProfile.source_release_id).trim();
       output.role_profile_first_person_summary = safe(roleProfile.first_person_summary).trim();
       output.active_role_profile_ref = safe(selectedDetail.active_role_profile_ref || '').trim();
+      collectRoleCreationProbeState(output);
       if ((probeCase === 'ac_ar_rr_12' || probeCase === 'ac_ar_rr_19') && output.release_report_button_count >= 1) {
         const requestedReleaseVersion = safe(queryParam('tc_probe_release_version')).trim();
         const releaseReportBtn = Array.from(document.querySelectorAll('#tcReleaseList button'))
@@ -814,6 +987,46 @@
                     ? output.queue_sources.includes('manual') && output.queue_sources.includes('auto_analysis')
                     : probeCase === 'ac_ar_01'
                       ? output.agent_count >= 1
+                      : probeCase === 'rc_default'
+                        ? output.rc_module === 'create-role' &&
+                          !!output.rc_session_id &&
+                          output.rc_message_count >= 1
+                        : probeCase === 'rc_message_with_image'
+                          ? output.rc_module === 'create-role' &&
+                            output.rc_user_image_message_count >= 1 &&
+                            output.rc_message_attachment_count >= 1 &&
+                            output.rc_message_image_count >= 1
+                          : probeCase === 'rc_profile_tab'
+                            ? output.rc_module === 'create-role' &&
+                              output.rc_detail_tab === 'profile' &&
+                              output.rc_profile_visible &&
+                              output.rc_profile_card_count >= 4 &&
+                              !!output.rc_role_name
+                            : probeCase === 'rc_task_hover'
+                              ? output.rc_module === 'create-role' &&
+                                output.rc_preview_visible &&
+                                output.rc_preview_kind === 'task' &&
+                                !output.rc_preview_pinned &&
+                                !!output.rc_preview_node_id &&
+                                output.rc_preview_has_task_center_button
+                              : probeCase === 'rc_task_pinned'
+                                ? output.rc_module === 'create-role' &&
+                                  output.rc_preview_visible &&
+                                  output.rc_preview_kind === 'task' &&
+                                  output.rc_preview_pinned &&
+                                  !!output.rc_preview_node_id &&
+                                  output.rc_preview_has_task_center_button
+                                : probeCase === 'rc_archive'
+                                  ? output.rc_module === 'create-role' &&
+                                    output.rc_archive_total >= 1 &&
+                                    output.rc_archive_pocket_count >= 1
+                                  : probeCase === 'rc_high_load'
+                                    ? output.rc_module === 'create-role' &&
+                                      output.rc_task_card_count >= 6 &&
+                                      output.rc_archive_total >= 1 &&
+                                      output.rc_task_ids_match_refs &&
+                                      output.rc_task_statuses.includes('succeeded') &&
+                                      output.rc_task_statuses.some((item) => item !== 'succeeded')
                       : probeCase === 'ac_ar_02'
                         ? output.release_count >= 1 && !output.release_has_commit_ref
                         : probeCase === 'ac_ar_03'

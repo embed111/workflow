@@ -18,31 +18,46 @@ from .work_record_store import (
 def bind_runtime_symbols(symbols: dict[str, object]) -> None:
     globals().update(symbols)
 
-def session_lock_for(state: RuntimeState, session_id: str) -> threading.Lock:
+def _decref_session_lock(state: RuntimeState, session_id: str, lock: threading.Lock) -> None:
     with state.session_lock_guard:
-        lock = state.session_locks.get(session_id)
-        if lock is None:
-            lock = threading.Lock()
-            state.session_locks[session_id] = lock
-        return lock
+        entry = state.session_locks.get(session_id)
+        if entry is None or entry.lock is not lock:
+            return
+        entry.ref_count = max(0, int(entry.ref_count or 0) - 1)
+        if entry.ref_count <= 0 and not entry.lock.locked():
+            state.session_locks.pop(session_id, None)
 
 
-def acquire_generation_slot(state: RuntimeState, session_id: str) -> threading.Lock:
-    lock = session_lock_for(state, session_id)
+def session_lock_for(state: RuntimeState, session_id: str) -> SessionLockEntry:
+    with state.session_lock_guard:
+        entry = state.session_locks.get(session_id)
+        if entry is None:
+            entry = SessionLockEntry()
+            state.session_locks[session_id] = entry
+        entry.ref_count += 1
+        return entry
+
+
+def acquire_generation_slot(state: RuntimeState, session_id: str) -> GenerationLease:
+    entry = session_lock_for(state, session_id)
+    lock = entry.lock
     lock.acquire()
     if not state.generation_semaphore.acquire(blocking=False):
         lock.release()
+        _decref_session_lock(state, session_id, lock)
         raise ConcurrencyLimitError(
             f"generation concurrency limit reached ({MAX_GENERATION_CONCURRENCY})"
         )
-    return lock
+    return GenerationLease(session_id=session_id, lock=lock)
 
 
-def release_generation_slot(state: RuntimeState, lock: threading.Lock | None) -> None:
-    if lock is None:
+def release_generation_slot(state: RuntimeState, lease: GenerationLease | None) -> None:
+    if lease is None:
         return
+    lock = lease.lock
     state.generation_semaphore.release()
     lock.release()
+    _decref_session_lock(state, lease.session_id, lock)
 
 
 def new_task_id() -> str:

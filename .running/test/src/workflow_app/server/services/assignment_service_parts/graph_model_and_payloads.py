@@ -251,14 +251,21 @@ def _normalize_graph_header(conn: sqlite3.Connection, body: dict[str, Any]) -> d
     }
 
 
-def _resolve_assignment_agent(conn: sqlite3.Connection, cfg: Any, raw: Any) -> dict[str, str]:
+def _resolve_assignment_agent(
+    conn: sqlite3.Connection,
+    cfg: Any,
+    raw: Any,
+    *,
+    source_workflow: Any = "",
+) -> dict[str, str]:
     requested = _normalize_text(raw, field="assigned_agent_id", required=True, max_len=120)
     token = safe_token(requested, "", 120)
     if not token:
         raise AssignmentCenterError(400, "assigned_agent_id invalid", "assigned_agent_id_invalid")
+    source_text = str(source_workflow or "").strip().lower()
     row = conn.execute(
         """
-        SELECT agent_id,agent_name
+        SELECT agent_id,agent_name,runtime_status
         FROM agent_registry
         WHERE agent_id=? OR agent_name=? COLLATE NOCASE
         LIMIT 1
@@ -266,6 +273,20 @@ def _resolve_assignment_agent(conn: sqlite3.Connection, cfg: Any, raw: Any) -> d
         (token, requested),
     ).fetchone()
     if row is not None:
+        runtime_status = str(row["runtime_status"] or "idle").strip().lower() or "idle"
+        if runtime_status == "creating" and source_text != "training-role-creation":
+            raise AssignmentCenterError(
+                409,
+                "assigned agent is creating and only available to role creation workflow",
+                "assigned_agent_creating_locked",
+                {
+                    "assigned_agent_id": str(row["agent_id"] or "").strip(),
+                    "assigned_agent_name": str(row["agent_name"] or "").strip(),
+                    "runtime_status": runtime_status,
+                    "allowed_source_workflow": "training-role-creation",
+                    "source_workflow": source_text,
+                },
+            )
         return {
             "agent_id": str(row["agent_id"] or "").strip(),
             "agent_name": str(row["agent_name"] or "").strip(),
@@ -288,11 +309,17 @@ def _resolve_assignment_agent(conn: sqlite3.Connection, cfg: Any, raw: Any) -> d
     )
 
 
-def _resolve_optional_assignment_agent(conn: sqlite3.Connection, cfg: Any, raw: Any) -> dict[str, str]:
+def _resolve_optional_assignment_agent(
+    conn: sqlite3.Connection,
+    cfg: Any,
+    raw: Any,
+    *,
+    source_workflow: Any = "",
+) -> dict[str, str]:
     text = str(raw or "").strip()
     if not text:
         return {"agent_id": "", "agent_name": ""}
-    return _resolve_assignment_agent(conn, cfg, text)
+    return _resolve_assignment_agent(conn, cfg, text, source_workflow=source_workflow)
 
 
 def _normalize_dependency_lists(body: dict[str, Any]) -> tuple[list[str], list[str]]:
@@ -317,11 +344,19 @@ def _normalize_node_payload(
     body: dict[str, Any],
     *,
     node_id: str = "",
+    source_workflow: Any = "",
 ) -> dict[str, Any]:
+    source_text = _normalize_text(
+        source_workflow or body.get("source_workflow") or "workflow-ui",
+        field="source_workflow",
+        required=True,
+        max_len=120,
+    )
     agent_meta = _resolve_assignment_agent(
         conn,
         cfg,
         body.get("assigned_agent_id") or body.get("agent_id") or body.get("agent_name"),
+        source_workflow=source_text,
     )
     delivery_mode = _normalize_delivery_mode(
         body.get("delivery_mode")
@@ -336,6 +371,7 @@ def _normalize_node_payload(
         or body.get("deliveryReceiverAgentId")
         or body.get("delivery_receiver_agent_name")
         or "",
+        source_workflow=source_text,
     )
     if delivery_mode == "specified" and not str(receiver_meta.get("agent_id") or "").strip():
         raise AssignmentCenterError(
@@ -356,6 +392,7 @@ def _normalize_node_payload(
     assigned_node_id = safe_token(str(body.get("node_id") or node_id or ""), "", 160) or assignment_node_id()
     return {
         "node_id": assigned_node_id,
+        "source_workflow": source_text,
         "node_name": node_name,
         "assigned_agent_id": str(agent_meta["agent_id"] or "").strip(),
         "assigned_agent_name": str(agent_meta["agent_name"] or "").strip(),

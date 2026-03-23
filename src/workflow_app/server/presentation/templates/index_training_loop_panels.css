@@ -902,10 +902,39 @@
   border-radius: 8px;
   background: #f8fafc;
   padding: 8px 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: start;
   font-size: 12px;
   color: #334155;
   line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+.assignment-path-text {
+  min-width: 0;
+}
+
+.assignment-path-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid #cdd6e1;
+  border-radius: 999px;
+  background: #fff;
+  color: #245bdb;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.assignment-path-open:hover {
+  border-color: #b7c8ea;
+  background: #f8fbff;
 }
 
 #metricLine {

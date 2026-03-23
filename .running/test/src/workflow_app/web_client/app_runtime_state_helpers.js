@@ -254,7 +254,7 @@
       resetCssWidth('--train-right-width');
       return;
     }
-    setCssWidth('--rail-width', clamp(readLayoutValue(layoutKeys.rail, 248), 220, 420));
+    setCssWidth('--rail-width', clamp(readLayoutValue(layoutKeys.rail, 200), 200, 420));
     setCssWidth('--chat-left-width', clamp(readLayoutValue(layoutKeys.chatLeft, 340), 280, 560));
     setCssWidth('--train-left-width', clamp(readLayoutValue(layoutKeys.trainLeft, 360), 300, 620));
     setCssWidth('--train-right-width', clamp(readLayoutValue(layoutKeys.trainRight, 420), 320, 680));
@@ -314,8 +314,8 @@
       containerId: 'appRoot',
       cssVar: '--rail-width',
       storageKey: layoutKeys.rail,
-      defaultValue: 248,
-      min: 220,
+      defaultValue: 200,
+      min: 200,
       max: 420,
       minOther: 760,
       direction: 'left',

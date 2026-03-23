@@ -1,0 +1,1034 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import html
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Iterator
+from urllib.parse import urlencode
+
+IMAGE_DATA_URL = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+cC8QAAAAASUVORK5CYII="
+)
+DEFAULT_MEMORY_SPEC = """# Memory Spec
+
+## Purpose
+- Keep `.codex/*` as memory and internal guidance, not runtime state.
+- Append current-round summaries into daily memory files only.
+"""
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Browser acceptance for training center role creation workbench.")
+    parser.add_argument("--root", default=".")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8143)
+    parser.add_argument(
+        "--artifacts-dir",
+        default=os.getenv("TEST_ARTIFACTS_DIR") or ".test/evidence",
+    )
+    parser.add_argument(
+        "--logs-dir",
+        default=os.getenv("TEST_LOG_DIR") or ".test/evidence",
+    )
+    return parser.parse_args()
+
+
+def assert_true(condition: bool, message: str) -> None:
+    if not condition:
+        raise AssertionError(message)
+
+
+def write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def read_json_response(response: urllib.request.addinfourl) -> dict[str, Any]:
+    raw = response.read()
+    if not raw:
+        return {}
+    payload = json.loads(raw.decode("utf-8"))
+    return payload if isinstance(payload, dict) else {}
+
+
+def api_request(base_url: str, method: str, route: str, body: dict[str, Any] | None = None) -> tuple[int, Any]:
+    payload = None
+    headers = {"Accept": "application/json"}
+    if body is not None:
+        payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(base_url + route, data=payload, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            content_type = str(response.headers.get("Content-Type") or "")
+            if "application/json" in content_type:
+                return int(response.status), read_json_response(response)
+            return int(response.status), response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        content_type = str(exc.headers.get("Content-Type") or "")
+        if "application/json" in content_type:
+            return int(exc.code), read_json_response(exc)
+        return int(exc.code), exc.read().decode("utf-8")
+
+
+def wait_for_health(base_url: str, timeout_s: float = 45.0) -> dict[str, Any]:
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        try:
+            status, data = api_request(base_url, "GET", "/healthz")
+            if status == 200 and isinstance(data, dict) and data.get("ok"):
+                return data
+        except Exception:
+            pass
+        time.sleep(0.5)
+    raise RuntimeError("healthz timeout")
+
+
+def find_edge() -> Path:
+    candidates = [
+        Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
+        Path(r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
+    ]
+    for path in candidates:
+        if path.exists() and path.is_file():
+            return path
+    raise RuntimeError("msedge not found")
+
+
+def edge_shot(
+    edge_path: Path,
+    url: str,
+    shot_path: Path,
+    *,
+    profile_dir: Path,
+    width: int = 1680,
+    height: int = 1200,
+    budget_ms: int = 26000,
+) -> None:
+    shot_path.parent.mkdir(parents=True, exist_ok=True)
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        str(edge_path),
+        "--headless=new",
+        "--disable-gpu",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-component-update",
+        "--disable-sync",
+        "--no-first-run",
+        "--no-default-browser-check",
+        f"--user-data-dir={profile_dir.as_posix()}",
+        f"--window-size={width},{height}",
+        f"--virtual-time-budget={max(1000, int(budget_ms))}",
+        f"--screenshot={shot_path.as_posix()}",
+        url,
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=180)
+    if proc.returncode != 0:
+        raise RuntimeError(f"edge screenshot failed: {proc.stderr}")
+
+
+def edge_dom(
+    edge_path: Path,
+    url: str,
+    *,
+    profile_dir: Path,
+    width: int = 1680,
+    height: int = 1200,
+    budget_ms: int = 26000,
+) -> str:
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        str(edge_path),
+        "--headless=new",
+        "--disable-gpu",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-component-update",
+        "--disable-sync",
+        "--no-first-run",
+        "--no-default-browser-check",
+        f"--user-data-dir={profile_dir.as_posix()}",
+        f"--window-size={width},{height}",
+        f"--virtual-time-budget={max(1000, int(budget_ms))}",
+        "--dump-dom",
+        url,
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=180)
+    if proc.returncode != 0:
+        raise RuntimeError(f"edge dump-dom failed: {proc.stderr}")
+    return proc.stdout
+
+
+def parse_probe(dom_text: str) -> dict[str, Any]:
+    matched = re.search(
+        r"<pre[^>]*id=['\"]trainingCenterProbeOutput['\"][^>]*>(.*?)</pre>",
+        str(dom_text or ""),
+        flags=re.I | re.S,
+    )
+    if not matched:
+        raise RuntimeError("trainingCenterProbeOutput_not_found")
+    raw = html.unescape(matched.group(1) or "").strip()
+    if not raw:
+        raise RuntimeError("trainingCenterProbeOutput_empty")
+    payload = json.loads(raw)
+    if not isinstance(payload, dict):
+        raise RuntimeError("trainingCenterProbeOutput_not_dict")
+    return payload
+
+
+def tc_probe_url(base_url: str, case_id: str, extra: dict[str, str] | None = None) -> str:
+    query: dict[str, str] = {
+        "tc_probe": "1",
+        "tc_probe_case": str(case_id),
+        "_ts": str(int(time.time() * 1000)),
+    }
+    if extra:
+        for key, value in extra.items():
+            query[str(key)] = str(value)
+    return base_url.rstrip("/") + "/?" + urlencode(query)
+
+
+def capture_probe(
+    edge_path: Path,
+    base_url: str,
+    evidence_root: Path,
+    name: str,
+    case_id: str,
+    extra: dict[str, str] | None = None,
+) -> tuple[str, str, dict[str, Any]]:
+    url = tc_probe_url(base_url, case_id, extra)
+    shot_path = evidence_root / "screenshots" / f"{name}.png"
+    probe_path = evidence_root / "screenshots" / f"{name}.probe.json"
+    profile_dir = evidence_root / "edge-profile" / name
+    edge_shot(edge_path, url, shot_path, profile_dir=profile_dir)
+    probe = parse_probe(edge_dom(edge_path, url, profile_dir=profile_dir))
+    write_json(probe_path, probe)
+    return shot_path.as_posix(), probe_path.as_posix(), probe
+
+
+def launch_server(
+    repo_root: Path,
+    runtime_root: Path,
+    *,
+    host: str,
+    port: int,
+    stdout_path: Path,
+    stderr_path: Path,
+) -> tuple[subprocess.Popen[bytes], Any, Any]:
+    stdout_path.parent.mkdir(parents=True, exist_ok=True)
+    stderr_path.parent.mkdir(parents=True, exist_ok=True)
+    stdout_handle = stdout_path.open("wb")
+    stderr_handle = stderr_path.open("wb")
+    server = subprocess.Popen(
+        [
+            sys.executable,
+            "scripts/workflow_web_server.py",
+            "--root",
+            str(runtime_root),
+            "--host",
+            host,
+            "--port",
+            str(port),
+        ],
+        cwd=str(repo_root),
+        stdout=stdout_handle,
+        stderr=stderr_handle,
+        env=os.environ.copy(),
+    )
+    return server, stdout_handle, stderr_handle
+
+
+def stop_server(server: subprocess.Popen[bytes], stdout_handle: Any, stderr_handle: Any) -> None:
+    try:
+        server.terminate()
+        server.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        server.kill()
+        server.wait(timeout=10)
+    finally:
+        stdout_handle.close()
+        stderr_handle.close()
+
+
+@contextmanager
+def running_server(
+    repo_root: Path,
+    runtime_root: Path,
+    *,
+    host: str,
+    port: int,
+    stdout_path: Path,
+    stderr_path: Path,
+) -> Iterator[None]:
+    server, stdout_handle, stderr_handle = launch_server(
+        repo_root,
+        runtime_root,
+        host=host,
+        port=port,
+        stdout_path=stdout_path,
+        stderr_path=stderr_path,
+    )
+    try:
+        yield
+    finally:
+        stop_server(server, stdout_handle, stderr_handle)
+
+
+def record_api(
+    api_dir: Path,
+    *,
+    stage: str,
+    name: str,
+    method: str,
+    path: str,
+    payload: dict[str, Any] | None,
+    status: int,
+    body: Any,
+) -> str:
+    file_path = api_dir / f"{stage}-{name}.json"
+    write_json(
+        file_path,
+        {
+            "request": {"method": method, "path": path, "payload": payload},
+            "response": {"status": status, "body": body},
+        },
+    )
+    return file_path.as_posix()
+
+
+def prepare_runtime_root(repo_root: Path, runtime_root: Path) -> Path:
+    if runtime_root.exists():
+        shutil.rmtree(runtime_root, ignore_errors=True)
+    for rel in (".codex", "scripts", "agents", "logs/runs", "state"):
+        (runtime_root / rel).mkdir(parents=True, exist_ok=True)
+    memory_spec_source = repo_root / ".codex" / "MEMORY.md"
+    memory_spec_target = runtime_root / ".codex" / "MEMORY.md"
+    if memory_spec_source.exists():
+        shutil.copy2(memory_spec_source, memory_spec_target)
+    else:
+        memory_spec_target.write_text(DEFAULT_MEMORY_SPEC, encoding="utf-8")
+    shutil.copy2(repo_root / "scripts" / "manage_codex_memory.py", runtime_root / "scripts" / "manage_codex_memory.py")
+    return runtime_root
+
+
+def role_message_text(role_name: str) -> str:
+    return (
+        f"角色名是{role_name}。"
+        "角色目标是做增长诊断。"
+        "核心能力有问题拆解、漏斗分析、实验设计。"
+        "边界是不写代码。"
+        "适用场景是增长复盘。"
+        "协作方式是输出结构化建议。"
+    )
+
+
+def image_attachment_payload(file_name: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "attachment_id": "probe-image-1",
+            "kind": "image",
+            "file_name": file_name,
+            "content_type": "image/png",
+            "size_bytes": 68,
+            "data_url": IMAGE_DATA_URL,
+        }
+    ]
+
+
+def role_task_ids(detail: dict[str, Any]) -> list[str]:
+    return [
+        str(item.get("node_id") or "").strip()
+        for item in list(detail.get("task_refs") or [])
+        if str(item.get("node_id") or "").strip()
+    ]
+
+
+def role_stage_task_ids(detail: dict[str, Any], stage_key: str, *, archived: bool = False) -> list[str]:
+    ids: list[str] = []
+    for stage in list(detail.get("stages") or []):
+        if str(stage.get("stage_key") or "").strip() != stage_key:
+            continue
+        items = stage.get("archived_tasks") if archived else stage.get("active_tasks")
+        for item in list(items or []):
+            node_id = str(item.get("node_id") or "").strip()
+            if node_id:
+                ids.append(node_id)
+    return ids
+
+
+def capture_required_probe(
+    edge_path: Path,
+    base_url: str,
+    evidence_root: Path,
+    name: str,
+    case_id: str,
+    extra: dict[str, str] | None,
+) -> dict[str, Any]:
+    shot, probe_file, probe = capture_probe(edge_path, base_url, evidence_root, name, case_id, extra)
+    assert_true(bool(probe.get("pass")), f"probe failed for {case_id}: {probe}")
+    return {"image": shot, "probe": probe_file, "result": probe}
+
+
+def main() -> int:
+    args = parse_args()
+    repo_root = Path(args.root).resolve()
+    artifacts_dir = Path(args.artifacts_dir).resolve()
+    logs_dir = Path(args.logs_dir).resolve()
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    evidence_root = artifacts_dir / "role-creation-browser-acceptance"
+    log_root = logs_dir / "role-creation-browser-acceptance"
+    if evidence_root.exists():
+        shutil.rmtree(evidence_root, ignore_errors=True)
+    if log_root.exists():
+        shutil.rmtree(log_root, ignore_errors=True)
+    api_dir = evidence_root / "api"
+    shots_dir = evidence_root / "screenshots"
+    api_dir.mkdir(parents=True, exist_ok=True)
+    shots_dir.mkdir(parents=True, exist_ok=True)
+    log_root.mkdir(parents=True, exist_ok=True)
+    runtime_base = Path(os.getenv("TEST_TMP_DIR") or (repo_root / ".test" / "runtime")).resolve()
+    runtime_root = prepare_runtime_root(repo_root, runtime_base / "role-creation-browser-acceptance")
+    base_url = f"http://{args.host}:{args.port}"
+    edge_path = find_edge()
+
+    sys.path.insert(0, str(repo_root / "src"))
+    from workflow_app.server.bootstrap import web_server_runtime as ws  # type: ignore
+    from workflow_app.server.infra.db.migrations import ensure_tables  # type: ignore
+
+    ensure_tables(runtime_root)
+    ws.bind_training_center_runtime_once()
+
+    evidence: dict[str, Any] = {
+        "repo_root": str(repo_root),
+        "runtime_root": str(runtime_root),
+        "base_url": base_url,
+        "edge_path": str(edge_path),
+        "api": {},
+        "screenshots": {},
+        "sessions": {},
+        "assertions": {},
+    }
+    operator = "role-creation-browser-acceptance"
+
+    try:
+        with running_server(
+            repo_root,
+            runtime_root,
+            host=args.host,
+            port=args.port,
+            stdout_path=log_root / "server.stdout.log",
+            stderr_path=log_root / "server.stderr.log",
+        ):
+            evidence["healthz"] = wait_for_health(base_url)
+
+            agent_root = (runtime_root / "workspace-root").resolve()
+            (agent_root / "workflow").mkdir(parents=True, exist_ok=True)
+            artifact_root = (evidence_root / "task-output").resolve()
+            artifact_root.mkdir(parents=True, exist_ok=True)
+
+            status, body = api_request(
+                base_url,
+                "POST",
+                "/api/config/agent-search-root",
+                {"agent_search_root": agent_root.as_posix()},
+            )
+            assert_true(status == 200 and isinstance(body, dict) and body.get("ok"), "switch agent root failed")
+            evidence["api"]["switch_agent_root"] = record_api(
+                api_dir,
+                stage="setup",
+                name="switch_agent_root",
+                method="POST",
+                path="/api/config/agent-search-root",
+                payload={"agent_search_root": agent_root.as_posix()},
+                status=status,
+                body=body,
+            )
+
+            status, body = api_request(
+                base_url,
+                "POST",
+                "/api/config/artifact-root",
+                {"artifact_root": artifact_root.as_posix()},
+            )
+            assert_true(status == 200 and isinstance(body, dict) and body.get("ok"), "switch artifact root failed")
+            evidence["api"]["switch_artifact_root"] = record_api(
+                api_dir,
+                stage="setup",
+                name="switch_artifact_root",
+                method="POST",
+                path="/api/config/artifact-root",
+                payload={"artifact_root": artifact_root.as_posix()},
+                status=status,
+                body=body,
+            )
+
+            default_create_payload = {"session_title": "浏览器默认视图草稿", "operator": operator}
+            status, default_create = api_request(base_url, "POST", "/api/training/role-creation/sessions", default_create_payload)
+            assert_true(status == 200 and isinstance(default_create, dict) and default_create.get("ok"), "default create session failed")
+            evidence["api"]["default_create_session"] = record_api(
+                api_dir,
+                stage="default",
+                name="create_session",
+                method="POST",
+                path="/api/training/role-creation/sessions",
+                payload=default_create_payload,
+                status=status,
+                body=default_create,
+            )
+            default_session_id = str((default_create.get("session") or {}).get("session_id") or "").strip()
+            assert_true(default_session_id, "default session_id missing")
+            evidence["sessions"]["default"] = {"session_id": default_session_id}
+
+            main_role_name = "增长分析师浏览器验收主线"
+            main_create_payload = {"session_title": "主线角色创建验收", "operator": operator}
+            status, main_create = api_request(base_url, "POST", "/api/training/role-creation/sessions", main_create_payload)
+            assert_true(status == 200 and isinstance(main_create, dict) and main_create.get("ok"), "main create session failed")
+            evidence["api"]["main_create_session"] = record_api(
+                api_dir,
+                stage="main",
+                name="create_session",
+                method="POST",
+                path="/api/training/role-creation/sessions",
+                payload=main_create_payload,
+                status=status,
+                body=main_create,
+            )
+            main_session_id = str((main_create.get("session") or {}).get("session_id") or "").strip()
+            assert_true(main_session_id, "main session_id missing")
+
+            main_message_payload = {
+                "content": role_message_text(main_role_name),
+                "attachments": image_attachment_payload("growth-main.png"),
+                "operator": operator,
+            }
+            status, main_message = api_request(
+                base_url,
+                "POST",
+                f"/api/training/role-creation/sessions/{main_session_id}/messages",
+                main_message_payload,
+            )
+            assert_true(status == 200 and isinstance(main_message, dict) and main_message.get("ok"), "main message post failed")
+            evidence["api"]["main_message_with_image"] = record_api(
+                api_dir,
+                stage="main",
+                name="message_with_image",
+                method="POST",
+                path=f"/api/training/role-creation/sessions/{main_session_id}/messages",
+                payload=main_message_payload,
+                status=status,
+                body=main_message,
+            )
+
+            main_start_payload = {"operator": operator}
+            status, main_start = api_request(
+                base_url,
+                "POST",
+                f"/api/training/role-creation/sessions/{main_session_id}/start",
+                main_start_payload,
+            )
+            assert_true(status == 200 and isinstance(main_start, dict) and main_start.get("ok"), "main start failed")
+            evidence["api"]["main_start_session"] = record_api(
+                api_dir,
+                stage="main",
+                name="start_session",
+                method="POST",
+                path=f"/api/training/role-creation/sessions/{main_session_id}/start",
+                payload=main_start_payload,
+                status=status,
+                body=main_start,
+            )
+            main_ticket_id = str((main_start.get("session") or {}).get("assignment_ticket_id") or "").strip()
+            main_workspace_init_ref = str((main_start.get("session") or {}).get("workspace_init_ref") or "").strip()
+            assert_true(main_ticket_id, "main ticket_id missing")
+            assert_true(main_workspace_init_ref, "main workspace init ref missing")
+            assert_true((runtime_root / main_workspace_init_ref).exists(), "workspace init evidence missing on disk")
+
+            status, main_detail_started = api_request(
+                base_url,
+                "GET",
+                f"/api/training/role-creation/sessions/{main_session_id}",
+            )
+            assert_true(status == 200 and isinstance(main_detail_started, dict) and main_detail_started.get("ok"), "main detail fetch failed")
+            evidence["api"]["main_detail_started"] = record_api(
+                api_dir,
+                stage="main",
+                name="detail_started",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{main_session_id}",
+                payload=None,
+                status=status,
+                body=main_detail_started,
+            )
+            main_task_ids_before_delegate = set(role_task_ids(main_detail_started))
+            main_delegate_payload = {"content": "另起一个任务去补行业案例并回传预览。", "operator": operator}
+            status, main_delegate = api_request(
+                base_url,
+                "POST",
+                f"/api/training/role-creation/sessions/{main_session_id}/messages",
+                main_delegate_payload,
+            )
+            assert_true(status == 200 and isinstance(main_delegate, dict) and main_delegate.get("ok"), "main delegate message failed")
+            evidence["api"]["main_explicit_delegate"] = record_api(
+                api_dir,
+                stage="main",
+                name="explicit_delegate",
+                method="POST",
+                path=f"/api/training/role-creation/sessions/{main_session_id}/messages",
+                payload=main_delegate_payload,
+                status=status,
+                body=main_delegate,
+            )
+            main_delegate_task_ids = sorted(set(role_task_ids(main_delegate)) - main_task_ids_before_delegate)
+            assert_true(bool(main_delegate_task_ids), "main delegate task ids missing")
+            main_delegate_task_id = main_delegate_task_ids[0]
+
+            main_stage_task_ids = [
+                str(item.get("node_id") or "").strip()
+                for stage in list(main_delegate.get("stages") or [])
+                for item in list(stage.get("active_tasks") or [])
+                if str(item.get("node_id") or "").strip()
+            ]
+            task_id_consistency = {
+                "session_id": main_session_id,
+                "ticket_id": main_ticket_id,
+                "delegate_task_ids": main_delegate_task_ids,
+                "task_ref_ids": role_task_ids(main_delegate),
+                "stage_task_ids": main_stage_task_ids,
+                "matched_delegate_task_ids": [node_id for node_id in main_delegate_task_ids if node_id in main_stage_task_ids],
+            }
+            assert_true(bool(task_id_consistency["matched_delegate_task_ids"]), "delegate task ids not visible in stage tasks")
+            task_consistency_path = api_dir / "main-task_id_consistency.json"
+            write_json(task_consistency_path, task_id_consistency)
+            evidence["sessions"]["main"] = {
+                "session_id": main_session_id,
+                "ticket_id": main_ticket_id,
+                "workspace_init_ref": main_workspace_init_ref,
+                "delegate_task_id": main_delegate_task_id,
+            }
+
+            archive_role_name = "增长分析师浏览器验收废案"
+            archive_create_payload = {"session_title": "废案入口验收", "operator": operator}
+            status, archive_create = api_request(base_url, "POST", "/api/training/role-creation/sessions", archive_create_payload)
+            assert_true(status == 200 and isinstance(archive_create, dict) and archive_create.get("ok"), "archive create session failed")
+            evidence["api"]["archive_create_session"] = record_api(
+                api_dir,
+                stage="archive",
+                name="create_session",
+                method="POST",
+                path="/api/training/role-creation/sessions",
+                payload=archive_create_payload,
+                status=status,
+                body=archive_create,
+            )
+            archive_session_id = str((archive_create.get("session") or {}).get("session_id") or "").strip()
+            assert_true(archive_session_id, "archive session_id missing")
+
+            archive_message_payload = {
+                "content": role_message_text(archive_role_name),
+                "attachments": image_attachment_payload("growth-archive.png"),
+                "operator": operator,
+            }
+            status, archive_message = api_request(
+                base_url,
+                "POST",
+                f"/api/training/role-creation/sessions/{archive_session_id}/messages",
+                archive_message_payload,
+            )
+            assert_true(status == 200 and isinstance(archive_message, dict) and archive_message.get("ok"), "archive message post failed")
+            evidence["api"]["archive_message_with_image"] = record_api(
+                api_dir,
+                stage="archive",
+                name="message_with_image",
+                method="POST",
+                path=f"/api/training/role-creation/sessions/{archive_session_id}/messages",
+                payload=archive_message_payload,
+                status=status,
+                body=archive_message,
+            )
+
+            status, archive_start = api_request(
+                base_url,
+                "POST",
+                f"/api/training/role-creation/sessions/{archive_session_id}/start",
+                {"operator": operator},
+            )
+            assert_true(status == 200 and isinstance(archive_start, dict) and archive_start.get("ok"), "archive start failed")
+            evidence["api"]["archive_start_session"] = record_api(
+                api_dir,
+                stage="archive",
+                name="start_session",
+                method="POST",
+                path=f"/api/training/role-creation/sessions/{archive_session_id}/start",
+                payload={"operator": operator},
+                status=status,
+                body=archive_start,
+            )
+            archive_ticket_id = str((archive_start.get("session") or {}).get("assignment_ticket_id") or "").strip()
+            archive_before_ids = set(role_task_ids(archive_start))
+            archive_delegate_payload = {"content": "另起一个任务去补竞品案例并回传预览。", "operator": operator}
+            status, archive_delegate = api_request(
+                base_url,
+                "POST",
+                f"/api/training/role-creation/sessions/{archive_session_id}/messages",
+                archive_delegate_payload,
+            )
+            assert_true(status == 200 and isinstance(archive_delegate, dict) and archive_delegate.get("ok"), "archive delegate failed")
+            evidence["api"]["archive_explicit_delegate"] = record_api(
+                api_dir,
+                stage="archive",
+                name="explicit_delegate",
+                method="POST",
+                path=f"/api/training/role-creation/sessions/{archive_session_id}/messages",
+                payload=archive_delegate_payload,
+                status=status,
+                body=archive_delegate,
+            )
+            archive_new_ids = sorted(set(role_task_ids(archive_delegate)) - archive_before_ids)
+            archive_task_id = archive_new_ids[0] if archive_new_ids else role_stage_task_ids(archive_delegate, "review_and_alignment")[0]
+            archive_api_payload = {"close_reason": "主线方案已足够，先收口到废案", "operator": operator}
+            status, archive_result = api_request(
+                base_url,
+                "POST",
+                f"/api/training/role-creation/sessions/{archive_session_id}/tasks/{archive_task_id}/archive",
+                archive_api_payload,
+            )
+            assert_true(status == 200 and isinstance(archive_result, dict) and archive_result.get("ok"), "archive task failed")
+            evidence["api"]["archive_task"] = record_api(
+                api_dir,
+                stage="archive",
+                name="archive_task",
+                method="POST",
+                path=f"/api/training/role-creation/sessions/{archive_session_id}/tasks/{archive_task_id}/archive",
+                payload=archive_api_payload,
+                status=status,
+                body=archive_result,
+            )
+            evidence["sessions"]["archive"] = {
+                "session_id": archive_session_id,
+                "ticket_id": archive_ticket_id,
+                "archived_task_id": archive_task_id,
+            }
+
+            high_role_name = "增长分析师浏览器验收高负载"
+            high_create_payload = {"session_title": "高任务量验收", "operator": operator}
+            status, high_create = api_request(base_url, "POST", "/api/training/role-creation/sessions", high_create_payload)
+            assert_true(status == 200 and isinstance(high_create, dict) and high_create.get("ok"), "high-load create session failed")
+            evidence["api"]["high_load_create_session"] = record_api(
+                api_dir,
+                stage="high",
+                name="create_session",
+                method="POST",
+                path="/api/training/role-creation/sessions",
+                payload=high_create_payload,
+                status=status,
+                body=high_create,
+            )
+            high_session_id = str((high_create.get("session") or {}).get("session_id") or "").strip()
+            assert_true(high_session_id, "high-load session_id missing")
+
+            high_message_payload = {
+                "content": role_message_text(high_role_name),
+                "attachments": image_attachment_payload("growth-high-load.png"),
+                "operator": operator,
+            }
+            status, high_message = api_request(
+                base_url,
+                "POST",
+                f"/api/training/role-creation/sessions/{high_session_id}/messages",
+                high_message_payload,
+            )
+            assert_true(status == 200 and isinstance(high_message, dict) and high_message.get("ok"), "high-load message post failed")
+            evidence["api"]["high_load_message_with_image"] = record_api(
+                api_dir,
+                stage="high",
+                name="message_with_image",
+                method="POST",
+                path=f"/api/training/role-creation/sessions/{high_session_id}/messages",
+                payload=high_message_payload,
+                status=status,
+                body=high_message,
+            )
+
+            status, high_start = api_request(
+                base_url,
+                "POST",
+                f"/api/training/role-creation/sessions/{high_session_id}/start",
+                {"operator": operator},
+            )
+            assert_true(status == 200 and isinstance(high_start, dict) and high_start.get("ok"), "high-load start failed")
+            evidence["api"]["high_load_start_session"] = record_api(
+                api_dir,
+                stage="high",
+                name="start_session",
+                method="POST",
+                path=f"/api/training/role-creation/sessions/{high_session_id}/start",
+                payload={"operator": operator},
+                status=status,
+                body=high_start,
+            )
+            high_ticket_id = str((high_start.get("session") or {}).get("assignment_ticket_id") or "").strip()
+            assert_true(high_ticket_id, "high-load ticket_id missing")
+
+            high_task_specs = [
+                ("persona_collection", "收集行业漏斗案例", "整理 6 份增长漏斗案例并给出摘要。"),
+                ("persona_collection", "整理竞品角色画像", "补一版竞品增长岗位画像差异。"),
+                ("capability_generation", "生成漏斗诊断模板", "生成漏斗诊断模板并沉淀 HTML 预览。"),
+                ("capability_generation", "生成实验设计样例", "生成实验设计样例并补方法说明。"),
+                ("review_and_alignment", "整理回看截图", "整理结果回看截图并附验证说明。"),
+                ("review_and_alignment", "生成交付预览页", "生成交付预览页并回传给当前会话。"),
+            ]
+            high_created_task_ids: list[str] = []
+            for index, (stage_key, task_name, node_goal) in enumerate(high_task_specs, start=1):
+                payload = {
+                    "stage_key": stage_key,
+                    "task_name": task_name,
+                    "node_goal": node_goal,
+                    "operator": operator,
+                }
+                status, created_task = api_request(
+                    base_url,
+                    "POST",
+                    f"/api/training/role-creation/sessions/{high_session_id}/tasks",
+                    payload,
+                )
+                assert_true(status == 200 and isinstance(created_task, dict) and created_task.get("ok"), f"high-load task create failed: {task_name}")
+                evidence["api"][f"high_load_create_task_{index}"] = record_api(
+                    api_dir,
+                    stage="high",
+                    name=f"create_task_{index}",
+                    method="POST",
+                    path=f"/api/training/role-creation/sessions/{high_session_id}/tasks",
+                    payload=payload,
+                    status=status,
+                    body=created_task,
+                )
+                node_id = str((created_task.get("created_task") or {}).get("node_id") or "").strip()
+                if node_id:
+                    high_created_task_ids.append(node_id)
+
+            high_archive_task_id = next((node_id for node_id in high_created_task_ids if node_id), "")
+            assert_true(high_archive_task_id, "high-load archive task id missing")
+            high_archive_payload = {"close_reason": "高负载验收里保留一条废案入口", "operator": operator}
+            status, high_archive = api_request(
+                base_url,
+                "POST",
+                f"/api/training/role-creation/sessions/{high_session_id}/tasks/{high_archive_task_id}/archive",
+                high_archive_payload,
+            )
+            assert_true(status == 200 and isinstance(high_archive, dict) and high_archive.get("ok"), "high-load archive failed")
+            evidence["api"]["high_load_archive_task"] = record_api(
+                api_dir,
+                stage="high",
+                name="archive_task",
+                method="POST",
+                path=f"/api/training/role-creation/sessions/{high_session_id}/tasks/{high_archive_task_id}/archive",
+                payload=high_archive_payload,
+                status=status,
+                body=high_archive,
+            )
+
+            status, high_detail = api_request(
+                base_url,
+                "GET",
+                f"/api/training/role-creation/sessions/{high_session_id}",
+            )
+            assert_true(status == 200 and isinstance(high_detail, dict) and high_detail.get("ok"), "high-load detail fetch failed")
+            evidence["api"]["high_load_detail"] = record_api(
+                api_dir,
+                stage="high",
+                name="detail",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{high_session_id}",
+                payload=None,
+                status=status,
+                body=high_detail,
+            )
+
+            success_candidates = role_stage_task_ids(high_detail, "persona_collection")[:2]
+            if len(success_candidates) < 2:
+                success_candidates = role_task_ids(high_detail)[:2]
+            assert_true(len(success_candidates) >= 2, "high-load success candidates missing")
+            for node_id in success_candidates[:2]:
+                ws.deliver_assignment_artifact(
+                    runtime_root,
+                    ticket_id_text=high_ticket_id,
+                    node_id_text=node_id,
+                    operator=operator,
+                    artifact_label=f"{node_id}.html",
+                    delivery_note="browser acceptance delivered",
+                )
+                ws.override_assignment_node_status(
+                    runtime_root,
+                    ticket_id_text=high_ticket_id,
+                    node_id_text=node_id,
+                    target_status="succeeded",
+                    operator=operator,
+                    reason="browser acceptance completed",
+                    result_ref=f"acceptance://{node_id}",
+                )
+
+            high_final_detail = ws.get_role_creation_session_detail(runtime_root, high_session_id)
+            high_state_snapshot_path = api_dir / "high-final-state.json"
+            write_json(high_state_snapshot_path, high_final_detail)
+            evidence["sessions"]["high_load"] = {
+                "session_id": high_session_id,
+                "ticket_id": high_ticket_id,
+                "archived_task_id": high_archive_task_id,
+                "succeeded_task_ids": success_candidates[:2],
+            }
+
+            stage_meta = dict(main_detail_started.get("stage_meta") or {})
+            main_profile = dict(main_message.get("profile") or {})
+            evidence["assertions"]["current_stage_api"] = {
+                "session_id": main_session_id,
+                "current_stage_key": str((main_detail_started.get("session") or {}).get("current_stage_key") or ""),
+                "detail_api": evidence["api"]["main_detail_started"],
+            }
+            evidence["assertions"]["role_spec_api"] = {
+                "session_id": main_session_id,
+                "role_name": str(main_profile.get("role_name") or ""),
+                "core_capabilities": list(main_profile.get("core_capabilities") or []),
+                "message_api": evidence["api"]["main_message_with_image"],
+            }
+            evidence["assertions"]["delegate_task_api"] = {
+                "session_id": main_session_id,
+                "delegate_task_ids": main_delegate_task_ids,
+                "delegate_api": evidence["api"]["main_explicit_delegate"],
+            }
+            evidence["assertions"]["task_id_consistency"] = task_id_consistency
+            evidence["assertions"]["workspace_init"] = {
+                "session_id": main_session_id,
+                "workspace_init_ref": main_workspace_init_ref,
+                "workspace_init_path": str((runtime_root / main_workspace_init_ref).resolve()),
+            }
+
+            assert_true(str((main_detail_started.get("session") or {}).get("current_stage_key") or "").strip() != "", "current stage key missing")
+            assert_true(str(main_profile.get("role_name") or "").strip() == main_role_name, "role profile name mismatch")
+            assert_true(len(list(main_profile.get("core_capabilities") or [])) >= 3, "role profile capabilities missing")
+            assert_true(bool(main_delegate_task_ids), "delegate task evidence missing")
+            assert_true(stage_meta.get("ticket_id"), "stage meta ticket id missing")
+
+            evidence["screenshots"]["default_view"] = capture_required_probe(
+                edge_path,
+                base_url,
+                evidence_root,
+                "rc_default_overview",
+                "rc_default",
+                {"tc_probe_session": default_session_id},
+            )
+            evidence["screenshots"]["message_with_image"] = capture_required_probe(
+                edge_path,
+                base_url,
+                evidence_root,
+                "rc_message_with_image",
+                "rc_message_with_image",
+                {"tc_probe_session": main_session_id},
+            )
+            evidence["screenshots"]["profile_tab"] = capture_required_probe(
+                edge_path,
+                base_url,
+                evidence_root,
+                "rc_profile_tab",
+                "rc_profile_tab",
+                {"tc_probe_session": main_session_id},
+            )
+            evidence["screenshots"]["task_hover"] = capture_required_probe(
+                edge_path,
+                base_url,
+                evidence_root,
+                "rc_task_hover",
+                "rc_task_hover",
+                {"tc_probe_session": main_session_id, "tc_probe_node": main_delegate_task_id},
+            )
+            evidence["screenshots"]["task_pinned"] = capture_required_probe(
+                edge_path,
+                base_url,
+                evidence_root,
+                "rc_task_pinned",
+                "rc_task_pinned",
+                {"tc_probe_session": main_session_id, "tc_probe_node": main_delegate_task_id},
+            )
+            evidence["screenshots"]["archive_entry"] = capture_required_probe(
+                edge_path,
+                base_url,
+                evidence_root,
+                "rc_archive_entry",
+                "rc_archive",
+                {"tc_probe_session": archive_session_id},
+            )
+            evidence["screenshots"]["high_load"] = capture_required_probe(
+                edge_path,
+                base_url,
+                evidence_root,
+                "rc_high_load",
+                "rc_high_load",
+                {"tc_probe_session": high_session_id},
+            )
+
+            summary_path = evidence_root / "summary.md"
+            lines = [
+                "# Role Creation Browser Acceptance",
+                "",
+                f"- runtime_root: {runtime_root.as_posix()}",
+                f"- base_url: {base_url}",
+                f"- edge_path: {edge_path.as_posix()}",
+                f"- artifact_root: {artifact_root.as_posix()}",
+                f"- api_dir: {api_dir.as_posix()}",
+                f"- screenshots_dir: {shots_dir.as_posix()}",
+                f"- server_stdout: {(log_root / 'server.stdout.log').as_posix()}",
+                f"- server_stderr: {(log_root / 'server.stderr.log').as_posix()}",
+                "",
+                "## Sessions",
+                "",
+                f"- default: {default_session_id}",
+                f"- main: {main_session_id} ticket={main_ticket_id} workspace_init_ref={main_workspace_init_ref}",
+                f"- archive: {archive_session_id} ticket={archive_ticket_id} archived_task={archive_task_id}",
+                f"- high_load: {high_session_id} ticket={high_ticket_id} archived_task={high_archive_task_id}",
+                "",
+                "## Required Screenshots",
+                "",
+            ]
+            for key, payload in evidence["screenshots"].items():
+                lines.append(f"- {key}: {payload['image']}")
+                lines.append(f"  probe: {payload['probe']}")
+            lines.extend(
+                [
+                    "",
+                    "## Key Evidence",
+                    "",
+                    f"- current_stage_api: {evidence['api']['main_detail_started']}",
+                    f"- role_spec_api: {evidence['api']['main_message_with_image']}",
+                    f"- explicit_delegate_api: {evidence['api']['main_explicit_delegate']}",
+                    f"- task_id_consistency: {task_consistency_path.as_posix()}",
+                    f"- workspace_init: {(runtime_root / main_workspace_init_ref).as_posix()}",
+                    f"- high_load_state: {high_state_snapshot_path.as_posix()}",
+                    "",
+                ]
+            )
+            summary_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            evidence["summary_md"] = summary_path.as_posix()
+            evidence["ok"] = True
+
+        write_json(evidence_root / "summary.json", evidence)
+        return 0
+    finally:
+        if not (evidence_root / "summary.json").exists():
+            write_json(evidence_root / "summary.json", evidence)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

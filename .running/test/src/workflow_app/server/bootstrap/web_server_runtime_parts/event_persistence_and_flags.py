@@ -2,7 +2,10 @@
 from ..services.work_record_store import (
     append_workflow_event_log_record,
     ensure_store,
+    latest_results_indexed,
     migrate_legacy_local_work_records,
+    new_sessions_24h_indexed,
+    pending_counts_indexed,
     unique_system_run_path,
     workflow_events_path,
 )
@@ -92,7 +95,10 @@ def current_agent_search_root(cfg: AppConfig, state: RuntimeState) -> Path | Non
 
 
 def current_agent_search_root_text(cfg: AppConfig, state: RuntimeState) -> str:
-    return agent_search_root_text(current_agent_search_root(cfg, state))
+    with state.config_lock:
+        root = cfg.agent_search_root
+        requested_text = str(getattr(cfg, "agent_search_root_requested_text", "") or "").strip()
+    return agent_search_root_text(root) or requested_text
 
 
 def current_agent_search_root_status(cfg: AppConfig, state: RuntimeState) -> tuple[Path | None, bool, str]:
@@ -264,8 +270,22 @@ def set_agent_search_root(
         old_root = cfg.agent_search_root
         save_runtime_config(cfg.root, {"agent_search_root": new_root.as_posix()})
         cfg.agent_search_root = new_root
+        cfg.agent_search_root_requested_text = new_root.as_posix()
     invalidate_available_agents_cache(config_root=cfg.root)
     return old_root, new_root
+
+
+class QuietDisconnectHTTPServer(ThreadingHTTPServer):
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        _exc_type, exc, _tb = sys.exc_info()
+        if isinstance(exc, (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)):
+            return
+        if isinstance(exc, OSError):
+            if getattr(exc, "winerror", None) in {10053, 10054}:
+                return
+            if getattr(exc, "errno", None) in {32, 103, 104}:
+                return
+        super().handle_error(request, client_address)
 
 
 def set_allow_manual_policy_input(
@@ -350,6 +370,20 @@ def list_available_agents(
         analyze_policy=analyze_policy,
         target_agent_name=target_name,
     )
+    if not bool(cfg.show_test_data):
+        filtered_items: list[dict[str, Any]] = []
+        for item in items:
+            agents_path_text = str(item.get("agents_md_path") or "").strip()
+            if not agents_path_text:
+                continue
+            workspace_path = Path(agents_path_text).resolve(strict=False).parent
+            if is_system_or_test_workspace(
+                workspace_path.as_posix(),
+                agent_search_root=cfg.agent_search_root,
+            ):
+                continue
+            filtered_items.append(item)
+        items = filtered_items
     if use_cache:
         with _AVAILABLE_AGENT_CACHE_LOCK:
             _AVAILABLE_AGENT_CACHE[cache_key] = {
@@ -434,6 +468,7 @@ from ..services import task_orchestration as _task_orchestration
 from ..services import chat_session_runtime as _chat_session_runtime
 from ..services import training_workflow as _training_workflow
 from ..services import assignment_service as _assignment_service
+from ..services import defect_service as _defect_service
 from ..infra import audit_runtime as _audit_runtime
 
 _RUNTIME_DOMAIN_MODULES = (
@@ -444,6 +479,7 @@ _RUNTIME_DOMAIN_MODULES = (
     _chat_session_runtime,
     _training_workflow,
     _assignment_service,
+    _defect_service,
     _audit_runtime,
 )
 
@@ -748,17 +784,20 @@ def main() -> None:
     root = Path(args.root).resolve()
     entry_script = resolve_entry_script(root, args.entry_script)
     runtime_cfg = load_runtime_config(root)
-    requested_root_text = str(args.agent_search_root or "").strip()
-    if not requested_root_text:
-        requested_root_text = str(runtime_cfg.get("agent_search_root") or "").strip()
-    if not requested_root_text:
-        requested_root_text = DEFAULT_AGENTS_ROOT.as_posix()
+    cli_root_text = str(args.agent_search_root or "").strip()
+    configured_root_text = str(runtime_cfg.get("agent_search_root") or "").strip()
+    requested_root_text = cli_root_text or configured_root_text or DEFAULT_AGENTS_ROOT.as_posix()
     agent_search_root = resolve_startup_agent_search_root(requested_root_text, base=root)
     if requested_root_text and agent_search_root is None:
         print(
             f"web> agent_search_root unavailable on startup, fallback to empty: {requested_root_text}",
             flush=True,
         )
+    requested_root_text_for_state = (
+        agent_search_root.as_posix()
+        if isinstance(agent_search_root, Path)
+        else cli_root_text or configured_root_text
+    )
     allow_manual_text = str(args.allow_manual_policy_input or "").strip()
     if allow_manual_text:
         allow_manual_policy_input = parse_bool_flag(
@@ -781,6 +820,7 @@ def main() -> None:
         root=root,
         entry_script=entry_script,
         agent_search_root=agent_search_root,
+        agent_search_root_requested_text=requested_root_text_for_state,
         show_test_data=show_test_data,
         host=args.host,
         port=int(args.port),
@@ -803,14 +843,17 @@ def main() -> None:
             f"web> artifact_root unavailable on startup, fallback to default: {detail}",
             flush=True,
         )
-    save_runtime_config(
-        cfg.root,
-        {
-            "agent_search_root": agent_search_root_text(agent_search_root),
-            "show_test_data": bool(show_test_data),
-            "artifact_root": str(artifact_settings.get("artifact_root") or ""),
-        },
-    )
+    runtime_patch = {
+        "show_test_data": bool(show_test_data),
+        "artifact_root": str(artifact_settings.get("artifact_root") or ""),
+    }
+    if isinstance(agent_search_root, Path):
+        runtime_patch["agent_search_root"] = agent_search_root.as_posix()
+    elif configured_root_text:
+        runtime_patch["agent_search_root"] = configured_root_text
+    elif cli_root_text:
+        runtime_patch["agent_search_root"] = cli_root_text
+    save_runtime_config(cfg.root, runtime_patch)
     try:
         assignment_workspace_sync = migrate_assignment_workspace_records(
             cfg.root,
@@ -883,8 +926,8 @@ def main() -> None:
     scheduler = start_reconcile_scheduler(cfg, state)
     setattr(state, "_runtime_shutdown_code", 0)
     setattr(state, "_runtime_shutdown_reason", "")
-    ThreadingHTTPServer.allow_reuse_address = True
-    server = ThreadingHTTPServer((cfg.host, cfg.port), make_handler(cfg, state))
+    QuietDisconnectHTTPServer.allow_reuse_address = True
+    server = QuietDisconnectHTTPServer((cfg.host, cfg.port), make_handler(cfg, state))
     setattr(state, "_runtime_server_shutdown", server.shutdown)
     runtime_upgrade.runtime_process_start(host=cfg.host, port=cfg.port)
     print(f"web> http://{cfg.host}:{cfg.port}")

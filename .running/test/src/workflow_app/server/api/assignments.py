@@ -157,6 +157,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                 cfg.root,
                 ticket_id_text=ws.safe_token(martifact_preview.group(1), "", 160),
                 node_id_text=ws.safe_token(martifact_preview.group(2), "", 160),
+                path_index=_parse_int_query(query, "path_index", 0),
                 include_test_data=include_test_data,
             )
             handler.send_text(200, str(data.get("content") or ""), str(data.get("content_type") or "text/plain; charset=utf-8"))

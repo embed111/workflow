@@ -63,6 +63,9 @@ def discover_agents(
             rel_parts = agents_file.relative_to(agents_root).parts[:-1]
         except Exception:
             rel_parts = agents_file.parts[:-1]
+        # The search root is the workspace umbrella, not a selectable agent itself.
+        if not rel_parts:
+            continue
         # Hidden-style directories (e.g. .test, .cache, .git) are not exposed as selectable agents.
         if any(part.startswith(".") for part in rel_parts):
             continue

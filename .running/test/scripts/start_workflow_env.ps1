@@ -157,6 +157,26 @@ function Start-EnvironmentLauncher {
             $Descriptor.version = [string]$manifest['version']
         }
     }
+    $runtimeConfig = Get-WorkflowRuntimeConfig -RuntimeRoot ([string]$Descriptor.runtime_root)
+    if ($runtimeConfig.ContainsKey('agent_search_root')) {
+        $configuredAgentRoot = [string]$runtimeConfig['agent_search_root']
+        if ([string]::IsNullOrWhiteSpace($configuredAgentRoot)) {
+            $Descriptor.agent_search_root = ''
+        }
+        else {
+            $Descriptor.agent_search_root = [System.IO.Path]::GetFullPath($configuredAgentRoot)
+        }
+    }
+    $configuredArtifactRoot = ''
+    if (-not [string]::IsNullOrWhiteSpace([string]$runtimeConfig['task_artifact_root'])) {
+        $configuredArtifactRoot = [string]$runtimeConfig['task_artifact_root']
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace([string]$runtimeConfig['artifact_root'])) {
+        $configuredArtifactRoot = [string]$runtimeConfig['artifact_root']
+    }
+    if (-not [string]::IsNullOrWhiteSpace($configuredArtifactRoot)) {
+        $Descriptor.artifact_root = [System.IO.Path]::GetFullPath($configuredArtifactRoot)
+    }
     Write-WorkflowRuntimeConfig -RuntimeRoot ([string]$Descriptor.runtime_root) -Patch @{
         agent_search_root = [string]$Descriptor.agent_search_root
         artifact_root = [string]$Descriptor.artifact_root

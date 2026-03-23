@@ -128,7 +128,145 @@ def ensure_tables(
             "CREATE INDEX IF NOT EXISTS idx_apc_hash_mtime ON agent_policy_cache(agents_hash,agents_mtime)"
         )
         conn.execute(
-            "CREATE TABLE IF NOT EXISTS agent_registry (agent_id TEXT PRIMARY KEY,agent_name TEXT NOT NULL,workspace_path TEXT NOT NULL,current_version TEXT NOT NULL DEFAULT '',latest_release_version TEXT NOT NULL DEFAULT '',bound_release_version TEXT NOT NULL DEFAULT '',lifecycle_state TEXT NOT NULL DEFAULT 'released',training_gate_state TEXT NOT NULL DEFAULT 'trainable',parent_agent_id TEXT NOT NULL DEFAULT '',core_capabilities TEXT NOT NULL DEFAULT '',capability_summary TEXT NOT NULL DEFAULT '',knowledge_scope TEXT NOT NULL DEFAULT '',skills_json TEXT NOT NULL DEFAULT '[]',applicable_scenarios TEXT NOT NULL DEFAULT '',version_notes TEXT NOT NULL DEFAULT '',avatar_uri TEXT NOT NULL DEFAULT '',vector_icon TEXT NOT NULL DEFAULT '',git_available INTEGER NOT NULL DEFAULT 0,pre_release_state TEXT NOT NULL DEFAULT 'unknown',pre_release_reason TEXT NOT NULL DEFAULT '',pre_release_checked_at TEXT NOT NULL DEFAULT '',pre_release_git_output TEXT NOT NULL DEFAULT '',last_release_at TEXT NOT NULL DEFAULT '',status_tags_json TEXT NOT NULL DEFAULT '[]',active_role_profile_release_id TEXT NOT NULL DEFAULT '',active_role_profile_ref TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL)"
+            "CREATE TABLE IF NOT EXISTS agent_registry (agent_id TEXT PRIMARY KEY,agent_name TEXT NOT NULL,workspace_path TEXT NOT NULL,current_version TEXT NOT NULL DEFAULT '',latest_release_version TEXT NOT NULL DEFAULT '',bound_release_version TEXT NOT NULL DEFAULT '',lifecycle_state TEXT NOT NULL DEFAULT 'released',training_gate_state TEXT NOT NULL DEFAULT 'trainable',parent_agent_id TEXT NOT NULL DEFAULT '',core_capabilities TEXT NOT NULL DEFAULT '',capability_summary TEXT NOT NULL DEFAULT '',knowledge_scope TEXT NOT NULL DEFAULT '',skills_json TEXT NOT NULL DEFAULT '[]',applicable_scenarios TEXT NOT NULL DEFAULT '',version_notes TEXT NOT NULL DEFAULT '',avatar_uri TEXT NOT NULL DEFAULT '',vector_icon TEXT NOT NULL DEFAULT '',git_available INTEGER NOT NULL DEFAULT 0,pre_release_state TEXT NOT NULL DEFAULT 'unknown',pre_release_reason TEXT NOT NULL DEFAULT '',pre_release_checked_at TEXT NOT NULL DEFAULT '',pre_release_git_output TEXT NOT NULL DEFAULT '',last_release_at TEXT NOT NULL DEFAULT '',status_tags_json TEXT NOT NULL DEFAULT '[]',active_role_profile_release_id TEXT NOT NULL DEFAULT '',active_role_profile_ref TEXT NOT NULL DEFAULT '',runtime_status TEXT NOT NULL DEFAULT 'idle',updated_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS role_creation_sessions (
+                session_id TEXT PRIMARY KEY,
+                session_title TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft',
+                current_stage_key TEXT NOT NULL DEFAULT 'persona_collection',
+                current_stage_index INTEGER NOT NULL DEFAULT 2,
+                role_spec_json TEXT NOT NULL DEFAULT '{}',
+                missing_fields_json TEXT NOT NULL DEFAULT '[]',
+                assignment_ticket_id TEXT NOT NULL DEFAULT '',
+                created_agent_id TEXT NOT NULL DEFAULT '',
+                created_agent_name TEXT NOT NULL DEFAULT '',
+                created_agent_workspace_path TEXT NOT NULL DEFAULT '',
+                workspace_init_status TEXT NOT NULL DEFAULT 'pending',
+                workspace_init_ref TEXT NOT NULL DEFAULT '',
+                last_message_preview TEXT NOT NULL DEFAULT '',
+                last_message_at TEXT NOT NULL DEFAULT '',
+                started_at TEXT NOT NULL DEFAULT '',
+                completed_at TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_role_creation_sessions_updated ON role_creation_sessions(updated_at DESC)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS role_creation_messages (
+                message_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL DEFAULT '',
+                attachments_json TEXT NOT NULL DEFAULT '[]',
+                message_type TEXT NOT NULL DEFAULT 'chat',
+                meta_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_role_creation_messages_session ON role_creation_messages(session_id,created_at)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS role_creation_task_refs (
+                ref_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                ticket_id TEXT NOT NULL,
+                node_id TEXT NOT NULL,
+                stage_key TEXT NOT NULL,
+                stage_index INTEGER NOT NULL DEFAULT 0,
+                relation_state TEXT NOT NULL DEFAULT 'active',
+                close_reason TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_role_creation_task_refs_unique ON role_creation_task_refs(session_id,node_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_role_creation_task_refs_stage ON role_creation_task_refs(session_id,stage_index,updated_at)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS defect_reports (
+                report_id TEXT PRIMARY KEY,
+                dts_id TEXT NOT NULL DEFAULT '',
+                dts_sequence INTEGER NOT NULL DEFAULT 0,
+                defect_summary TEXT NOT NULL DEFAULT '',
+                report_text TEXT NOT NULL DEFAULT '',
+                evidence_images_json TEXT NOT NULL DEFAULT '[]',
+                is_formal INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'not_formal',
+                discovered_iteration TEXT NOT NULL DEFAULT '',
+                resolved_version TEXT NOT NULL DEFAULT '',
+                current_decision_json TEXT NOT NULL DEFAULT '{}',
+                report_source TEXT NOT NULL DEFAULT 'workflow-ui',
+                automation_context_json TEXT NOT NULL DEFAULT '{}',
+                is_test_data INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_defect_reports_updated ON defect_reports(updated_at DESC)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_defect_reports_status ON defect_reports(is_formal,status,updated_at DESC)"
+        )
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_defect_reports_dts_id ON defect_reports(dts_id) WHERE dts_id<>''"
+        )
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_defect_reports_dts_sequence ON defect_reports(dts_sequence) WHERE dts_sequence>0"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS defect_history (
+                history_id TEXT PRIMARY KEY,
+                report_id TEXT NOT NULL,
+                entry_type TEXT NOT NULL,
+                actor TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL DEFAULT '',
+                detail_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_defect_history_report_time ON defect_history(report_id,created_at)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS defect_task_refs (
+                ref_id TEXT PRIMARY KEY,
+                report_id TEXT NOT NULL,
+                ticket_id TEXT NOT NULL,
+                focus_node_id TEXT NOT NULL DEFAULT '',
+                action_kind TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                external_request_id TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_defect_task_refs_report_time ON defect_task_refs(report_id,updated_at DESC)"
+        )
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_defect_task_refs_unique ON defect_task_refs(report_id,ticket_id,focus_node_id,external_request_id)"
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_ar_registry_name ON agent_registry(agent_name)"
@@ -246,6 +384,7 @@ def ensure_tables(
         ensure_column(conn, "agent_registry", "pre_release_git_output", "pre_release_git_output TEXT NOT NULL DEFAULT ''")
         ensure_column(conn, "agent_registry", "active_role_profile_release_id", "active_role_profile_release_id TEXT NOT NULL DEFAULT ''")
         ensure_column(conn, "agent_registry", "active_role_profile_ref", "active_role_profile_ref TEXT NOT NULL DEFAULT ''")
+        ensure_column(conn, "agent_registry", "runtime_status", "runtime_status TEXT NOT NULL DEFAULT 'idle'")
         ensure_column(conn, "agent_release_history", "capability_summary", "capability_summary TEXT NOT NULL DEFAULT ''")
         ensure_column(conn, "agent_release_history", "knowledge_scope", "knowledge_scope TEXT NOT NULL DEFAULT ''")
         ensure_column(conn, "agent_release_history", "skills_json", "skills_json TEXT NOT NULL DEFAULT '[]'")

@@ -1,23 +1,33 @@
-  function switchTab(name) {
+  function switchTab(name, options) {
+    const opts = options && typeof options === 'object' ? options : {};
+    const tabName = normalizeAppTab(name);
     document.querySelectorAll('.tab').forEach((node) => {
-      node.classList.toggle('active', safe(node.getAttribute('data-tab')) === name);
+      node.classList.toggle('active', safe(node.getAttribute('data-tab')) === tabName);
     });
     document.querySelectorAll('.pane').forEach((node) => {
-      node.classList.toggle('active', safe(node.id) === 'pane-' + name);
+      node.classList.toggle('active', safe(node.id) === 'pane-' + tabName);
     });
-    if (name !== 'task-center' && typeof stopAssignmentExecutionRealtime === 'function') {
+    if (opts.persist !== false) {
+      writeSavedAppTab(tabName);
+    }
+    if (tabName !== 'task-center' && typeof stopAssignmentExecutionRealtime === 'function') {
       stopAssignmentExecutionRealtime();
-    } else if (name !== 'task-center' && typeof stopAssignmentExecutionPoller === 'function') {
+    } else if (tabName !== 'task-center' && typeof stopAssignmentExecutionPoller === 'function') {
       stopAssignmentExecutionPoller();
     }
-    if (name === 'training-center') {
+    if (tabName === 'training-center') {
       refreshTrainingCenterAgents()
-        .then(() => refreshTrainingCenterQueue(false))
+        .then(async () => {
+          await refreshTrainingCenterQueue(false);
+          if (safe(state.tcModule).trim() === 'create-role' && typeof refreshRoleCreationSessions === 'function') {
+            await refreshRoleCreationSessions({ preserveSelection: true });
+          }
+        })
         .catch((err) => {
           setTrainingCenterError(err.message || String(err));
         });
     }
-    if (name === 'task-center') {
+    if (tabName === 'task-center') {
       if (!state.agentSearchRootReady) {
         renderAssignmentCenter();
         return;
@@ -26,7 +36,13 @@
         setAssignmentError(err.message || String(err));
       });
     }
-    if (name === 'settings') {
+    if (tabName === 'requirement-bug') {
+      renderDefectCenter();
+      refreshDefectList({ preserveSelection: true }).catch((err) => {
+        setDefectError(err.message || String(err));
+      });
+    }
+    if (tabName === 'settings') {
       updateArtifactRootMeta();
       updateAssignmentExecutionSettingsMeta();
     }
@@ -34,6 +50,12 @@
 
   function bindEvents() {
     bindAssignmentCenterEvents();
+    if (typeof bindDefectCenterEvents === 'function') {
+      bindDefectCenterEvents();
+    }
+    if (typeof bindRoleCreationEvents === 'function') {
+      bindRoleCreationEvents();
+    }
     $('agentSelect').onchange = () => {
       const agent = selectedAgent();
       if (agent) localStorage.setItem(agentCacheKey, agent);
@@ -290,6 +312,9 @@
     };
     $('tcTabAgentsBtn').onclick = () => {
       setTrainingCenterModule('agents');
+    };
+    $('tcTabCreateRoleBtn').onclick = () => {
+      setTrainingCenterModule('create-role');
     };
     $('tcTabOpsBtn').onclick = () => {
       setTrainingCenterModule('ops');

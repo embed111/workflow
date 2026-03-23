@@ -201,6 +201,9 @@ $showTestData = $false
 if ($Environment -eq 'prod') {
     $showTestData = $false
 }
+elseif ($Environment -eq 'test') {
+    $showTestData = $true
+}
 elseif ($existingRuntimeConfig.ContainsKey('show_test_data')) {
     $showTestData = [bool]$existingRuntimeConfig.show_test_data
 }

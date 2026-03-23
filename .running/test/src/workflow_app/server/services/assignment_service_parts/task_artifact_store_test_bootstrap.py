@@ -159,6 +159,10 @@ def bootstrap_assignment_test_graph(cfg: Any, *, operator: str) -> dict[str, Any
                 "",
             ]
         ).strip() + "\n"
+        failed_payload = _artifact_text_to_html_document(
+            failed_payload,
+            title=str(failed_node.get("expected_artifact") or failed_node.get("node_name") or "失败日志"),
+        )
         for raw_path in failed_paths:
             path = Path(raw_path).resolve(strict=False)
             path.parent.mkdir(parents=True, exist_ok=True)

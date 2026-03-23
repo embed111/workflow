@@ -235,6 +235,242 @@ function Get-WorkflowEnvironmentLogRoot {
     return (Join-Path (Join-Path (Get-WorkflowControlRoot -SourceRoot $SourceRoot) 'logs') $Environment)
 }
 
+function Get-WorkflowNormalizedFullPath {
+    param(
+        [Parameter()]
+        [AllowEmptyString()]
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return ''
+    }
+    try {
+        return [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+    }
+    catch {
+        return ''
+    }
+}
+
+function Test-WorkflowSamePath {
+    param(
+        [Parameter()]
+        [AllowEmptyString()]
+        [string]$Left,
+        [Parameter()]
+        [AllowEmptyString()]
+        [string]$Right
+    )
+
+    $leftPath = Get-WorkflowNormalizedFullPath -Path $Left
+    $rightPath = Get-WorkflowNormalizedFullPath -Path $Right
+    if ([string]::IsNullOrWhiteSpace($leftPath) -or [string]::IsNullOrWhiteSpace($rightPath)) {
+        return $false
+    }
+    return [string]::Equals($leftPath, $rightPath, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-WorkflowEnvironmentLocalDeploymentMarkerPath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceRoot,
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('dev', 'test', 'prod')]
+        [string]$Environment
+    )
+
+    return (Join-Path (Join-Path (Get-WorkflowRunningRoot -SourceRoot $SourceRoot) $Environment) '.workflow-local-deployment.json')
+}
+
+function Write-WorkflowLocalDeploymentMarker {
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Descriptor,
+        [Parameter(Mandatory = $true)]
+        [string]$Version,
+        [Parameter(Mandatory = $true)]
+        [string]$DeployedAt
+    )
+
+    $markerPath = Get-WorkflowEnvironmentLocalDeploymentMarkerPath `
+        -SourceRoot ([string]$Descriptor.source_root) `
+        -Environment ([string]$Descriptor.environment)
+    Write-WorkflowJson -Path $markerPath -Payload @{
+        environment   = [string]$Descriptor.environment
+        version       = $Version
+        deployed_at   = $DeployedAt
+        source_root   = [string]$Descriptor.source_root
+        deploy_root   = [string]$Descriptor.deploy_root
+        control_root  = [string]$Descriptor.control_root
+        runtime_root  = [string]$Descriptor.runtime_root
+        manifest_path = [string]$Descriptor.manifest_path
+        marker_kind   = 'local_deployment'
+    }
+    return $markerPath
+}
+
+function Get-WorkflowGitRepositoryRoot {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceRoot
+    )
+
+    $gitCommand = Get-Command git -ErrorAction SilentlyContinue
+    if (-not $gitCommand) {
+        return ''
+    }
+    try {
+        $output = & $gitCommand.Source -C $SourceRoot rev-parse --show-toplevel 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            return ''
+        }
+        $gitRoot = [string]($output | Select-Object -First 1)
+        return (Get-WorkflowNormalizedFullPath -Path $gitRoot.Trim())
+    }
+    catch {
+        return ''
+    }
+}
+
+function Get-WorkflowProdGitProtectedPathspecs {
+    return @(
+        '.running/prod',
+        '.running/control/runtime/prod',
+        '.running/control/envs/prod.json',
+        '.running/control/instances/prod.json',
+        '.running/control/pids/prod.pid',
+        '.running/control/logs/prod',
+        '.running/control/prod-candidate.json',
+        '.running/control/prod-last-action.json',
+        '.running/control/prod-upgrade-request.json',
+        '.running/control/deployment-events.jsonl'
+    )
+}
+
+function Invoke-WorkflowGitSkipWorktree {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$GitRoot,
+        [Parameter(Mandatory = $true)]
+        [string[]]$RelativePaths
+    )
+
+    $gitCommand = (Get-Command git -ErrorAction Stop).Source
+    $paths = @(
+        $RelativePaths |
+            Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+            ForEach-Object { [string]$_ } |
+            Sort-Object -Unique
+    )
+    if ($paths.Count -eq 0) {
+        return 0
+    }
+    $updatedCount = 0
+    $chunk = New-Object System.Collections.Generic.List[string]
+    $chunkCharCount = 0
+    foreach ($relativePath in $paths) {
+        $pathLength = ([string]$relativePath).Length + 1
+        if ($chunk.Count -gt 0 -and ($chunk.Count -ge 60 -or ($chunkCharCount + $pathLength) -gt 6000)) {
+            & $gitCommand -C $GitRoot update-index --skip-worktree -- @($chunk.ToArray()) 2>$null | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                throw "git update-index --skip-worktree failed in $GitRoot"
+            }
+            $updatedCount += $chunk.Count
+            $chunk.Clear()
+            $chunkCharCount = 0
+        }
+        $chunk.Add($relativePath)
+        $chunkCharCount += $pathLength
+    }
+    if ($chunk.Count -gt 0) {
+        & $gitCommand -C $GitRoot update-index --skip-worktree -- @($chunk.ToArray()) 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "git update-index --skip-worktree failed in $GitRoot"
+        }
+        $updatedCount += $chunk.Count
+        $chunk.Clear()
+        $chunkCharCount = 0
+    }
+    return $updatedCount
+}
+
+function Protect-WorkflowProdGitRuntimeState {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceRoot
+    )
+
+    $gitRoot = Get-WorkflowGitRepositoryRoot -SourceRoot $SourceRoot
+    if ([string]::IsNullOrWhiteSpace($gitRoot)) {
+        return @{
+            ok            = $true
+            applied       = $false
+            reason        = 'git_unavailable_or_not_repo'
+            git_root      = ''
+            tracked_count = 0
+            updated_count = 0
+        }
+    }
+    $gitCommand = (Get-Command git -ErrorAction Stop).Source
+    $trackedFiles = @()
+    try {
+        $trackedFiles = & $gitCommand -C $gitRoot -c core.quotePath=false ls-files -- @(Get-WorkflowProdGitProtectedPathspecs) 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            throw "git ls-files failed in $gitRoot"
+        }
+    }
+    catch {
+        return @{
+            ok            = $false
+            applied       = $false
+            reason        = 'git_ls_files_failed'
+            error         = $_.Exception.Message
+            git_root      = $gitRoot
+            tracked_count = 0
+            updated_count = 0
+        }
+    }
+    $uniqueTracked = @(
+        $trackedFiles |
+            Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+            ForEach-Object { ([string]$_).Trim() } |
+            Sort-Object -Unique
+    )
+    if ($uniqueTracked.Count -eq 0) {
+        return @{
+            ok            = $true
+            applied       = $false
+            reason        = 'no_tracked_prod_runtime_paths'
+            git_root      = $gitRoot
+            tracked_count = 0
+            updated_count = 0
+        }
+    }
+    try {
+        $updatedCount = Invoke-WorkflowGitSkipWorktree -GitRoot $gitRoot -RelativePaths $uniqueTracked
+        return @{
+            ok            = $true
+            applied       = $true
+            reason        = 'protected'
+            git_root      = $gitRoot
+            tracked_count = $uniqueTracked.Count
+            updated_count = $updatedCount
+        }
+    }
+    catch {
+        return @{
+            ok            = $false
+            applied       = $false
+            reason        = 'git_update_index_failed'
+            error         = $_.Exception.Message
+            git_root      = $gitRoot
+            tracked_count = $uniqueTracked.Count
+            updated_count = 0
+        }
+    }
+}
+
 function Get-WorkflowProdCandidatePath {
     param(
         [Parameter(Mandatory = $true)]

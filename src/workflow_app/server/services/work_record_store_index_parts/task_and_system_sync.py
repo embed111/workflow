@@ -170,30 +170,12 @@ def _sync_message_delete_audit_with_conn(conn: sqlite3.Connection, root: Path) -
         return
     _touch_source(conn, root, path, record_kind="record_jsonl", entity_type="message_delete_audit", entity_id="message-delete")
     for line_no, row in _read_jsonl_with_lines(path):
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO audit_index (
-                audit_key,audit_type,session_id,analysis_id,ticket_id,node_id,action,status,operator,created_at,
-                reason_preview,manual_fallback,ref_relpath,source_relpath,source_line_no
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """,
-            (
-                f"message_delete:{line_no}",
-                "message_delete",
-                str(row.get("session_id") or ""),
-                "",
-                "",
-                "",
-                str(row.get("action") or "delete"),
-                "",
-                str(row.get("operator") or ""),
-                str(row.get("created_at") or ""),
-                _preview(row.get("reason") or ""),
-                0,
-                _ref_relpath(root, str(row.get("ref") or "")),
-                relpath,
-                line_no,
-            ),
+        _upsert_message_delete_audit_row(
+            conn,
+            root,
+            row,
+            source_relpath=relpath,
+            source_line_no=line_no,
         )
 
 
@@ -205,31 +187,217 @@ def _sync_policy_confirmation_audit_with_conn(conn: sqlite3.Connection, root: Pa
         return
     _touch_source(conn, root, path, record_kind="record_jsonl", entity_type="policy_confirmation_audit", entity_id="policy-confirmation")
     for line_no, row in _read_jsonl_with_lines(path):
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO audit_index (
-                audit_key,audit_type,session_id,analysis_id,ticket_id,node_id,action,status,operator,created_at,
-                reason_preview,manual_fallback,ref_relpath,source_relpath,source_line_no
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """,
-            (
-                f"policy_confirmation:{line_no}",
-                "policy_confirmation",
-                str(row.get("session_id") or ""),
-                "",
-                "",
-                "",
-                str(row.get("action") or ""),
-                str(row.get("status") or ""),
-                str(row.get("operator") or ""),
-                str(row.get("created_at") or ""),
-                _preview(row.get("reason") or row.get("detail") or ""),
-                1 if _store._normalize_bool(row.get("manual_fallback")) else 0,
-                _ref_relpath(root, str(row.get("ref") or "")),
-                relpath,
-                line_no,
-            ),
+        _upsert_policy_confirmation_audit_row(
+            conn,
+            root,
+            row,
+            source_relpath=relpath,
+            source_line_no=line_no,
         )
+
+
+def _message_delete_audit_key(row: dict[str, Any], *, line_no: int = 0) -> str:
+    audit_id = _safe_int(row.get("audit_id"))
+    if audit_id > 0:
+        return f"message_delete:{audit_id}"
+    return f"message_delete:{line_no}"
+
+
+def _policy_confirmation_audit_key(row: dict[str, Any], *, line_no: int = 0) -> str:
+    audit_id = _safe_int(row.get("audit_id"))
+    if audit_id > 0:
+        return f"policy_confirmation:{audit_id}"
+    return f"policy_confirmation:{line_no}"
+
+
+def _system_workflow_event_key(row: dict[str, Any], *, line_no: int = 0) -> str:
+    event_id = str(row.get("event_id") or "").strip()
+    if event_id:
+        return f"system_workflow_event:{event_id}"
+    return f"system_workflow_event:{line_no}"
+
+
+def _reconcile_run_key(row: dict[str, Any], *, line_no: int = 0) -> str:
+    run_id = str(row.get("run_id") or "").strip()
+    if run_id:
+        return f"reconcile_run:{run_id}"
+    return f"reconcile_run:{line_no}"
+
+
+def _upsert_message_delete_audit_row(
+    conn: sqlite3.Connection,
+    root: Path,
+    row: dict[str, Any],
+    *,
+    source_relpath: str,
+    source_line_no: int = 0,
+) -> None:
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO audit_index (
+            audit_key,audit_type,session_id,analysis_id,ticket_id,node_id,action,status,operator,created_at,
+            reason_preview,manual_fallback,ref_relpath,source_relpath,source_line_no
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            _message_delete_audit_key(row, line_no=source_line_no),
+            "message_delete",
+            str(row.get("session_id") or ""),
+            "",
+            "",
+            "",
+            str(row.get("action") or "delete"),
+            "",
+            str(row.get("operator") or ""),
+            str(row.get("created_at") or row.get("audit_ts") or ""),
+            _preview(row.get("reason") or row.get("reason_text") or ""),
+            0,
+            _ref_relpath(root, str(row.get("ref") or "")),
+            source_relpath,
+            source_line_no,
+        ),
+    )
+
+
+def _upsert_policy_confirmation_audit_row(
+    conn: sqlite3.Connection,
+    root: Path,
+    row: dict[str, Any],
+    *,
+    source_relpath: str,
+    source_line_no: int = 0,
+) -> None:
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO audit_index (
+            audit_key,audit_type,session_id,analysis_id,ticket_id,node_id,action,status,operator,created_at,
+            reason_preview,manual_fallback,ref_relpath,source_relpath,source_line_no
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            _policy_confirmation_audit_key(row, line_no=source_line_no),
+            "policy_confirmation",
+            str(row.get("session_id") or ""),
+            "",
+            "",
+            "",
+            str(row.get("action") or ""),
+            str(row.get("status") or ""),
+            str(row.get("operator") or ""),
+            str(row.get("created_at") or row.get("audit_ts") or ""),
+            _preview(row.get("reason") or row.get("reason_text") or row.get("detail") or ""),
+            1 if _store._normalize_bool(row.get("manual_fallback")) else 0,
+            _ref_relpath(root, str(row.get("ref") or "")),
+            source_relpath,
+            source_line_no,
+        ),
+    )
+
+
+def _upsert_system_workflow_event_row(
+    conn: sqlite3.Connection,
+    root: Path,
+    row: dict[str, Any],
+    *,
+    source_relpath: str,
+    source_line_no: int = 0,
+) -> None:
+    event_type = str(row.get("event_type") or row.get("action") or "").strip()
+    level = str(row.get("level") or row.get("stage") or "").strip()
+    created_at = str(row.get("created_at") or row.get("timestamp") or "").strip()
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO event_index (
+            event_key,stream_type,ticket_id,node_id,run_id,task_id,session_id,analysis_id,workflow_id,
+            event_type,level,created_at,message_preview,detail_preview,related_status,source_relpath,source_line_no,run_relpath
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            _system_workflow_event_key(row, line_no=source_line_no),
+            "system_workflow_event",
+            str(row.get("ticket_id") or ""),
+            str(row.get("node_id") or ""),
+            str(row.get("run_id") or ""),
+            str(row.get("task_id") or ""),
+            str(row.get("session_id") or ""),
+            str(row.get("analysis_id") or ""),
+            str(row.get("workflow_id") or ""),
+            event_type,
+            level,
+            created_at,
+            _preview(row.get("message") or row.get("action") or row.get("status") or event_type),
+            _preview(row),
+            str(row.get("status") or ""),
+            source_relpath,
+            source_line_no,
+            "",
+        ),
+    )
+
+
+def _upsert_reconcile_run_row(
+    conn: sqlite3.Connection,
+    root: Path,
+    row: dict[str, Any],
+    *,
+    source_relpath: str,
+    source_line_no: int = 0,
+) -> None:
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO event_index (
+            event_key,stream_type,ticket_id,node_id,run_id,task_id,session_id,analysis_id,workflow_id,
+            event_type,level,created_at,message_preview,detail_preview,related_status,source_relpath,source_line_no,run_relpath
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            _reconcile_run_key(row, line_no=source_line_no),
+            "reconcile_run",
+            "",
+            "",
+            str(row.get("run_id") or ""),
+            "",
+            "",
+            "",
+            "",
+            str(row.get("reason") or "reconcile"),
+            "",
+            str(row.get("run_at") or row.get("created_at") or ""),
+            _preview(row.get("notes") or row.get("reason") or ""),
+            _preview(row),
+            str(row.get("status") or ""),
+            source_relpath,
+            source_line_no,
+            _artifact_relpath(root, str(row.get("ref") or "")),
+        ),
+    )
+
+
+def _upsert_ingress_request_row(
+    conn: sqlite3.Connection,
+    root: Path,
+    row: dict[str, Any],
+    *,
+    source_relpath: str = "",
+) -> None:
+    request_id = str(row.get("request_id") or "").strip()
+    if not request_id:
+        return
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO ingress_request_index (
+            request_id,session_id,route,created_at,event_logged,source_relpath
+        ) VALUES (?,?,?,?,?,?)
+        """,
+        (
+            request_id,
+            str(row.get("session_id") or ""),
+            str(row.get("route") or ""),
+            str(row.get("created_at") or ""),
+            1 if _store._normalize_bool(row.get("event_logged")) else 0,
+            source_relpath,
+        ),
+    )
 
 
 def _sync_system_workflow_events_with_conn(conn: sqlite3.Connection, root: Path) -> None:
@@ -240,34 +408,12 @@ def _sync_system_workflow_events_with_conn(conn: sqlite3.Connection, root: Path)
         return
     _touch_source(conn, root, path, record_kind="record_jsonl", entity_type="system_workflow_event", entity_id="workflow-events")
     for line_no, row in _read_jsonl_with_lines(path):
-        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO event_index (
-                event_key,stream_type,ticket_id,node_id,run_id,task_id,session_id,analysis_id,workflow_id,
-                event_type,level,created_at,message_preview,detail_preview,related_status,source_relpath,source_line_no,run_relpath
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """,
-            (
-                f"system_workflow_event:{line_no}",
-                "system_workflow_event",
-                str(payload.get("ticket_id") or row.get("ticket_id") or ""),
-                str(payload.get("node_id") or row.get("node_id") or ""),
-                str(payload.get("run_id") or row.get("run_id") or ""),
-                str(payload.get("task_id") or row.get("task_id") or ""),
-                str(payload.get("session_id") or row.get("session_id") or ""),
-                str(payload.get("analysis_id") or row.get("analysis_id") or ""),
-                str(payload.get("workflow_id") or row.get("workflow_id") or ""),
-                str(row.get("event_type") or ""),
-                str(row.get("level") or payload.get("level") or ""),
-                str(row.get("created_at") or row.get("timestamp") or ""),
-                _preview(row.get("message") or payload.get("message") or row.get("event_type") or ""),
-                _preview(payload),
-                str(payload.get("status") or ""),
-                relpath,
-                line_no,
-                "",
-            ),
+        _upsert_system_workflow_event_row(
+            conn,
+            root,
+            row,
+            source_relpath=relpath,
+            source_line_no=line_no,
         )
 
 
@@ -279,34 +425,28 @@ def _sync_reconcile_runs_with_conn(conn: sqlite3.Connection, root: Path) -> None
         return
     _touch_source(conn, root, path, record_kind="record_jsonl", entity_type="reconcile_run", entity_id="reconcile-runs")
     for line_no, row in _read_jsonl_with_lines(path):
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO event_index (
-                event_key,stream_type,ticket_id,node_id,run_id,task_id,session_id,analysis_id,workflow_id,
-                event_type,level,created_at,message_preview,detail_preview,related_status,source_relpath,source_line_no,run_relpath
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """,
-            (
-                f"reconcile_run:{line_no}",
-                "reconcile_run",
-                "",
-                "",
-                str(row.get("run_id") or ""),
-                "",
-                "",
-                "",
-                "",
-                str(row.get("reason") or "reconcile"),
-                "",
-                str(row.get("run_at") or row.get("created_at") or ""),
-                _preview(row.get("notes") or row.get("reason") or ""),
-                _preview(row),
-                str(row.get("status") or ""),
-                relpath,
-                line_no,
-                _artifact_relpath(root, str(row.get("ref") or "")),
-            ),
+        _upsert_reconcile_run_row(
+            conn,
+            root,
+            row,
+            source_relpath=relpath,
+            source_line_no=line_no,
         )
+
+
+def _sync_ingress_requests_with_conn(conn: sqlite3.Connection, root: Path) -> None:
+    path = _store.ingress_requests_path(root)
+    relpath = _artifact_relpath(root, path)
+    conn.execute("DELETE FROM ingress_request_index")
+    if not path.exists():
+        return
+    _touch_source(conn, root, path, record_kind="record_json", entity_type="ingress_request", entity_id="ingress-requests")
+    current = _store._load_json_dict(path)
+    items = current.get("items") if isinstance(current.get("items"), dict) else {}
+    for request_id, row in items.items():
+        payload = dict(row or {})
+        payload["request_id"] = str(payload.get("request_id") or request_id or "").strip()
+        _upsert_ingress_request_row(conn, root, payload, source_relpath=relpath)
 
 
 def sync_audit_and_system_indexes(root: Path) -> None:
@@ -318,10 +458,135 @@ def sync_audit_and_system_indexes(root: Path) -> None:
             _sync_policy_confirmation_audit_with_conn(conn, root)
             _sync_system_workflow_events_with_conn(conn, root)
             _sync_reconcile_runs_with_conn(conn, root)
+            _sync_ingress_requests_with_conn(conn, root)
             conn.commit()
         finally:
             conn.close()
         _write_records_manifest(root)
+
+
+def append_message_delete_audit_index(root: Path, row: dict[str, Any]) -> None:
+    with _store._STORE_LOCK:
+        ensure_sqlite_index(root)
+        conn = _connect(root)
+        try:
+            _upsert_message_delete_audit_row(
+                conn,
+                root,
+                dict(row or {}),
+                source_relpath=_artifact_relpath(root, _store.message_delete_audit_path(root)),
+            )
+            _touch_source(
+                conn,
+                root,
+                _store.message_delete_audit_path(root),
+                record_kind="record_jsonl",
+                entity_type="message_delete_audit",
+                entity_id="message-delete",
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def append_policy_confirmation_audit_index(root: Path, row: dict[str, Any]) -> None:
+    with _store._STORE_LOCK:
+        ensure_sqlite_index(root)
+        conn = _connect(root)
+        try:
+            _upsert_policy_confirmation_audit_row(
+                conn,
+                root,
+                dict(row or {}),
+                source_relpath=_artifact_relpath(root, _store.policy_confirmation_audit_path(root)),
+            )
+            _touch_source(
+                conn,
+                root,
+                _store.policy_confirmation_audit_path(root),
+                record_kind="record_jsonl",
+                entity_type="policy_confirmation_audit",
+                entity_id="policy-confirmation",
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def append_system_workflow_event_index(root: Path, row: dict[str, Any]) -> None:
+    with _store._STORE_LOCK:
+        ensure_sqlite_index(root)
+        conn = _connect(root)
+        try:
+            _upsert_system_workflow_event_row(
+                conn,
+                root,
+                dict(row or {}),
+                source_relpath=_artifact_relpath(root, _store.workflow_events_path(root)),
+            )
+            _touch_source(
+                conn,
+                root,
+                _store.workflow_events_path(root),
+                record_kind="record_jsonl",
+                entity_type="system_workflow_event",
+                entity_id="workflow-events",
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def append_reconcile_run_index(root: Path, row: dict[str, Any]) -> None:
+    with _store._STORE_LOCK:
+        ensure_sqlite_index(root)
+        conn = _connect(root)
+        try:
+            _upsert_reconcile_run_row(
+                conn,
+                root,
+                dict(row or {}),
+                source_relpath=_artifact_relpath(root, _store.reconcile_runs_path(root)),
+            )
+            _touch_source(
+                conn,
+                root,
+                _store.reconcile_runs_path(root),
+                record_kind="record_jsonl",
+                entity_type="reconcile_run",
+                entity_id="reconcile-runs",
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def upsert_ingress_request_index(root: Path, row: dict[str, Any]) -> None:
+    with _store._STORE_LOCK:
+        ensure_sqlite_index(root)
+        conn = _connect(root)
+        try:
+            _upsert_ingress_request_row(conn, root, dict(row or {}))
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def mark_ingress_request_logged_index(root: Path, request_id: str) -> None:
+    request_id_text = str(request_id or "").strip()
+    if not request_id_text:
+        return
+    with _store._STORE_LOCK:
+        ensure_sqlite_index(root)
+        conn = _connect(root)
+        try:
+            conn.execute(
+                "UPDATE ingress_request_index SET event_logged=1 WHERE request_id=?",
+                (request_id_text,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
 
 
 def _sync_assignment_task_bundle_with_conn(conn: sqlite3.Connection, root: Path, ticket_id: str) -> None:
@@ -543,6 +808,29 @@ def sync_assignment_task_bundle(root: Path, ticket_id: str) -> None:
             conn.close()
 
 
+def _has_indexable_sources(root: Path) -> bool:
+    artifact_root = _store.artifact_root(root)
+    checks = (
+        next((artifact_root / "tasks").glob("*/task.json"), None),
+        next(_store.sessions_root(root).glob("*/session.json"), None),
+        next(_store.analysis_root(root).glob("*/analysis.json"), None),
+        next(_store.runs_root(root).glob("*/run.json"), None),
+        next(_store.policy_patch_tasks_root(root).glob("*.json"), None),
+    )
+    if any(item is not None for item in checks):
+        return True
+    for path in (
+        _store.message_delete_audit_path(root),
+        _store.policy_confirmation_audit_path(root),
+        _store.workflow_events_path(root),
+        _store.reconcile_runs_path(root),
+        _store.ingress_requests_path(root),
+    ):
+        if path.exists() and path.is_file():
+            return True
+    return False
+
+
 def ensure_sqlite_index(root: Path) -> None:
     db_path = sqlite_index_path(root)
     existed = db_path.exists()
@@ -551,9 +839,18 @@ def ensure_sqlite_index(root: Path) -> None:
         _ensure_schema(conn)
         artifact_marker = _store.artifact_root(root).as_posix()
         current_marker = _read_meta(conn, "artifact_root")
-        task_count = _safe_int(conn.execute("SELECT COUNT(1) AS cnt FROM task_index").fetchone()["cnt"])
-        session_count = _safe_int(conn.execute("SELECT COUNT(1) AS cnt FROM session_index").fetchone()["cnt"])
-        rebuild_needed = (not existed) or (current_marker and current_marker != artifact_marker) or (task_count == 0 and session_count == 0)
+        counts = {
+            "task": _safe_int(conn.execute("SELECT COUNT(1) AS cnt FROM task_index").fetchone()["cnt"]),
+            "session": _safe_int(conn.execute("SELECT COUNT(1) AS cnt FROM session_index").fetchone()["cnt"]),
+            "analysis": _safe_int(conn.execute("SELECT COUNT(1) AS cnt FROM analysis_index").fetchone()["cnt"]),
+            "task_run": _safe_int(conn.execute("SELECT COUNT(1) AS cnt FROM task_run_index").fetchone()["cnt"]),
+            "audit": _safe_int(conn.execute("SELECT COUNT(1) AS cnt FROM audit_index").fetchone()["cnt"]),
+            "event": _safe_int(conn.execute("SELECT COUNT(1) AS cnt FROM event_index").fetchone()["cnt"]),
+            "ingress": _safe_int(conn.execute("SELECT COUNT(1) AS cnt FROM ingress_request_index").fetchone()["cnt"]),
+        }
+        rebuild_needed = (not existed) or (current_marker and current_marker != artifact_marker)
+        if not rebuild_needed and not any(int(value or 0) > 0 for value in counts.values()):
+            rebuild_needed = _has_indexable_sources(root)
         _set_meta(conn, "artifact_root", artifact_marker)
         conn.commit()
     finally:
@@ -584,6 +881,7 @@ def rebuild_record_indexes(root: Path) -> None:
             _sync_policy_confirmation_audit_with_conn(conn, root)
             _sync_system_workflow_events_with_conn(conn, root)
             _sync_reconcile_runs_with_conn(conn, root)
+            _sync_ingress_requests_with_conn(conn, root)
             conn.commit()
             write_structure_file(root)
             _write_records_manifest(root)

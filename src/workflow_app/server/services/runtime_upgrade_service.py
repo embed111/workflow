@@ -19,6 +19,64 @@ RUNTIME_INSTANCE_FILE_VAR = "WORKFLOW_RUNTIME_INSTANCE_FILE"
 
 PROD_UPGRADE_EXIT_CODE = 73
 
+_RUNTIME_UPGRADE_HIGHLIGHT_CACHE: dict[tuple[str, str], list[str]] = {}
+_RUNTIME_UPGRADE_HIGHLIGHT_RULES: tuple[dict[str, Any], ...] = (
+    {
+        "prefixes": (
+            "src/workflow_app/web_client/runtime_upgrade_banner.js",
+            "src/workflow_app/server/api/runtime_upgrade.py",
+        ),
+        "message": "升级切换完成后，成功确认窗会更快出现，不再长时间空等。",
+    },
+    {
+        "prefixes": (
+            "src/workflow_app/server/presentation/templates/index_runtime_upgrade_banner.css",
+        ),
+        "message": "升级弹窗改成更扁平的配色，去掉了明显的渐变、发光和厚重阴影。",
+    },
+    {
+        "prefixes": (
+            "src/workflow_app/server/services/runtime_upgrade_service.py",
+        ),
+        "message": "升级完成后会明确列出本次修复与变化，而不是只给笼统说明。",
+    },
+    {
+        "prefixes": (
+            "src/workflow_app/server/services/assignment_service_parts/assignment_core.py",
+            "src/workflow_app/server/services/assignment_service_parts/task_artifact_store_core.py",
+            "src/workflow_app/server/services/assignment_service_parts/workspace_state_and_metrics.py",
+            "src/workflow_app/web_client/assignment_center_state_helpers.js",
+            "src/workflow_app/web_client/assignment_center_render_runtime.js",
+            "src/workflow_app/server/presentation/templates/index.html",
+        ),
+        "message": "任务中心已统一交付方式和交付对象，未指定时默认交付给当前 agent。",
+    },
+    {
+        "prefixes": (
+            "src/workflow_app/server/services/assignment_service_parts/",
+            "src/workflow_app/server/api/assignments.py",
+            "src/workflow_app/web_client/assignment_center_",
+            "src/workflow_app/server/presentation/templates/index_training_loop_panels.css",
+        ),
+        "message": "任务产物默认按 HTML 生成，任务详情里可以直接打开查看。",
+    },
+    {
+        "prefixes": (
+            "src/workflow_app/server/bootstrap/web_server_runtime_parts/event_persistence_and_flags.py",
+            "src/workflow_app/server/bootstrap/web_server_runtime_parts/runtime_paths_and_config.py",
+            "scripts/start_workflow_env.ps1",
+        ),
+        "message": "工作区路径配置与升级启动稳定性有更新，无害断连日志会更安静。",
+    },
+)
+_RUNTIME_UPGRADE_GENERIC_HIGHLIGHTS: tuple[tuple[str, str], ...] = (
+    ("src/workflow_app/web_client/", "页面交互和展示体验有更新。"),
+    ("src/workflow_app/server/api/", "接口返回和页面联动逻辑有更新。"),
+    ("src/workflow_app/server/bootstrap/", "启动流程和运行时配置有更新。"),
+    ("src/workflow_app/server/services/", "服务端执行和稳定性逻辑有更新。"),
+    ("scripts/", "部署与环境切换脚本有更新。"),
+)
+
 
 def _read_json(path: Path) -> dict[str, Any]:
     try:
@@ -177,6 +235,141 @@ def candidate_is_newer(snapshot: dict[str, Any]) -> bool:
     return candidate_is_complete(candidate) and candidate_rank > current_rank
 
 
+def current_runtime_deploy_root() -> Path | None:
+    env_path = _env_path(RUNTIME_DEPLOY_ROOT_VAR)
+    if isinstance(env_path, Path):
+        return env_path
+    manifest = current_runtime_manifest()
+    text = str(manifest.get("deploy_root") or "").strip()
+    if not text:
+        return None
+    return Path(text).resolve(strict=False)
+
+
+def _runtime_highlight_relpath_allowed(relpath: str) -> bool:
+    normalized = str(relpath or "").replace("\\", "/").strip("./")
+    if not normalized:
+        return False
+    if normalized.startswith((".running/", ".test/", ".tmp/", ".codex/", "__pycache__/")):
+        return False
+    if normalized.endswith((".pyc", ".pyo", ".log", ".db", ".sqlite", ".sqlite3")):
+        return False
+    if normalized.startswith("src/workflow_app/"):
+        return True
+    if normalized.startswith("scripts/"):
+        return True
+    return normalized in {"run_workflow.bat"}
+
+
+def _runtime_highlight_files(root: Path | None) -> dict[str, Path]:
+    if not isinstance(root, Path) or not root.exists():
+        return {}
+    output: dict[str, Path] = {}
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        relpath = path.relative_to(root).as_posix()
+        if not _runtime_highlight_relpath_allowed(relpath):
+            continue
+        output[relpath] = path
+    return output
+
+
+def _runtime_upgrade_file_changed(current_path: Path, previous_path: Path) -> bool:
+    try:
+        current_stat = current_path.stat()
+        previous_stat = previous_path.stat()
+    except Exception:
+        return True
+    if current_stat.st_size != previous_stat.st_size:
+        return True
+    try:
+        return current_path.read_bytes() != previous_path.read_bytes()
+    except Exception:
+        return True
+
+
+def _runtime_upgrade_changed_relpaths(current_root: Path | None, previous_root: Path | None) -> list[str]:
+    if not isinstance(current_root, Path) or not isinstance(previous_root, Path):
+        return []
+    cache_key = (current_root.as_posix(), previous_root.as_posix())
+    cached = _RUNTIME_UPGRADE_HIGHLIGHT_CACHE.get(cache_key)
+    if isinstance(cached, list):
+        return list(cached)
+    current_files = _runtime_highlight_files(current_root)
+    previous_files = _runtime_highlight_files(previous_root)
+    changed: list[str] = []
+    for relpath in sorted(set(current_files.keys()) | set(previous_files.keys())):
+        current_path = current_files.get(relpath)
+        previous_path = previous_files.get(relpath)
+        if current_path is None or previous_path is None:
+            changed.append(relpath)
+            continue
+        if _runtime_upgrade_file_changed(current_path, previous_path):
+            changed.append(relpath)
+    _RUNTIME_UPGRADE_HIGHLIGHT_CACHE[cache_key] = list(changed)
+    return changed
+
+
+def _runtime_upgrade_match_prefix(relpath: str, prefix: str) -> bool:
+    normalized_rel = str(relpath or "").replace("\\", "/").strip()
+    normalized_prefix = str(prefix or "").replace("\\", "/").strip()
+    if not normalized_rel or not normalized_prefix:
+        return False
+    if normalized_rel == normalized_prefix:
+        return True
+    if normalized_prefix.endswith("/"):
+        return normalized_rel.startswith(normalized_prefix)
+    return normalized_rel.startswith(normalized_prefix)
+
+
+def _runtime_upgrade_highlights_for_changed_paths(changed_paths: list[str]) -> list[str]:
+    if not changed_paths:
+        return []
+    highlights: list[str] = []
+    for rule in _RUNTIME_UPGRADE_HIGHLIGHT_RULES:
+        prefixes = rule.get("prefixes") or ()
+        if any(
+            _runtime_upgrade_match_prefix(relpath, prefix)
+            for relpath in changed_paths
+            for prefix in prefixes
+        ):
+            message = str(rule.get("message") or "").strip()
+            if message and message not in highlights:
+                highlights.append(message)
+    if len(highlights) < 3:
+        for prefix, message in _RUNTIME_UPGRADE_GENERIC_HIGHLIGHTS:
+            if any(_runtime_upgrade_match_prefix(relpath, prefix) for relpath in changed_paths):
+                if message not in highlights:
+                    highlights.append(message)
+            if len(highlights) >= 3:
+                break
+    if not highlights:
+        changed_count = len(changed_paths)
+        return [f"本次升级包含 {changed_count} 个已发布文件变更，建议重点留意常用操作路径。"]
+    return highlights[:4]
+
+
+def build_runtime_upgrade_highlights(snapshot: dict[str, Any]) -> list[str]:
+    last_action = dict(snapshot.get("last_action") or {})
+    if str(last_action.get("status") or "").strip().lower() != "success":
+        return []
+    current_root = current_runtime_deploy_root()
+    manifest = snapshot.get("manifest") if isinstance(snapshot.get("manifest"), dict) else {}
+    previous_root_text = str(manifest.get("backup_app_root") or "").strip()
+    previous_root = Path(previous_root_text).resolve(strict=False) if previous_root_text else None
+    if not isinstance(current_root, Path) or not current_root.exists():
+        return []
+    changed_paths = _runtime_upgrade_changed_relpaths(current_root, previous_root)
+    if changed_paths:
+        return _runtime_upgrade_highlights_for_changed_paths(changed_paths)
+    previous_version = str(last_action.get("previous_version") or "").strip()
+    current_version = str(last_action.get("current_version") or snapshot.get("current_version") or "").strip()
+    if previous_version and current_version:
+        return [f"正式环境已从 {previous_version} 切换到 {current_version}，本次以稳定性和体验调整为主。"]
+    return ["正式环境已切换到新版本，本次包含若干体验与稳定性更新。"]
+
+
 def build_runtime_upgrade_status(
     snapshot: dict[str, Any],
     *,
@@ -226,6 +419,7 @@ def build_runtime_upgrade_status(
         "can_upgrade": bool(is_prod and not blocker and candidate_is_newer(snapshot)),
         "banner_visible": bool(is_prod and candidate_is_newer(snapshot)),
         "last_action": last_action,
+        "upgrade_highlights": build_runtime_upgrade_highlights(snapshot),
     }
 
 

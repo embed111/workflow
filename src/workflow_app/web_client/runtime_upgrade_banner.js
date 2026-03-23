@@ -2,11 +2,14 @@
     environment: '',
     current_version: '',
     candidate_version: '',
+    request_candidate_version: '',
+    request_requested_at: '',
     banner_visible: false,
     can_upgrade: false,
     request_pending: false,
     blocking_reason: '',
     last_action: {},
+    upgrade_highlights: [],
     reconnecting: false,
     offline_seen: false,
     status_error: '',
@@ -19,11 +22,15 @@
     progress_tick: 0,
     progress_stage_key: '',
     progress_stage_started_at: 0,
+    progress_session_key: '',
+    progress_floor_percent: 0,
   };
 
   const RUNTIME_UPGRADE_POLL_IDLE_MS = 5000;
   const RUNTIME_UPGRADE_POLL_ACTIVE_MS = 1200;
   const RUNTIME_UPGRADE_SUCCESS_HOLD_MS = 3000;
+  const RUNTIME_UPGRADE_PROGRESS_CACHE_KEY = 'workflow.runtime_upgrade.progress.v1';
+  const RUNTIME_UPGRADE_ACK_CACHE_KEY = 'workflow.runtime_upgrade.ack.v1';
 
   function updateRuntimeVersionBadge() {
     const node = $('runtimeVersionBadge');
@@ -55,18 +62,57 @@
 
     const head = document.createElement('div');
     head.className = 'runtime-upgrade-head';
+    const headMain = document.createElement('div');
+    headMain.className = 'runtime-upgrade-head-main';
+    const eyebrow = document.createElement('div');
+    eyebrow.className = 'runtime-upgrade-eyebrow';
+    eyebrow.textContent = '正式环境';
     const title = document.createElement('div');
     title.className = 'runtime-upgrade-title';
-    title.textContent = '正式环境可控升级';
+    title.textContent = '工作区升级';
     const meta = document.createElement('div');
     meta.className = 'runtime-upgrade-meta';
-    head.appendChild(title);
-    head.appendChild(meta);
+    headMain.appendChild(eyebrow);
+    headMain.appendChild(title);
+    headMain.appendChild(meta);
+    const statusChip = document.createElement('div');
+    statusChip.className = 'runtime-upgrade-status-chip is-idle';
+    head.appendChild(headMain);
+    head.appendChild(statusChip);
+
+    const versions = document.createElement('div');
+    versions.className = 'runtime-upgrade-version-grid';
+    const currentCard = document.createElement('div');
+    currentCard.className = 'runtime-upgrade-version-card';
+    const currentLabel = document.createElement('div');
+    currentLabel.className = 'runtime-upgrade-version-label';
+    currentLabel.textContent = '当前版本';
+    const currentValue = document.createElement('div');
+    currentValue.className = 'runtime-upgrade-version-value';
+    currentCard.appendChild(currentLabel);
+    currentCard.appendChild(currentValue);
+    const candidateCard = document.createElement('div');
+    candidateCard.className = 'runtime-upgrade-version-card is-candidate';
+    const candidateLabel = document.createElement('div');
+    candidateLabel.className = 'runtime-upgrade-version-label';
+    candidateLabel.textContent = '候选版本';
+    const candidateValue = document.createElement('div');
+    candidateValue.className = 'runtime-upgrade-version-value';
+    candidateCard.appendChild(candidateLabel);
+    candidateCard.appendChild(candidateValue);
+    versions.appendChild(currentCard);
+    versions.appendChild(candidateCard);
 
     const body = document.createElement('div');
     body.className = 'runtime-upgrade-body';
+    const progressSummary = document.createElement('div');
+    progressSummary.className = 'runtime-upgrade-progress-summary';
     const progressMeta = document.createElement('div');
     progressMeta.className = 'runtime-upgrade-progress-meta';
+    const progressPercent = document.createElement('div');
+    progressPercent.className = 'runtime-upgrade-progress-percent';
+    progressSummary.appendChild(progressMeta);
+    progressSummary.appendChild(progressPercent);
     const progress = document.createElement('div');
     progress.className = 'runtime-upgrade-progress';
     const progressTrack = document.createElement('div');
@@ -77,15 +123,28 @@
     progress.appendChild(progressTrack);
     const message = document.createElement('div');
     message.className = 'runtime-upgrade-message';
+    const footer = document.createElement('div');
+    footer.className = 'runtime-upgrade-footer';
+    const footerMeta = document.createElement('div');
+    footerMeta.className = 'runtime-upgrade-footer-meta';
     const note = document.createElement('div');
     note.className = 'runtime-upgrade-note';
     const error = document.createElement('div');
     error.className = 'runtime-upgrade-note is-bad';
-    body.appendChild(progressMeta);
+    footerMeta.appendChild(note);
+    footerMeta.appendChild(error);
+    body.appendChild(progressSummary);
     body.appendChild(progress);
     body.appendChild(message);
-    body.appendChild(note);
-    body.appendChild(error);
+    const highlights = document.createElement('div');
+    highlights.className = 'runtime-upgrade-highlights';
+    const highlightsTitle = document.createElement('div');
+    highlightsTitle.className = 'runtime-upgrade-highlights-title';
+    const highlightsList = document.createElement('ul');
+    highlightsList.className = 'runtime-upgrade-highlights-list';
+    highlights.appendChild(highlightsTitle);
+    highlights.appendChild(highlightsList);
+    body.appendChild(highlights);
 
     const actions = document.createElement('div');
     actions.className = 'runtime-upgrade-actions';
@@ -93,23 +152,90 @@
     button.id = 'runtimeUpgradeApplyBtn';
     button.type = 'button';
     actions.appendChild(button);
+    footer.appendChild(footerMeta);
+    footer.appendChild(actions);
 
     wrap.appendChild(head);
+    wrap.appendChild(versions);
     wrap.appendChild(body);
-    wrap.appendChild(actions);
+    wrap.appendChild(footer);
     node.appendChild(wrap);
 
     node._runtimeUpgradeRefs = {
       wrap,
       meta,
+      statusChip,
+      versions,
+      currentLabel,
+      currentValue,
+      candidateLabel,
+      candidateValue,
       progressMeta,
+      progressPercent,
       progressFill,
       message,
+      highlights,
+      highlightsTitle,
+      highlightsList,
       note,
       error,
       button,
     };
     return node._runtimeUpgradeRefs;
+  }
+
+  function runtimeUpgradeAckStore() {
+    try {
+      return window.localStorage || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function readRuntimeUpgradeAckKey() {
+    const store = runtimeUpgradeAckStore();
+    if (!store) return '';
+    try {
+      return safe(store.getItem(RUNTIME_UPGRADE_ACK_CACHE_KEY)).trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function writeRuntimeUpgradeAckKey(key) {
+    const store = runtimeUpgradeAckStore();
+    if (!store) return;
+    const nextKey = safe(key).trim();
+    try {
+      if (!nextKey) {
+        store.removeItem(RUNTIME_UPGRADE_ACK_CACHE_KEY);
+        return;
+      }
+      store.setItem(RUNTIME_UPGRADE_ACK_CACHE_KEY, nextKey);
+    } catch (_) {
+    }
+  }
+
+  function runtimeUpgradeSuccessReviewKey() {
+    const info = state.runtimeUpgrade || {};
+    const last = runtimeUpgradeLastAction();
+    if (runtimeUpgradeLastActionStatus() !== 'success') return '';
+    const previousVersion = safe(last.previous_version).trim();
+    const currentVersion =
+      safe(last.current_version).trim() ||
+      safe(info.current_version).trim();
+    const finishedAt =
+      safe(last.finished_at).trim() ||
+      safe(last.started_at).trim() ||
+      safe(last.requested_at).trim();
+    if (!currentVersion || !finishedAt) return '';
+    return ['success', previousVersion, currentVersion, finishedAt].join('|');
+  }
+
+  function acknowledgeRuntimeUpgradeSuccess() {
+    const ackKey = runtimeUpgradeSuccessReviewKey();
+    if (!ackKey) return;
+    writeRuntimeUpgradeAckKey(ackKey);
   }
 
   function runtimeUpgradeShouldShow() {
@@ -154,9 +280,9 @@
   }
 
   function runtimeUpgradeRecentSuccessVisible() {
-    const info = state.runtimeUpgrade || {};
-    if (runtimeUpgradeLastActionStatus() !== 'success') return false;
-    return Number(info.success_hold_until || 0) > Date.now();
+    const ackKey = runtimeUpgradeSuccessReviewKey();
+    if (!ackKey) return false;
+    return readRuntimeUpgradeAckKey() !== ackKey;
   }
 
   function runtimeUpgradePollDelayMs() {
@@ -176,17 +302,10 @@
 
   function scheduleRuntimeUpgradeSuccessHoldTimer() {
     clearRuntimeUpgradeSuccessHoldTimer();
-    const remaining = Number(state.runtimeUpgrade.success_hold_until || 0) - Date.now();
-    if (!(remaining > 0)) return;
-    state.runtimeUpgrade.success_hold_timer = window.setTimeout(() => {
-      state.runtimeUpgrade.success_hold_timer = 0;
-      renderRuntimeUpgradeBanner();
-    }, remaining + 30);
   }
 
   function syncRuntimeUpgradeSuccessHold() {
     const info = state.runtimeUpgrade || {};
-    const last = runtimeUpgradeLastAction();
     const status = runtimeUpgradeLastActionStatus();
     if (status !== 'success') {
       info.success_hold_until = 0;
@@ -194,13 +313,120 @@
       clearRuntimeUpgradeSuccessHoldTimer();
       return;
     }
-    const stamp = safe(last.finished_at || last.started_at || last.requested_at).trim();
-    const nextKey = [status, stamp, safe(info.current_version).trim(), safe(info.candidate_version).trim()].join('|');
-    if (safe(info.success_hold_key).trim() !== nextKey) {
-      info.success_hold_key = nextKey;
-      info.success_hold_until = Date.now() + RUNTIME_UPGRADE_SUCCESS_HOLD_MS;
-    }
+    info.success_hold_key = runtimeUpgradeSuccessReviewKey();
+    info.success_hold_until = 0;
     scheduleRuntimeUpgradeSuccessHoldTimer();
+  }
+
+  function runtimeUpgradeProgressStore() {
+    try {
+      return window.sessionStorage || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function readRuntimeUpgradeProgressSnapshot() {
+    const store = runtimeUpgradeProgressStore();
+    if (!store) return {};
+    try {
+      const raw = safe(store.getItem(RUNTIME_UPGRADE_PROGRESS_CACHE_KEY)).trim();
+      if (!raw) return {};
+      const data = JSON.parse(raw);
+      return data && typeof data === 'object' ? data : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function clearRuntimeUpgradeProgressSnapshot() {
+    const store = runtimeUpgradeProgressStore();
+    if (!store) return;
+    try {
+      store.removeItem(RUNTIME_UPGRADE_PROGRESS_CACHE_KEY);
+    } catch (_) {
+    }
+  }
+
+  function writeRuntimeUpgradeProgressSnapshot(sessionKey, percent) {
+    const store = runtimeUpgradeProgressStore();
+    if (!store) return;
+    const nextSessionKey = safe(sessionKey).trim();
+    const nextPercent = Math.max(0, Math.min(100, Number(percent) || 0));
+    try {
+      if (!nextSessionKey || !(nextPercent > 0)) {
+        store.removeItem(RUNTIME_UPGRADE_PROGRESS_CACHE_KEY);
+        return;
+      }
+      store.setItem(
+        RUNTIME_UPGRADE_PROGRESS_CACHE_KEY,
+        JSON.stringify({
+          session_key: nextSessionKey,
+          percent: nextPercent,
+          updated_at: new Date().toISOString(),
+        })
+      );
+    } catch (_) {
+    }
+  }
+
+  function runtimeUpgradeProgressSessionKey() {
+    const info = state.runtimeUpgrade || {};
+    const last = runtimeUpgradeLastAction();
+    const status = runtimeUpgradeLastActionStatus();
+    const isActive =
+      !!info.reconnecting ||
+      !!info.request_pending ||
+      status === 'switching' ||
+      runtimeUpgradeRecentFailureVisible() ||
+      runtimeUpgradeRecentSuccessVisible();
+    if (!isActive) return '';
+    const candidateVersion =
+      safe(info.request_candidate_version).trim() ||
+      safe(info.candidate_version).trim() ||
+      safe(last.candidate_version).trim();
+    const requestStamp =
+      safe(info.request_requested_at).trim() ||
+      safe(last.requested_at).trim() ||
+      safe(last.started_at).trim() ||
+      safe(last.finished_at).trim();
+    if (!candidateVersion && !requestStamp) return '';
+    return [
+      safe(info.environment).trim() || 'prod',
+      candidateVersion,
+      requestStamp,
+    ].join('|');
+  }
+
+  function syncRuntimeUpgradeProgressPercent(sessionKey, percent) {
+    const info = state.runtimeUpgrade || {};
+    const nextSessionKey = safe(sessionKey).trim();
+    const rawPercent = Math.max(0, Math.min(100, Number(percent) || 0));
+    if (!nextSessionKey) {
+      info.progress_session_key = '';
+      info.progress_floor_percent = 0;
+      clearRuntimeUpgradeProgressSnapshot();
+      return rawPercent;
+    }
+
+    const currentSessionKey = safe(info.progress_session_key).trim();
+    if (currentSessionKey !== nextSessionKey) {
+      const cached = readRuntimeUpgradeProgressSnapshot();
+      const cachedSessionKey = safe(cached.session_key).trim();
+      info.progress_session_key = nextSessionKey;
+      info.progress_floor_percent =
+        cachedSessionKey === nextSessionKey
+          ? Math.max(0, Math.min(100, Number(cached.percent) || 0))
+          : 0;
+    }
+
+    const nextPercent = Math.max(
+      rawPercent,
+      Math.max(0, Math.min(100, Number(info.progress_floor_percent) || 0))
+    );
+    info.progress_floor_percent = nextPercent;
+    writeRuntimeUpgradeProgressSnapshot(nextSessionKey, nextPercent);
+    return nextPercent;
   }
 
   function runtimeUpgradeProgressModel() {
@@ -208,42 +434,43 @@
     const lastStatus = runtimeUpgradeLastActionStatus();
     const stageStamp = safe(runtimeUpgradeLastActionAt()).trim();
     const versionKey = [safe(info.current_version).trim(), safe(info.candidate_version).trim()].join('|');
+    const progressSessionKey = runtimeUpgradeProgressSessionKey();
     let stage = null;
     if (info.reconnecting && info.offline_seen) {
       stage = {
         key: ['reconnecting-offline', stageStamp, versionKey].join('|'),
         label: '正在切换版本',
         tone: 'running',
-        minPercent: 74,
-        maxPercent: 94,
-        durationMs: 12000,
-      };
-    } else if (info.reconnecting) {
-      stage = {
-        key: ['reconnecting', stageStamp, versionKey].join('|'),
-        label: '等待正式环境重连',
-        tone: 'running',
         minPercent: 58,
-        maxPercent: 78,
-        durationMs: 5000,
-      };
-    } else if (lastStatus === 'switching') {
-      stage = {
-        key: ['switching', stageStamp, versionKey].join('|'),
-        label: '正在切换候选版本',
-        tone: 'running',
-        minPercent: 34,
-        maxPercent: 58,
-        durationMs: 4200,
+        maxPercent: 90,
+        durationMs: 12000,
       };
     } else if (info.request_pending) {
       stage = {
         key: ['request_pending', stageStamp, versionKey].join('|'),
         label: '升级请求已受理',
         tone: 'running',
-        minPercent: 12,
-        maxPercent: 34,
-        durationMs: 2800,
+        minPercent: 2,
+        maxPercent: 10,
+        durationMs: 2200,
+      };
+    } else if (lastStatus === 'switching') {
+      stage = {
+        key: ['switching', stageStamp, versionKey].join('|'),
+        label: '正在切换候选版本',
+        tone: 'running',
+        minPercent: 10,
+        maxPercent: 28,
+        durationMs: 3600,
+      };
+    } else if (info.reconnecting) {
+      stage = {
+        key: ['reconnecting', stageStamp, versionKey].join('|'),
+        label: '等待正式环境重连',
+        tone: 'running',
+        minPercent: 28,
+        maxPercent: 58,
+        durationMs: 5000,
       };
     }
     if (stage) {
@@ -256,7 +483,10 @@
       const elapsed = Math.max(0, Date.now() - Number(info.progress_stage_started_at || Date.now()));
       const progressT = Math.max(0, Math.min(1, elapsed / Math.max(1, Number(stage.durationMs) || 1)));
       const easedT = 1 - Math.pow(1 - progressT, 2.2);
-      const percent = stage.minPercent + ((stage.maxPercent - stage.minPercent) * easedT);
+      const percent = syncRuntimeUpgradeProgressPercent(
+        progressSessionKey,
+        stage.minPercent + ((stage.maxPercent - stage.minPercent) * easedT)
+      );
       return {
         percent,
         displayPercent: Math.round(percent),
@@ -267,17 +497,21 @@
     }
     info.progress_stage_key = '';
     info.progress_stage_started_at = 0;
-    if (runtimeUpgradeRecentTerminalVisible()) {
-      if (lastStatus === 'success') {
-        return { percent: 100, displayPercent: 100, label: '升级完成', tone: 'done', autoAdvance: false };
-      }
+    if (lastStatus === 'success' && runtimeUpgradeRecentSuccessVisible()) {
+      const percent = syncRuntimeUpgradeProgressPercent(progressSessionKey, 100);
+      return { percent, displayPercent: Math.round(percent), label: '升级完成', tone: 'done', autoAdvance: false };
+    }
+    if (runtimeUpgradeRecentFailureVisible()) {
       if (lastStatus === 'rollback_success') {
-        return { percent: 100, displayPercent: 100, label: '已自动回滚', tone: 'bad', autoAdvance: false };
+        const percent = syncRuntimeUpgradeProgressPercent(progressSessionKey, 100);
+        return { percent, displayPercent: Math.round(percent), label: '已自动回滚', tone: 'bad', autoAdvance: false };
       }
       if (lastStatus === 'failed') {
-        return { percent: 100, displayPercent: 100, label: '升级失败', tone: 'bad', autoAdvance: false };
+        const percent = syncRuntimeUpgradeProgressPercent(progressSessionKey, 100);
+        return { percent, displayPercent: Math.round(percent), label: '升级失败', tone: 'bad', autoAdvance: false };
       }
     }
+    syncRuntimeUpgradeProgressPercent('', 0);
     if (info.can_upgrade) {
       return { percent: 0, displayPercent: 0, label: '可开始升级', tone: 'idle', autoAdvance: false };
     }
@@ -290,16 +524,16 @@
     if (info.reconnecting && info.offline_seen) {
       return '旧实例已下线，正在等待新实例恢复。';
     }
+    if (info.request_pending) {
+      return safe(info.blocking_reason).trim() || '升级请求已提交，正在准备切换正式环境。';
+    }
     if (info.reconnecting) {
       return '正式环境正在切换，页面会短暂刷新并自动重连。';
     }
-    if (info.request_pending) {
-      return safe(info.blocking_reason).trim() || '正式环境正在切换，请等待完成。';
+    if (lastStatus === 'success' && runtimeUpgradeRecentSuccessVisible()) {
+      return '正式环境已切到新版本，请确认本次新特性。';
     }
-    if (runtimeUpgradeRecentTerminalVisible()) {
-      if (lastStatus === 'success') {
-        return '正式环境已完成版本切换。';
-      }
+    if (runtimeUpgradeRecentFailureVisible()) {
       if (lastStatus === 'rollback_success') {
         return '新版本健康检查失败，系统已自动回滚到上一版本。';
       }
@@ -311,6 +545,45 @@
       return safe(info.blocking_reason).trim();
     }
     return '当前无运行中任务，可升级到已通过 test 门禁的新版本。';
+  }
+
+  function runtimeUpgradeMetaText(progressInfo) {
+    const info = state.runtimeUpgrade || {};
+    const tone = safe(progressInfo && progressInfo.tone).trim();
+    if (info.reconnecting || info.request_pending || tone === 'running') {
+      return '切换期间页面会自动重连，请勿重复操作。';
+    }
+    if (runtimeUpgradeRecentSuccessVisible()) {
+      return '升级已完成，请确认本次新特性后关闭提示。';
+    }
+    if (runtimeUpgradeRecentFailureVisible()) {
+      return '保留最近一次切换结果，便于判断是否需要再次升级。';
+    }
+    if (info.can_upgrade) {
+      return '有新版本可以升级，可在空闲时切换。';
+    }
+    return '仅在有新版本时展示升级提示。';
+  }
+
+  function runtimeUpgradeStatusChip(progressInfo) {
+    const info = state.runtimeUpgrade || {};
+    const lastStatus = runtimeUpgradeLastActionStatus();
+    if (info.reconnecting || info.request_pending || (progressInfo && safe(progressInfo.tone).trim() === 'running')) {
+      return { tone: 'running', text: '切换中' };
+    }
+    if (runtimeUpgradeRecentSuccessVisible()) {
+      return { tone: 'done', text: '待确认' };
+    }
+    if (runtimeUpgradeRecentFailureVisible() && lastStatus === 'rollback_success') {
+      return { tone: 'bad', text: '已回滚' };
+    }
+    if (runtimeUpgradeRecentFailureVisible() && lastStatus === 'failed') {
+      return { tone: 'bad', text: '失败' };
+    }
+    if (info.can_upgrade) {
+      return { tone: 'ready', text: '可升级' };
+    }
+    return { tone: 'idle', text: '待命' };
   }
 
   function runtimeUpgradeLastActionText() {
@@ -327,6 +600,58 @@
     const head = map[status] || ('最近状态：' + status);
     const finishedAt = safe(last.finished_at || last.started_at).trim();
     return finishedAt ? head + ' · ' + formatDateTime(finishedAt) : head;
+  }
+
+  function runtimeUpgradeSuccessReviewActive() {
+    return runtimeUpgradeLastActionStatus() === 'success' && runtimeUpgradeRecentSuccessVisible();
+  }
+
+  function runtimeUpgradeDisplayVersions() {
+    const info = state.runtimeUpgrade || {};
+    const last = runtimeUpgradeLastAction();
+    if (runtimeUpgradeSuccessReviewActive()) {
+      const previousVersion = safe(last.previous_version).trim() || '切换前版本未记录';
+      const currentVersion =
+        safe(last.current_version).trim() ||
+        safe(info.current_version).trim() ||
+        '切换后版本未记录';
+      return {
+        leftLabel: '上一版本',
+        leftValue: previousVersion,
+        rightLabel: '当前版本',
+        rightValue: currentVersion,
+      };
+    }
+    return {
+      leftLabel: '当前版本',
+      leftValue: safe(info.current_version).trim() || '未读取',
+      rightLabel: '候选版本',
+      rightValue:
+        safe(info.request_candidate_version).trim() ||
+        safe(info.candidate_version).trim() ||
+        '暂无候选',
+    };
+  }
+
+  function renderRuntimeUpgradeHighlights(refs, info) {
+    const rows = Array.isArray(info.upgrade_highlights)
+      ? info.upgrade_highlights.map((item) => safe(item).trim()).filter(Boolean)
+      : [];
+    if (!runtimeUpgradeSuccessReviewActive()) {
+      refs.highlights.style.display = 'none';
+      refs.highlightsTitle.textContent = '';
+      refs.highlightsList.innerHTML = '';
+      return;
+    }
+    refs.highlights.style.display = 'grid';
+    refs.highlightsTitle.textContent = '本次修复与变化';
+    refs.highlightsList.innerHTML = '';
+    const items = rows.length ? rows : ['正式环境已完成版本切换，本次包含若干界面与交互修复。'];
+    items.slice(0, 4).forEach((item) => {
+      const node = document.createElement('li');
+      node.textContent = item;
+      refs.highlightsList.appendChild(node);
+    });
   }
 
   function clearRuntimeUpgradeProgressTick() {
@@ -356,17 +681,22 @@
       return;
     }
     node.classList.remove('hidden');
-    refs.meta.textContent =
-      '当前版本 ' +
-      (safe(info.current_version).trim() || '-') +
-      ' -> 待升级版本 ' +
-      (safe(info.candidate_version).trim() || '-');
     const progressInfo = runtimeUpgradeProgressModel();
-    refs.progressMeta.textContent =
-      progressInfo.label + ' · ' + String(Math.max(0, Math.min(100, Number(progressInfo.displayPercent) || 0))) + '%';
+    const successReviewActive = runtimeUpgradeSuccessReviewActive();
+    refs.versions.style.display = 'none';
+    refs.versions.setAttribute('aria-hidden', 'true');
+    refs.meta.textContent = runtimeUpgradeMetaText(progressInfo);
+    const chip = runtimeUpgradeStatusChip(progressInfo);
+    refs.statusChip.className = 'runtime-upgrade-status-chip is-' + safe(chip.tone).trim();
+    refs.statusChip.textContent = chip.text;
+    refs.progressMeta.textContent = progressInfo.label;
+    refs.progressPercent.textContent =
+      String(Math.max(0, Math.min(100, Number(progressInfo.displayPercent) || 0))) + '%';
     refs.progressFill.className = 'runtime-upgrade-progress-fill is-' + safe(progressInfo.tone).trim();
     refs.progressFill.style.width = String(Math.max(0, Math.min(100, Number(progressInfo.percent) || 0))) + '%';
+    refs.message.className = 'runtime-upgrade-message is-' + safe(progressInfo.tone).trim();
     refs.message.textContent = runtimeUpgradeStatusText();
+    renderRuntimeUpgradeHighlights(refs, info);
 
     const lastActionText = runtimeUpgradeLastActionText();
     if (lastActionText) {
@@ -385,7 +715,17 @@
     }
 
     const button = refs.button;
-    if (info.reconnecting || info.request_pending || info.can_upgrade) {
+    if (successReviewActive) {
+      button.textContent = '我知道了';
+      button.disabled = false;
+      button.classList.remove('is-placeholder');
+      button.removeAttribute('aria-hidden');
+      button.tabIndex = 0;
+      button.onclick = () => {
+        acknowledgeRuntimeUpgradeSuccess();
+        renderRuntimeUpgradeBanner();
+      };
+    } else if (info.reconnecting || info.request_pending || info.can_upgrade) {
       button.textContent = info.reconnecting || info.request_pending ? '切换中' : '升级正式环境';
       button.disabled = !!info.reconnecting || !!info.request_pending || !info.can_upgrade;
       button.classList.remove('is-placeholder');
@@ -410,15 +750,24 @@
 
   function applyRuntimeUpgradeStatus(payload) {
     const data = payload && typeof payload === 'object' ? payload : {};
-    state.runtimeUpgrade = Object.assign({}, state.runtimeUpgrade || {}, {
+    const prev = state.runtimeUpgrade || {};
+    const nextLastAction = data.last_action && typeof data.last_action === 'object' ? data.last_action : {};
+    const nextLastStatus = safe(nextLastAction.status).trim().toLowerCase();
+    const isTerminalStatus = nextLastStatus === 'success' || nextLastStatus === 'rollback_success' || nextLastStatus === 'failed';
+    state.runtimeUpgrade = Object.assign({}, prev, {
       environment: safe(data.environment).trim(),
       current_version: safe(data.current_version).trim(),
       candidate_version: safe(data.candidate_version).trim(),
+      request_candidate_version: safe(data.request_candidate_version || data.candidate_version || prev.request_candidate_version).trim(),
+      request_requested_at: safe(data.request_requested_at || (nextLastAction && nextLastAction.requested_at) || prev.request_requested_at).trim(),
       banner_visible: !!data.banner_visible,
       can_upgrade: !!data.can_upgrade,
       request_pending: !!data.request_pending,
       blocking_reason: safe(data.blocking_reason).trim(),
-      last_action: data.last_action && typeof data.last_action === 'object' ? data.last_action : {},
+      last_action: nextLastAction,
+      upgrade_highlights: Array.isArray(data.upgrade_highlights) ? data.upgrade_highlights.slice(0, 8) : [],
+      reconnecting: isTerminalStatus ? false : !!prev.reconnecting,
+      offline_seen: isTerminalStatus ? false : !!prev.offline_seen,
       status_error: '',
     });
     syncRuntimeUpgradeSuccessHold();
@@ -487,6 +836,39 @@
       });
   }
 
+  async function fetchRuntimeUpgradeStatusSnapshot() {
+    try {
+      const response = await fetch('/api/runtime-upgrade/status', { cache: 'no-store' });
+      if (!response.ok) return null;
+      const data = await response.json();
+      return data && typeof data === 'object' ? data : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function runtimeUpgradeSwitchApplied(statusPayload) {
+    const payload = statusPayload && typeof statusPayload === 'object' ? statusPayload : null;
+    if (!payload) return false;
+    if (!!payload.request_pending) return false;
+    const requestedVersion =
+      safe(state.runtimeUpgrade.request_candidate_version).trim() ||
+      safe(state.runtimeUpgrade.candidate_version).trim();
+    const currentVersion = safe(payload.current_version).trim();
+    const lastAction = payload.last_action && typeof payload.last_action === 'object'
+      ? payload.last_action
+      : {};
+    const lastStatus = safe(lastAction.status).trim().toLowerCase();
+    const lastCurrentVersion =
+      safe(lastAction.current_version).trim() ||
+      safe(lastAction.candidate_version).trim() ||
+      currentVersion;
+    if (requestedVersion && currentVersion && currentVersion === requestedVersion) {
+      return true;
+    }
+    return lastStatus === 'success' && (!requestedVersion || lastCurrentVersion === requestedVersion);
+  }
+
   async function waitForRuntimeUpgradeReconnect() {
     const deadline = Date.now() + 60000;
     let seenOffline = false;
@@ -505,10 +887,18 @@
           renderRuntimeUpgradeBanner();
           rescheduleRuntimeUpgradePoller();
         }
-      } else if (seenOffline) {
-        state.runtimeUpgrade.offline_seen = false;
-        window.location.reload();
-        return;
+      } else {
+        const statusPayload = await fetchRuntimeUpgradeStatusSnapshot();
+        if (runtimeUpgradeSwitchApplied(statusPayload)) {
+          state.runtimeUpgrade.offline_seen = false;
+          window.location.reload();
+          return;
+        }
+        if (seenOffline) {
+          state.runtimeUpgrade.offline_seen = false;
+          window.location.reload();
+          return;
+        }
       }
       await new Promise((resolve) => window.setTimeout(resolve, 1200));
     }
@@ -522,16 +912,23 @@
       return;
     }
     state.runtimeUpgrade.status_error = '';
+    state.runtimeUpgrade.progress_stage_key = '';
+    state.runtimeUpgrade.progress_stage_started_at = 0;
+    state.runtimeUpgrade.progress_session_key = '';
+    state.runtimeUpgrade.progress_floor_percent = 0;
+    clearRuntimeUpgradeProgressSnapshot();
     const button = $('runtimeUpgradeApplyBtn');
     if (button) button.disabled = true;
     const data = await postJSON('/api/runtime-upgrade/apply', { operator: 'web-user' });
     applyRuntimeUpgradeStatus(
       Object.assign({}, info, {
         request_pending: true,
+        request_candidate_version: safe(data.candidate_version || info.candidate_version).trim(),
+        request_requested_at: safe(data.requested_at).trim(),
         blocking_reason: safe(data.reconnect_hint || data.message).trim(),
         last_action: {
           status: 'requested',
-          requested_at: new Date().toISOString(),
+          requested_at: safe(data.requested_at).trim() || new Date().toISOString(),
         },
       })
     );

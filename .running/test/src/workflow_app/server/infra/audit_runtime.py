@@ -47,76 +47,21 @@ def sync_analysis_tasks(root: Path) -> int:
 
 
 def pending_counts(root: Path, *, include_test_data: bool = True) -> tuple[int, int]:
-    session_map = {
-        str(item.get("session_id") or ""): dict(item) for item in list_session_records(root, include_test_data=True, limit=100000)
-    }
-    analyses = [
-        item
-        for item in list_analysis_records(root)
-        if include_test_data or not bool((session_map.get(str(item.get("session_id") or ""), {}) or {}).get("is_test_data"))
-    ]
-    pa = len([item for item in analyses if str(item.get("status") or "") == "pending"])
-    pt = len(
-        [
-            item
-            for item in analyses
-            if str((get_training_task_record(root, str(item.get("analysis_id") or "")) or {}).get("status") or "") == "pending"
-        ]
-    )
-    return pa, pt
+    return pending_counts_indexed(root, include_test_data=include_test_data)
 
 
 def latest_results(root: Path, *, include_test_data: bool = True) -> tuple[str, str]:
-    session_map = {
-        str(item.get("session_id") or ""): dict(item) for item in list_session_records(root, include_test_data=True, limit=100000)
-    }
-    analyses = [
-        item
-        for item in list_analysis_records(root)
-        if include_test_data or not bool((session_map.get(str(item.get("session_id") or ""), {}) or {}).get("is_test_data"))
-    ]
-    analyses.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
-    latest_analysis = next((item for item in analyses if str(item.get("decision") or "").strip()), None)
-    training_rows: list[dict[str, Any]] = []
-    for item in analyses:
-        training = get_training_task_record(root, str(item.get("analysis_id") or ""))
-        if training:
-            training_rows.append(dict(training))
-    training_rows.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
-    latest_training = training_rows[0] if training_rows else None
-    return (
-        (
-            f"{latest_analysis['analysis_id']}:{latest_analysis.get('decision') or ''}({latest_analysis.get('status') or ''})"
-            if latest_analysis
-            else "none"
-        ),
-        (
-            f"{latest_training.get('training_id') or ''}:{latest_training.get('status') or ''}"
-            if latest_training
-            else "none"
-        ),
-    )
+    return latest_results_indexed(root, include_test_data=include_test_data)
 
 
 def new_sessions_24h(root: Path, *, include_test_data: bool = True) -> int:
     since = iso_ts(now_local() - timedelta(hours=24))
-    session_map = {
-        str(item.get("session_id") or ""): dict(item) for item in list_session_records(root, include_test_data=True, limit=100000)
-    }
-    session_ids = {
-        str(item.get("session_id") or "")
-        for item in list_workflow_event_log_records(root)
-        if str(item.get("actor") or "") == "user"
-        and str(item.get("stage") or "") == "chat"
-        and str(item.get("action") or "") == "send_message"
-        and str(item.get("status") or "") == "success"
-        and str(item.get("timestamp") or "") >= since
-        and (
-            include_test_data
-            or not bool((session_map.get(str(item.get("session_id") or ""), {}) or {}).get("is_test_data"))
-        )
-    }
-    return len([sid for sid in session_ids if sid])
+    return new_sessions_24h_indexed(
+        root,
+        include_test_data=include_test_data,
+        since=since,
+        routes=CHAT_INGRESS_ROUTES,
+    )
 
 
 def append_markdown(path: Path, header: str | None, lines: list[str]) -> None:

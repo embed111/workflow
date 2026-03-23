@@ -15,13 +15,13 @@
     setStatus('产物已提交');
   }
 
-  async function viewSelectedAssignmentArtifact() {
+  async function viewSelectedAssignmentArtifact(pathIndex) {
     const selected = selectedAssignmentNode();
     const ticketId = selectedAssignmentTicketId();
     const nodeId = safe(selected.node_id).trim();
     if (!ticketId || !nodeId) return;
     window.open(
-      withTestDataQuery('/api/assignments/' + encodeURIComponent(ticketId) + '/nodes/' + encodeURIComponent(nodeId) + '/artifact-preview'),
+      assignmentArtifactPreviewUrl(ticketId, nodeId, pathIndex),
       '_blank',
       'noopener',
     );

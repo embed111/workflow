@@ -200,15 +200,20 @@
       queryParam('tc_loop_node') ||
       queryParam('tc_loop_task')
     );
-    setTrainingCenterModule(deepLinkTrainingLoop ? 'ops' : 'agents');
-    if (deepLinkTrainingLoop) {
-      switchTab('training-center');
-    }
+    const initialTab = deepLinkTrainingLoop ? 'training-center' : readSavedAppTab();
+    setTrainingCenterModule(deepLinkTrainingLoop ? 'ops' : readSavedTrainingCenterModule());
+    state.requirementBugModule = readSavedRequirementBugModule();
     renderTrainingCenterAgentStats();
     renderTrainingCenterAgentList();
     renderTrainingCenterAgentDetail();
+    if (typeof renderRoleCreationWorkbench === 'function') {
+      renderRoleCreationWorkbench();
+    }
     renderTrainingCenterQueue();
     renderAssignmentCenter();
+    if (typeof renderDefectCenter === 'function') {
+      renderDefectCenter();
+    }
     syncTrainingCenterPlanAgentOptions();
     updateTrainingCenterSelectedMeta();
     cleanupLegacyTestDataCaches();
@@ -227,6 +232,7 @@
     } else {
       renderFeed();
     }
+    switchTab(initialTab, { persist: false });
     applyGateState();
     startWorkflowPoller();
     startRuntimeUpgradePoller();
@@ -242,6 +248,9 @@
     }
     if (isAssignmentProbeEnabled()) {
       await runAssignmentCenterProbe();
+    }
+    if (isDefectProbeEnabled()) {
+      await runDefectCenterProbe();
     }
     if (isTestDataToggleProbeEnabled()) {
       await runTestDataToggleProbe();

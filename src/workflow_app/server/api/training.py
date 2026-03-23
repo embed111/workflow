@@ -14,6 +14,55 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
     execution_settings = ws.get_assignment_execution_settings(cfg.root)
     policy_fields = ws.show_test_data_policy_fields(cfg, state)
 
+    if path == "/api/training/role-creation/sessions":
+        if not root_ready:
+            handler.send_json(
+                200,
+                {
+                    "ok": True,
+                    "items": [],
+                    "total": 0,
+                    "agent_search_root": root_text,
+                    "agent_search_root_ready": False,
+                    "features_locked": True,
+                },
+            )
+            return True
+        try:
+            data = ws.list_role_creation_sessions(cfg.root)
+            handler.send_json(
+                200,
+                {
+                    "ok": True,
+                    **data,
+                    "agent_search_root": root_text,
+                    "agent_search_root_ready": True,
+                    "features_locked": False,
+                },
+            )
+        except ws.TrainingCenterError as exc:
+            payload = {"ok": False, "error": str(exc), "code": exc.code}
+            payload.update(exc.extra)
+            handler.send_json(exc.status_code, payload)
+        return True
+
+    mrcs = re.fullmatch(r"/api/training/role-creation/sessions/([0-9A-Za-z._:-]+)", path)
+    if mrcs:
+        if not root_ready:
+            handler.send_json(409, handler.root_not_ready_payload())
+            return True
+        try:
+            data = ws.get_role_creation_session_detail(
+                cfg.root,
+                ws.safe_token(mrcs.group(1), "", 160),
+            )
+            handler.send_json(200, {"ok": True, **data})
+        except ws.TrainingCenterError as exc:
+            payload = {"ok": False, "error": str(exc), "code": exc.code}
+            payload.update(exc.extra)
+            handler.send_json(exc.status_code, payload)
+        return True
+
     if path == "/api/training/agents":
         if not root_ready:
             handler.send_json(
@@ -253,6 +302,110 @@ def try_handle_post(handler, cfg, state, ctx: dict) -> bool:
     body = ctx.get("body") or {}
 
     if path.startswith("/api/training") and not handler.ensure_root_ready():
+        return True
+
+    if path == "/api/training/role-creation/sessions":
+        try:
+            data = ws.create_role_creation_session(cfg, body)
+            handler.send_json(200, {"ok": True, **data})
+        except ws.TrainingCenterError as exc:
+            payload = {"ok": False, "error": str(exc), "code": exc.code}
+            payload.update(exc.extra)
+            handler.send_json(exc.status_code, payload)
+        return True
+
+    mrcsm = re.fullmatch(r"/api/training/role-creation/sessions/([0-9A-Za-z._:-]+)/messages", path)
+    if mrcsm:
+        try:
+            data = ws.post_role_creation_message(
+                cfg,
+                ws.safe_token(mrcsm.group(1), "", 160),
+                body,
+            )
+            handler.send_json(200, {"ok": True, **data})
+        except ws.TrainingCenterError as exc:
+            payload = {"ok": False, "error": str(exc), "code": exc.code}
+            payload.update(exc.extra)
+            handler.send_json(exc.status_code, payload)
+        return True
+
+    mrcss = re.fullmatch(r"/api/training/role-creation/sessions/([0-9A-Za-z._:-]+)/start", path)
+    if mrcss:
+        try:
+            data = ws.start_role_creation_session(
+                cfg,
+                ws.safe_token(mrcss.group(1), "", 160),
+                body,
+            )
+            handler.send_json(200, {"ok": True, **data})
+        except ws.TrainingCenterError as exc:
+            payload = {"ok": False, "error": str(exc), "code": exc.code}
+            payload.update(exc.extra)
+            handler.send_json(exc.status_code, payload)
+        return True
+
+    mrcst = re.fullmatch(r"/api/training/role-creation/sessions/([0-9A-Za-z._:-]+)/stage", path)
+    if mrcst:
+        try:
+            data = ws.update_role_creation_session_stage(
+                cfg,
+                ws.safe_token(mrcst.group(1), "", 160),
+                body,
+            )
+            handler.send_json(200, {"ok": True, **data})
+        except ws.TrainingCenterError as exc:
+            payload = {"ok": False, "error": str(exc), "code": exc.code}
+            payload.update(exc.extra)
+            handler.send_json(exc.status_code, payload)
+        return True
+
+    mrcsn = re.fullmatch(r"/api/training/role-creation/sessions/([0-9A-Za-z._:-]+)/tasks", path)
+    if mrcsn:
+        try:
+            data = ws.create_role_creation_task(
+                cfg,
+                ws.safe_token(mrcsn.group(1), "", 160),
+                body,
+            )
+            handler.send_json(200, {"ok": True, **data})
+        except ws.TrainingCenterError as exc:
+            payload = {"ok": False, "error": str(exc), "code": exc.code}
+            payload.update(exc.extra)
+            handler.send_json(exc.status_code, payload)
+        return True
+
+    mrcsa = re.fullmatch(
+        r"/api/training/role-creation/sessions/([0-9A-Za-z._:-]+)/tasks/([0-9A-Za-z._:-]+)/archive",
+        path,
+    )
+    if mrcsa:
+        try:
+            data = ws.archive_role_creation_task(
+                cfg,
+                ws.safe_token(mrcsa.group(1), "", 160),
+                ws.safe_token(mrcsa.group(2), "", 160),
+                body,
+            )
+            handler.send_json(200, {"ok": True, **data})
+        except ws.TrainingCenterError as exc:
+            payload = {"ok": False, "error": str(exc), "code": exc.code}
+            payload.update(exc.extra)
+            handler.send_json(exc.status_code, payload)
+        return True
+
+    mrcsc = re.fullmatch(r"/api/training/role-creation/sessions/([0-9A-Za-z._:-]+)/complete", path)
+    if mrcsc:
+        try:
+            data = ws.complete_role_creation_session(
+                cfg,
+                ws.safe_token(mrcsc.group(1), "", 160),
+                body,
+            )
+            handler.send_json(200, {"ok": True, **data})
+        except ws.TrainingCenterError as exc:
+            payload = {"ok": False, "error": str(exc), "code": exc.code}
+            payload.update(exc.extra)
+            handler.send_json(exc.status_code, payload)
         return True
 
     if path == "/api/training/plans/manual":

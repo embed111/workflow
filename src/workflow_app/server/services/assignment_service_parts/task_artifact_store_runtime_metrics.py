@@ -3,6 +3,7 @@ def read_assignment_artifact_preview(
     *,
     ticket_id_text: str,
     node_id_text: str,
+    path_index: int = 0,
     include_test_data: bool = True,
 ) -> dict[str, Any]:
     ticket_id = safe_token(str(ticket_id_text or ""), "", 160)
@@ -22,17 +23,31 @@ def read_assignment_artifact_preview(
     if not artifact_paths:
         raise AssignmentCenterError(404, "artifact not delivered", "artifact_not_delivered")
     artifact_root = _assignment_artifact_root(root)
-    path = Path(str(artifact_paths[0])).resolve(strict=False)
+    index = max(0, min(int(path_index or 0), len(artifact_paths) - 1))
+    path = Path(str(artifact_paths[index])).resolve(strict=False)
     if not path_in_scope(path, artifact_root):
         raise AssignmentCenterError(400, "artifact path out of root", "artifact_path_out_of_root")
     if not path.exists() or not path.is_file():
         raise AssignmentCenterError(404, "artifact file missing", "artifact_file_missing")
+    try:
+        content = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise AssignmentCenterError(
+            415,
+            "artifact preview only supports utf-8 text files",
+            "artifact_preview_unsupported_encoding",
+            {
+                "path": path.as_posix(),
+                "suffix": str(path.suffix or "").strip().lower(),
+            },
+        ) from exc
     return {
         "ticket_id": ticket_id,
         "node_id": node_id,
+        "path_index": index,
         "path": path.as_posix(),
-        "content": path.read_text(encoding="utf-8"),
-        "content_type": "text/plain; charset=utf-8",
+        "content": content,
+        "content_type": _artifact_preview_content_type(path),
     }
 
 

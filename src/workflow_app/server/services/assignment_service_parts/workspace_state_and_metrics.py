@@ -58,6 +58,30 @@ def _artifact_directory_role(artifact_root: Path, artifact_dir: Path) -> str:
     return "artifact"
 
 
+def _effective_delivery_target_agent_id(node: dict[str, Any]) -> str:
+    target_agent_id = str(node.get("delivery_target_agent_id") or "").strip()
+    if target_agent_id:
+        return target_agent_id
+    if str(node.get("delivery_mode") or "").strip().lower() == "specified":
+        receiver_agent_id = str(node.get("delivery_receiver_agent_id") or "").strip()
+        if receiver_agent_id:
+            return receiver_agent_id
+    return str(node.get("assigned_agent_id") or "").strip()
+
+
+def _effective_delivery_target_agent_name(node: dict[str, Any]) -> str:
+    target_agent_name = str(node.get("delivery_target_agent_name") or "").strip()
+    if target_agent_name:
+        return target_agent_name
+    if str(node.get("delivery_mode") or "").strip().lower() == "specified":
+        receiver_agent_name = str(
+            node.get("delivery_receiver_agent_name") or node.get("delivery_receiver_agent_id") or ""
+        ).strip()
+        if receiver_agent_name:
+            return receiver_agent_name
+    return str(node.get("assigned_agent_name") or node.get("assigned_agent_id") or "").strip()
+
+
 def _artifact_structure_markdown(
     root: Path,
     *,
@@ -71,7 +95,7 @@ def _artifact_structure_markdown(
     task_dir = (_assignment_artifact_root(root) / "tasks" / ticket_id).resolve(strict=False)
     task_name = str(node.get("node_name") or node.get("node_id") or "").strip() or "-"
     assigned_agent = str(node.get("assigned_agent_name") or node.get("assigned_agent_id") or "").strip() or "-"
-    delivery_receiver = str(node.get("delivery_receiver_agent_id") or "").strip() or "-"
+    delivery_target = _effective_delivery_target_agent_name(node) or _effective_delivery_target_agent_id(node) or "-"
     lines = [
         "# 单任务目录结构说明",
         "",
@@ -85,7 +109,7 @@ def _artifact_structure_markdown(
         f"- node_id: {str(node.get('node_id') or '').strip() or '-'}",
         f"- 任务名称: {task_name}",
         f"- 执行 agent: {assigned_agent}",
-        f"- 接收 agent: {delivery_receiver}",
+        f"- 交付对象: {delivery_target}",
         f"- 最近产物文件: {artifact_file.name}",
         f"- 最近刷新时间: {str(delivered_at or '').strip() or '-'}",
         f"- 刷新来源: {str(operator or '').strip() or '-'}",
@@ -100,6 +124,102 @@ def _artifact_structure_markdown(
         "",
     ]
     return "\n".join(lines).strip() + "\n"
+
+
+def _artifact_body_looks_html(raw: Any) -> bool:
+    head = str(raw or "").lstrip()[:512].lower()
+    return head.startswith("<!doctype html") or head.startswith("<html")
+
+
+def _artifact_html_escape(raw: Any) -> str:
+    return (
+        str(raw or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _artifact_text_to_html_document(raw: Any, *, title: str = "任务产物") -> str:
+    text = str(raw or "")
+    if _artifact_body_looks_html(text):
+        return text
+    escaped_title = _artifact_html_escape(title or "任务产物")
+    escaped_body = _artifact_html_escape(text)
+    body_html = (
+        "<pre class='artifact-body'>"
+        + escaped_body
+        + "</pre>"
+        if escaped_body
+        else "<div class='artifact-empty'>暂无正文</div>"
+    )
+    return (
+        "<!doctype html>\n"
+        "<html lang='zh-CN'>\n"
+        "<head>\n"
+        "  <meta charset='utf-8' />\n"
+        "  <meta name='viewport' content='width=device-width, initial-scale=1' />\n"
+        f"  <title>{escaped_title}</title>\n"
+        "  <style>\n"
+        "    :root { color-scheme: light; }\n"
+        "    body {\n"
+        "      margin: 0;\n"
+        "      font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;\n"
+        "      background: #f4f7fb;\n"
+        "      color: #1f2937;\n"
+        "    }\n"
+        "    .artifact-shell {\n"
+        "      max-width: 960px;\n"
+        "      margin: 0 auto;\n"
+        "      padding: 24px;\n"
+        "    }\n"
+        "    .artifact-card {\n"
+        "      border: 1px solid #d9e2ec;\n"
+        "      border-radius: 16px;\n"
+        "      background: #ffffff;\n"
+        "      box-shadow: 0 18px 44px rgba(15, 23, 42, 0.08);\n"
+        "      overflow: hidden;\n"
+        "    }\n"
+        "    .artifact-head {\n"
+        "      padding: 18px 20px;\n"
+        "      border-bottom: 1px solid #e5edf5;\n"
+        "      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);\n"
+        "    }\n"
+        "    .artifact-title {\n"
+        "      margin: 0;\n"
+        "      font-size: 20px;\n"
+        "      line-height: 1.3;\n"
+        "      font-weight: 800;\n"
+        "    }\n"
+        "    .artifact-content {\n"
+        "      padding: 20px;\n"
+        "    }\n"
+        "    .artifact-body {\n"
+        "      margin: 0;\n"
+        "      white-space: pre-wrap;\n"
+        "      word-break: break-word;\n"
+        "      font: 13px/1.65 'Cascadia Mono', 'Consolas', 'SFMono-Regular', monospace;\n"
+        "      color: #334155;\n"
+        "    }\n"
+        "    .artifact-empty {\n"
+        "      font-size: 13px;\n"
+        "      color: #64748b;\n"
+        "    }\n"
+        "  </style>\n"
+        "</head>\n"
+        "<body>\n"
+        "  <main class='artifact-shell'>\n"
+        "    <section class='artifact-card'>\n"
+        "      <header class='artifact-head'>\n"
+        f"        <h1 class='artifact-title'>{escaped_title}</h1>\n"
+        "      </header>\n"
+        f"      <div class='artifact-content'>{body_html}</div>\n"
+        "    </section>\n"
+        "  </main>\n"
+        "</body>\n"
+        "</html>\n"
+    )
 
 
 def _write_artifact_structure_files(
@@ -216,6 +336,8 @@ def _persist_assignment_workspace_node(
         "delivery_mode_text": _delivery_mode_text(node.get("delivery_mode") or "none"),
         "delivery_receiver_agent_id": str(node.get("delivery_receiver_agent_id") or "").strip(),
         "delivery_receiver_agent_name": str(node.get("delivery_receiver_agent_name") or "").strip(),
+        "delivery_target_agent_id": _effective_delivery_target_agent_id(node),
+        "delivery_target_agent_name": _effective_delivery_target_agent_name(node),
         "artifact_delivery_status": str(node.get("artifact_delivery_status") or "pending").strip().lower() or "pending",
         "artifact_delivery_status_text": _artifact_delivery_status_text(
             node.get("artifact_delivery_status") or "pending"
@@ -262,6 +384,7 @@ def _artifact_delivery_markdown(
     artifact_label: str,
     delivery_note: str,
 ) -> str:
+    delivery_target = _effective_delivery_target_agent_name(node) or _effective_delivery_target_agent_id(node) or "-"
     lines = [
         f"# {artifact_label or '任务产物'}",
         "",
@@ -270,7 +393,7 @@ def _artifact_delivery_markdown(
         f"- node_name: {str(node.get('node_name') or '').strip()}",
         f"- assigned_agent: {str(node.get('assigned_agent_name') or node.get('assigned_agent_id') or '').strip()}",
         f"- delivery_mode: {_delivery_mode_text(node.get('delivery_mode') or 'none')}",
-        f"- delivery_receiver: {str(node.get('delivery_receiver_agent_name') or node.get('delivery_receiver_agent_id') or '-').strip() or '-'}",
+        f"- delivery_target: {delivery_target}",
         f"- delivered_at: {delivered_at}",
         f"- operator: {operator}",
     ]
@@ -278,7 +401,10 @@ def _artifact_delivery_markdown(
         lines.append(f"- expected_artifact: {str(node.get('expected_artifact') or '').strip()}")
     if delivery_note:
         lines.extend(["", "## 交付说明", "", delivery_note])
-    return "\n".join(lines).strip() + "\n"
+    return _artifact_text_to_html_document(
+        "\n".join(lines).strip() + "\n",
+        title=artifact_label or "任务产物",
+    )
 
 
 def _artifact_paths_preview(paths: list[Any]) -> list[str]:
@@ -540,6 +666,8 @@ def _load_nodes(conn: sqlite3.Connection, ticket_id: str) -> list[dict[str, Any]
                 "delivery_mode_text": _delivery_mode_text(row["delivery_mode"] or "none"),
                 "delivery_receiver_agent_id": str(row["delivery_receiver_agent_id"] or "").strip(),
                 "delivery_receiver_agent_name": str(row["delivery_receiver_agent_name"] or "").strip(),
+                "delivery_target_agent_id": "",
+                "delivery_target_agent_name": "",
                 "artifact_delivery_status": _normalize_artifact_delivery_status(
                     row["artifact_delivery_status"] or "pending"
                 ),
@@ -558,6 +686,8 @@ def _load_nodes(conn: sqlite3.Connection, ticket_id: str) -> list[dict[str, Any]
                 "updated_at": str(row["updated_at"] or "").strip(),
             }
         )
+        out[-1]["delivery_target_agent_id"] = _effective_delivery_target_agent_id(out[-1])
+        out[-1]["delivery_target_agent_name"] = _effective_delivery_target_agent_name(out[-1])
     return out
 
 

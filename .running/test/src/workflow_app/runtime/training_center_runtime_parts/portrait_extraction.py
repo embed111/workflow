@@ -258,6 +258,7 @@ from ..server.services import training_registry_service as _training_registry_se
 from ..server.services import release_management_service as _release_management_service
 from ..server.services import training_plan_service as _training_plan_service
 from ..server.services import training_loop_service as _training_loop_service
+from ..server.services import role_creation_service as _role_creation_service
 
 _TRAINING_CENTER_MODULES = (
     _trainer_assignment_service,
@@ -265,6 +266,7 @@ _TRAINING_CENTER_MODULES = (
     _release_management_service,
     _training_plan_service,
     _training_loop_service,
+    _role_creation_service,
 )
 
 for _module in _TRAINING_CENTER_MODULES:

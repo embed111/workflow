@@ -125,6 +125,50 @@ def restore_runtime_config(runtime_root: Path, original_text: str) -> None:
         return
 
 
+def run_workspace_line_budget_gate(workspace_root: Path, report_root: Path, version: str) -> tuple[bool, dict[str, Any]]:
+    checker = (workspace_root / "scripts" / "quality" / "check_workspace_line_budget.py").resolve()
+    if not checker.exists():
+        raise RuntimeError(f"line budget checker missing: {checker}")
+    report_path = (report_root / f"workspace-line-budget-{version}.md").resolve()
+    json_report_path = report_path.with_suffix(".json")
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(checker),
+            "--root",
+            workspace_root.as_posix(),
+            "--report",
+            report_path.as_posix(),
+            "--json-report",
+            json_report_path.as_posix(),
+        ],
+        cwd=str(workspace_root),
+        capture_output=True,
+        text=True,
+    )
+    if not json_report_path.exists():
+        raise RuntimeError(f"line budget json report missing: {json_report_path}")
+    payload = json.loads(json_report_path.read_text(encoding="utf-8"))
+    hard_gate = payload.get("hard_gate") or {}
+    refactor_gate = payload.get("refactor_trigger_gate") or {}
+    guideline_gate = payload.get("guideline_gate") or {}
+    detail = {
+        "report_path": report_path.as_posix(),
+        "json_report_path": json_report_path.as_posix(),
+        "hard_gate_pass": bool(hard_gate.get("pass", proc.returncode == 0)),
+        "hard_gate_offender_count": int(hard_gate.get("offender_count", 0) or 0),
+        "refactor_triggered": bool(refactor_gate.get("triggered", False)),
+        "refactor_trigger_count": int(refactor_gate.get("offender_count", 0) or 0),
+        "guideline_triggered": bool(guideline_gate.get("triggered", False)),
+        "guideline_trigger_count": int(guideline_gate.get("offender_count", 0) or 0),
+        "trigger_action": str(payload.get("trigger_action") or "none"),
+        "summary": payload,
+    }
+    if str(proc.stderr or "").strip():
+        detail["stderr"] = str(proc.stderr or "").strip()
+    return bool(detail["hard_gate_pass"]), detail
+
+
 def main() -> int:
     args = parse_args()
     workspace_root = Path(args.workspace_root).resolve()
@@ -178,6 +222,12 @@ def main() -> int:
     }
 
     try:
+        line_budget_ok, line_budget = run_workspace_line_budget_gate(workspace_root, report_root, args.version)
+        evidence["checks"]["workspace_line_budget"] = line_budget
+        assert_true(line_budget_ok, "workspace hard line budget failed")
+        if bool(line_budget.get("refactor_triggered")):
+            evidence.setdefault("warnings", []).append("workspace line budget triggered refactor_skill")
+
         evidence["healthz"] = wait_health(base_url)
 
         status, runtime_status = api_request(base_url, "GET", "/api/runtime-upgrade/status")

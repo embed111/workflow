@@ -9,7 +9,7 @@ from typing import Any
 from . import work_record_store as _store
 
 
-_INDEX_SCHEMA_VERSION = 1
+_INDEX_SCHEMA_VERSION = 2
 _INDEX_DIR_NAME = ".index"
 _INDEX_DB_NAME = "index.db"
 _PREVIEW_LIMIT = 200
@@ -351,6 +351,15 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             source_line_no INTEGER NOT NULL DEFAULT 0
         );
 
+        CREATE TABLE IF NOT EXISTS ingress_request_index (
+            request_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL DEFAULT '',
+            route TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT '',
+            event_logged INTEGER NOT NULL DEFAULT 0,
+            source_relpath TEXT NOT NULL DEFAULT ''
+        );
+
         CREATE TABLE IF NOT EXISTS event_index (
             event_key TEXT PRIMARY KEY,
             stream_type TEXT NOT NULL DEFAULT '',
@@ -381,6 +390,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_analysis_run_index_analysis ON analysis_run_index(analysis_id,created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_task_run_index_session ON task_run_index(session_id,created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_audit_index_lookup ON audit_index(audit_type,session_id,ticket_id,created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_ingress_request_index_created_at ON ingress_request_index(created_at DESC, route, event_logged);
         CREATE INDEX IF NOT EXISTS idx_event_index_lookup ON event_index(stream_type,session_id,ticket_id,analysis_id,created_at DESC);
         """
     )
@@ -405,6 +415,7 @@ def _clear_index_tables(conn: sqlite3.Connection) -> None:
         "analysis_run_index",
         "task_run_index",
         "audit_index",
+        "ingress_request_index",
         "event_index",
     ):
         conn.execute(f"DELETE FROM {table}")

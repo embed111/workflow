@@ -1,3 +1,14 @@
+  function assignmentArtifactPreviewUrl(ticketId, nodeId, pathIndex) {
+    const tid = safe(ticketId).trim();
+    const nid = safe(nodeId).trim();
+    const index = Math.max(0, Number(pathIndex || 0));
+    return withTestDataQuery(
+      '/api/assignments/' + encodeURIComponent(tid) +
+      '/nodes/' + encodeURIComponent(nid) +
+      '/artifact-preview?path_index=' + encodeURIComponent(String(index)),
+    );
+  }
+
   function renderAssignmentDetail() {
     const body = $('assignmentDetailBody');
     if (!body) return;
@@ -30,6 +41,7 @@
       : [];
     const blockings = Array.isArray(detail.blocking_reasons) ? detail.blocking_reasons : [];
     const artifactPaths = Array.isArray(selected.artifact_paths) ? selected.artifact_paths : [];
+    const ticketId = selectedAssignmentTicketId();
     const rawStatus = safe(selected.status).trim().toLowerCase();
     let receiptActionHtml = '';
     let managementHtml = '';
@@ -110,12 +122,12 @@
         escapeHtml(safe(selected.artifact_delivery_status_text) || assignmentArtifactDeliveryStatusText(selected.artifact_delivery_status))
       ) +
       assignmentStatHtml(
-        '交付类型',
+        '交付方式',
         escapeHtml(safe(selected.delivery_mode_text) || assignmentDeliveryModeText(selected.delivery_mode))
       ) +
       assignmentStatHtml(
         '交付对象',
-        escapeHtml(safe(selected.delivery_receiver_agent_name || selected.delivery_receiver_agent_id) || '-')
+        escapeHtml(assignmentDeliveryTargetLabel(selected))
       ) +
       assignmentStatHtml(
         '最近交付时间',
@@ -124,7 +136,14 @@
       '</div>' +
       "<div class='assignment-path-list'>" +
       (artifactPaths.length
-        ? artifactPaths.map((item) => "<div class='assignment-path-item'>" + escapeHtml(safe(item)) + '</div>').join('')
+        ? artifactPaths.map((item, index) =>
+          "<div class='assignment-path-item'>" +
+            "<div class='assignment-path-text'>" + escapeHtml(safe(item)) + '</div>' +
+            "<a class='assignment-path-open' href='" +
+              escapeHtml(assignmentArtifactPreviewUrl(ticketId, selected.node_id, index)) +
+              "' target='_blank' rel='noopener'>打开</a>" +
+          '</div>'
+        ).join('')
         : "<div class='assignment-path-item'>尚未交付，路径将在提交产物后生成。</div>") +
       '</div>' +
       artifactActionHtml;
@@ -226,7 +245,7 @@
     }
     if (receiverSelect) {
       receiverSelect.innerHTML = items.length
-        ? ("<option value=''>请选择交付对象</option>" + items.map((item) => {
+        ? ("<option value=''>请选择指定交付对象</option>" + items.map((item) => {
           const agentId = safe(item && item.agent_id).trim();
           const agentName = safe(item && item.agent_name).trim();
           return "<option value='" + escapeHtml(agentId) + "'" +
@@ -743,7 +762,7 @@
     if (!safe(form.assigned_agent_id).trim()) throw new Error('执行 agent 必填');
     if (!safe(form.node_goal).trim()) throw new Error('确认任务目标必填');
     if (safe(form.delivery_mode).trim().toLowerCase() === 'specified' && !safe(form.delivery_receiver_agent_id).trim()) {
-      throw new Error('指定交付人时必须选择交付给 agent');
+      throw new Error('指定交付对象时必须选择接收 agent');
     }
     const ticketId = await ensureAssignmentGraphExists();
     const payload = {

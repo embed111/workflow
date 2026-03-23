@@ -279,6 +279,10 @@ def _deliver_assignment_artifact_locked(
         artifact_label=artifact_label,
         delivery_note=delivery_note,
     )
+    payload = _artifact_text_to_html_document(
+        payload,
+        title=artifact_label or _artifact_label_text(selected_node),
+    )
     copied_source_artifacts = _copy_assignment_artifact_source_files(
         root,
         node=selected_node,

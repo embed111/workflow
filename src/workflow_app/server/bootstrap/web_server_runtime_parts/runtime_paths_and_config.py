@@ -36,6 +36,9 @@ from ...runtime.training_center_runtime import (
     TrainingCenterError,
     bind_runtime as bind_training_center_runtime,
     clone_training_agent_from_current,
+    complete_role_creation_session,
+    create_role_creation_session,
+    create_role_creation_task,
     confirm_training_agent_release_review,
     create_training_plan_and_enqueue,
     discard_agent_pre_release,
@@ -44,14 +47,18 @@ from ...runtime.training_center_runtime import (
     discover_training_trainers,
     enter_training_queue_next_round,
     enter_training_agent_release_review,
+    get_role_creation_session_detail,
     get_training_agent_release_review,
     get_training_queue_loop,
     get_training_queue_status_detail,
     execute_training_queue_item,
     get_training_run_detail,
+    is_system_or_test_workspace,
+    list_role_creation_sessions,
     list_training_agent_releases,
     list_training_agents_overview,
     list_training_queue_items,
+    post_role_creation_message,
     rename_training_queue_item,
     remove_training_queue_item,
     rollback_training_queue_round_increment,
@@ -59,6 +66,9 @@ from ...runtime.training_center_runtime import (
     submit_manual_release_evaluation,
     submit_training_agent_release_review_manual,
     switch_training_agent_release,
+    start_role_creation_session,
+    archive_role_creation_task,
+    update_role_creation_session_stage,
 )
 
 from ..presentation.pages import load_index_page_css, load_index_page_html
@@ -122,6 +132,7 @@ class AppConfig:
     root: Path
     entry_script: Path
     agent_search_root: Path | None
+    agent_search_root_requested_text: str
     show_test_data: bool
     host: str
     port: int
@@ -138,7 +149,7 @@ class RuntimeState:
     active_streams: dict[str, threading.Event] = field(default_factory=dict)
     reconcile_lock: threading.Lock = field(default_factory=threading.Lock)
     session_lock_guard: threading.Lock = field(default_factory=threading.Lock)
-    session_locks: dict[str, threading.Lock] = field(default_factory=dict)
+    session_locks: dict[str, "SessionLockEntry"] = field(default_factory=dict)
     task_runtime_lock: threading.Lock = field(default_factory=threading.Lock)
     active_tasks: dict[str, "TaskRuntime"] = field(default_factory=dict)
     generation_semaphore: threading.Semaphore = field(
@@ -176,6 +187,18 @@ class SessionGateError(RuntimeError):
 
 class ConcurrencyLimitError(RuntimeError):
     pass
+
+
+@dataclass
+class SessionLockEntry:
+    lock: threading.Lock = field(default_factory=threading.Lock)
+    ref_count: int = 0
+
+
+@dataclass
+class GenerationLease:
+    session_id: str
+    lock: threading.Lock
 
 
 class WorkflowGateError(RuntimeError):

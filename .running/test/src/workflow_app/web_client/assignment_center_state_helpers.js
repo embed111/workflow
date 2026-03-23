@@ -325,7 +325,7 @@
   }
 
   function assignmentDeliveryModeText(value) {
-    return safe(value).trim().toLowerCase() === 'specified' ? '指定交付人' : '无交付人';
+    return safe(value).trim().toLowerCase() === 'specified' ? '指定交付对象' : '默认交付给当前 agent';
   }
 
   function assignmentArtifactDeliveryStatusText(value) {
@@ -346,16 +346,54 @@
     return safe((matched && (matched.agent_name || matched.agent_id)) || target).trim();
   }
 
+  function assignmentAgentDisplayName(agentId, agentName) {
+    const id = safe(agentId).trim();
+    const name = safe(agentName).trim();
+    return name || (id ? assignmentAgentLabelById(id) : '') || id;
+  }
+
+  function assignmentDeliveryTargetLabel(item) {
+    const source = item && typeof item === 'object' ? item : {};
+    const deliveryMode = safe(source.delivery_mode).trim().toLowerCase();
+    const targetId = safe(source.delivery_target_agent_id).trim();
+    const targetName = safe(source.delivery_target_agent_name).trim();
+    if (targetId || targetName) {
+      return assignmentAgentDisplayName(targetId, targetName) || '-';
+    }
+    const receiverId = safe(source.delivery_receiver_agent_id).trim();
+    const receiverName = safe(source.delivery_receiver_agent_name).trim();
+    if (deliveryMode === 'specified' && (receiverId || receiverName)) {
+      return assignmentAgentDisplayName(receiverId, receiverName) || '-';
+    }
+    const assignedId = safe(source.assigned_agent_id).trim();
+    const assignedName = safe(source.assigned_agent_name).trim();
+    return assignmentAgentDisplayName(assignedId, assignedName) || '-';
+  }
+
   function assignmentCreatePreviewPaths() {
     const form = state.assignmentCreateForm || defaultAssignmentCreateForm();
     const artifactRoot = safe(state.artifactRootPath).trim();
     if (!artifactRoot) return ['-'];
     const ticketId = selectedAssignmentTicketId() || '<ticket_id>';
     const nodeId = '<node_id>';
-    const paths = [artifactRoot + '/tasks/' + ticketId + '/artifacts/' + nodeId + '/output/...'];
+    const deliveryTarget = assignmentSafePathSegment(
+      assignmentDeliveryTargetLabel({
+        delivery_mode: form.delivery_mode,
+        delivery_receiver_agent_id: form.delivery_receiver_agent_id,
+        assigned_agent_id: form.assigned_agent_id,
+      }),
+      'current-agent',
+    );
+    const deliveryTask = assignmentSafePathSegment(safe(form.node_name).trim(), 'task');
+    const paths = [
+      artifactRoot + '/tasks/' + ticketId + '/artifacts/' + nodeId + '/output/...',
+      artifactRoot + '/delivery/' + deliveryTarget + '/' + deliveryTask + '/...',
+    ];
     if (safe(form.delivery_mode).trim().toLowerCase() === 'specified') {
       const receiver = assignmentSafePathSegment(
-        assignmentAgentLabelById(form.delivery_receiver_agent_id) || form.delivery_receiver_agent_id || 'receiver',
+        assignmentDeliveryTargetLabel({
+          delivery_receiver_agent_id: form.delivery_receiver_agent_id,
+        }) || form.delivery_receiver_agent_id || 'receiver',
         'receiver',
       );
       paths.push(

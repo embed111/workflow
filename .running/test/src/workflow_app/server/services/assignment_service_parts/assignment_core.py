@@ -326,7 +326,7 @@ def _normalize_delivery_mode(raw: Any) -> str:
 
 
 def _delivery_mode_text(value: Any) -> str:
-    return "指定交付人" if str(value or "").strip().lower() == "specified" else "无交付人"
+    return "指定交付对象" if str(value or "").strip().lower() == "specified" else "默认交付给当前 agent"
 
 
 def _artifact_delivery_status_text(value: Any) -> str:

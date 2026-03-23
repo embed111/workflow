@@ -1,18 +1,35 @@
   // Training center agent catalog, portrait, and release list helpers.
 
   function setTrainingCenterModule(moduleName) {
-    const next = safe(moduleName).toLowerCase() === 'ops' ? 'ops' : 'agents';
+    const next = normalizeTrainingCenterModule(moduleName);
     state.tcModule = next;
+    writeSavedTrainingCenterModule(next);
     const tabAgentsBtn = $('tcTabAgentsBtn');
+    const tabCreateRoleBtn = $('tcTabCreateRoleBtn');
     const tabOpsBtn = $('tcTabOpsBtn');
     if (tabAgentsBtn) tabAgentsBtn.classList.toggle('active', next === 'agents');
+    if (tabCreateRoleBtn) tabCreateRoleBtn.classList.toggle('active', next === 'create-role');
     if (tabOpsBtn) tabOpsBtn.classList.toggle('active', next === 'ops');
     const moduleAgents = $('tcModuleAgents');
+    const moduleCreateRole = $('tcModuleCreateRole');
     const moduleOps = $('tcModuleOps');
     if (moduleAgents) moduleAgents.classList.toggle('active', next === 'agents');
+    if (moduleCreateRole) moduleCreateRole.classList.toggle('active', next === 'create-role');
     if (moduleOps) moduleOps.classList.toggle('active', next === 'ops');
     if (next === 'ops') {
       renderTrainingLoop();
+    }
+    if (next === 'create-role') {
+      if (typeof renderRoleCreationWorkbench === 'function') {
+        renderRoleCreationWorkbench();
+      }
+      if (state.agentSearchRootReady && typeof refreshRoleCreationSessions === 'function') {
+        refreshRoleCreationSessions({ preserveSelection: true }).catch((err) => {
+          if (typeof setRoleCreationError === 'function') {
+            setRoleCreationError(err.message || String(err));
+          }
+        });
+      }
     }
   }
 
