@@ -38,6 +38,7 @@ from ...runtime.training_center_runtime import (
     clone_training_agent_from_current,
     complete_role_creation_session,
     create_role_creation_session,
+    delete_role_creation_session,
     create_role_creation_task,
     confirm_training_agent_release_review,
     create_training_plan_and_enqueue,

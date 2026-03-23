@@ -179,6 +179,19 @@ function Wait-WorkflowHealth {
     }
 }
 
+function Get-WorkflowStartupSplashPath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceRoot
+    )
+
+    $candidate = Join-Path $SourceRoot 'scripts\assets\workflow_startup_splash.html'
+    if (Test-Path -LiteralPath $candidate) {
+        return [System.IO.Path]::GetFullPath($candidate)
+    }
+    return ''
+}
+
 function Set-ProcessEnvironment {
     param(
         [Parameter(Mandatory = $true)]
@@ -322,11 +335,39 @@ function Open-WorkflowBrowser {
         [Parameter(Mandatory = $true)]
         [string]$BindHost,
         [Parameter(Mandatory = $true)]
-        [int]$Port
+        [int]$Port,
+        [Parameter()]
+        [ValidateSet('dev', 'test', 'prod')]
+        [string]$Environment = 'prod',
+        [Parameter()]
+        [string]$SourceRoot = '',
+        [switch]$UseSplash
     )
 
     $url = "http://$BindHost`:$Port"
+    if ($UseSplash) {
+        $splashPath = ''
+        if (-not [string]::IsNullOrWhiteSpace($SourceRoot)) {
+            $splashPath = Get-WorkflowStartupSplashPath -SourceRoot $SourceRoot
+        }
+        if (-not [string]::IsNullOrWhiteSpace($splashPath)) {
+            try {
+                $builder = New-Object System.UriBuilder ([System.Uri]::new($splashPath))
+                $builder.Fragment = @(
+                    'target=' + [System.Uri]::EscapeDataString($url),
+                    'environment=' + [System.Uri]::EscapeDataString($Environment)
+                ) -join '&'
+                Start-Process $builder.Uri.AbsoluteUri | Out-Null
+                return $true
+            }
+            catch {
+                return $false
+            }
+        }
+        return $false
+    }
     Start-Process $url | Out-Null
+    return $true
 }
 
 function Stop-WorkflowServerFromDescriptor {
@@ -503,10 +544,18 @@ Assert-WorkflowArtifactIsolation -Descriptor $descriptor
 
 $pendingUpgrade = $null
 $openedBrowser = $false
+if ($OpenBrowser) {
+    $openedBrowser = Open-WorkflowBrowser `
+        -BindHost ([string]$descriptor.host) `
+        -Port ([int]$descriptor.port) `
+        -Environment $Environment `
+        -SourceRoot $sourceRoot `
+        -UseSplash
+}
 
 while ($true) {
     $launcher = Start-EnvironmentLauncher -Descriptor $descriptor -SkipBackfill:$SkipBackfill -OpenBrowser:$false
-    $healthTimeoutSeconds = if ($pendingUpgrade -and $Environment -eq 'prod') { 60 } else { 30 }
+    $healthTimeoutSeconds = 60
     $health = Wait-WorkflowHealth -BindHost ([string]$descriptor.host) -Port ([int]$descriptor.port) -LauncherProcess $launcher -TimeoutSeconds $healthTimeoutSeconds
 
     if (-not $health.ok) {
@@ -538,8 +587,7 @@ while ($true) {
     }
 
     if ($OpenBrowser -and (-not $openedBrowser)) {
-        Open-WorkflowBrowser -BindHost ([string]$descriptor.host) -Port ([int]$descriptor.port)
-        $openedBrowser = $true
+        $openedBrowser = Open-WorkflowBrowser -BindHost ([string]$descriptor.host) -Port ([int]$descriptor.port)
     }
 
     Write-Host "[workflow-start] environment: $Environment"

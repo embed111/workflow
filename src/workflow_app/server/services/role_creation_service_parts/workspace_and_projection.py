@@ -105,6 +105,18 @@ def _write_text(path: Path, content: str) -> None:
     path.write_text(str(content or ""), encoding="utf-8")
 
 
+def _role_creation_asset_root(cfg: Any) -> Path:
+    os_mod = __import__("os")
+    for env_name in ("WORKFLOW_RUNTIME_DEPLOY_ROOT", "WORKFLOW_RUNTIME_SOURCE_ROOT"):
+        raw = str(os_mod.getenv(env_name) or "").strip()
+        if not raw:
+            continue
+        candidate = Path(raw).resolve(strict=False)
+        if candidate.exists():
+            return candidate
+    return Path(cfg.root).resolve(strict=False)
+
+
 def _sync_workspace_profile(root: Path, session_summary: dict[str, Any], role_spec: dict[str, Any]) -> None:
     workspace_path_text = str(session_summary.get("created_agent_workspace_path") or "").strip()
     if not workspace_path_text:
@@ -127,7 +139,8 @@ def _initialize_role_workspace(cfg: Any, *, session_summary: dict[str, Any], rol
     workspace_path = _workspace_path_for_role(search_root, role_name)
     if not path_in_scope(workspace_path, search_root):
         raise TrainingCenterError(409, "目标角色工作区超出 agent root", "role_creation_workspace_out_of_scope")
-    source_root = Path(cfg.root).resolve(strict=False)
+    runtime_root = Path(cfg.root).resolve(strict=False)
+    asset_root = _role_creation_asset_root(cfg)
     now_dt = now_local()
     month_key = now_dt.strftime("%Y-%m")
     day_key = now_dt.strftime("%Y-%m-%d")
@@ -146,8 +159,8 @@ def _initialize_role_workspace(cfg: Any, *, session_summary: dict[str, Any], rol
         _render_workspace_soul_md(role_spec, workspace_name=workspace_path.name, workspace_path=workspace_path),
     )
     _write_text(codex_dir / "USER.md", _render_workspace_user_md(role_spec))
-    memory_spec_source = source_root / ".codex" / "MEMORY.md"
-    memory_script_source = source_root / "scripts" / "manage_codex_memory.py"
+    memory_spec_source = asset_root / ".codex" / "MEMORY.md"
+    memory_script_source = asset_root / "scripts" / "manage_codex_memory.py"
     if memory_spec_source.exists():
         _write_text(codex_dir / "MEMORY.md", memory_spec_source.read_text(encoding="utf-8"))
     else:
@@ -178,11 +191,11 @@ def _initialize_role_workspace(cfg: Any, *, session_summary: dict[str, Any], rol
             {
                 "returncode": int(verify_result.returncode),
                 "stdout": verify_stdout,
-                "stderr": verify_stderr,
-            },
-        )
+            "stderr": verify_stderr,
+        },
+    )
     evidence_id = f"role-creation-workspace-init-{date_key(now_dt)}-{now_dt.strftime('%H%M%S')}-{uuid.uuid4().hex[:6]}"
-    evidence_path = source_root / "logs" / "runs" / f"{evidence_id}.md"
+    evidence_path = runtime_root / "logs" / "runs" / f"{evidence_id}.md"
     evidence_body = (
         f"# 角色工作区初始化证据 {role_name}\n\n"
         f"- session_id: {session_summary.get('session_id')}\n"
@@ -206,7 +219,7 @@ def _initialize_role_workspace(cfg: Any, *, session_summary: dict[str, Any], rol
     return {
         "workspace_path": workspace_path.as_posix(),
         "workspace_init_status": "completed",
-        "workspace_init_ref": relative_to_root(source_root, evidence_path),
+        "workspace_init_ref": relative_to_root(runtime_root, evidence_path),
         "created_agent_id": agent_id,
         "created_agent_name": role_name,
     }

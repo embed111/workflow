@@ -126,6 +126,9 @@
     tcRoleCreationDetail: null,
     tcRoleCreationLoading: false,
     tcRoleCreationError: '',
+    tcRoleCreationOptimisticMessages: {},
+    tcRoleCreationPoller: 0,
+    tcRoleCreationPollBusy: false,
     tcRoleCreationDetailTab: 'evolution',
     tcRoleCreationDraftAttachments: [],
     tcRoleCreationDraftCollapsed: false,
@@ -371,6 +374,152 @@
     const value = queryParam('policy_probe_stage').toLowerCase();
     if (['initial', 'analyzing', 'ready', 'manual'].includes(value)) return value;
     return 'initial';
+  }
+
+  const startupOverlayStages = ['shell', 'connect', 'agents', 'sessions', 'workspace', 'ready'];
+  let startupOverlayState = {
+    active: false,
+    startedAt: 0,
+    stage: 'shell',
+    title: '正在准备工作台',
+    detail: '正在初始化布局、连接运行时并恢复最近的工作状态。',
+    hint: '首次启动通常会更慢，因为需要做环境检查、运行态恢复和数据预热。',
+    percent: 0,
+    error: '',
+    ready: false,
+    failed: false,
+    hideTimer: 0,
+    tickTimer: 0,
+  };
+
+  function ensureStartupOverlayRefs() {
+    const node = $('startupOverlay');
+    if (!node) return null;
+    if (node._startupOverlayRefs) return node._startupOverlayRefs;
+    node._startupOverlayRefs = {
+      root: node,
+      title: $('startupOverlayTitle'),
+      detail: $('startupOverlayDetail'),
+      bar: $('startupOverlayBar'),
+      percent: $('startupOverlayPercent'),
+      elapsed: $('startupOverlayElapsed'),
+      hint: $('startupOverlayHint'),
+      error: $('startupOverlayError'),
+      stages: Array.from(node.querySelectorAll('[data-stage]')),
+    };
+    return node._startupOverlayRefs;
+  }
+
+  function formatStartupOverlayElapsed(ms) {
+    const value = Math.max(0, Number(ms || 0));
+    if (value < 1000) return '刚开始';
+    const seconds = Math.floor(value / 1000);
+    if (seconds < 60) return '已等待 ' + String(seconds) + 's';
+    const minutes = Math.floor(seconds / 60);
+    const remain = seconds % 60;
+    return '已等待 ' + String(minutes) + 'm ' + String(remain) + 's';
+  }
+
+  function clearStartupOverlayTimers() {
+    if (startupOverlayState.hideTimer) {
+      clearTimeout(startupOverlayState.hideTimer);
+      startupOverlayState.hideTimer = 0;
+    }
+    if (startupOverlayState.tickTimer) {
+      clearInterval(startupOverlayState.tickTimer);
+      startupOverlayState.tickTimer = 0;
+    }
+  }
+
+  function ensureStartupOverlayTicker() {
+    if (startupOverlayState.tickTimer) return;
+    startupOverlayState.tickTimer = window.setInterval(() => {
+      if (!startupOverlayState.active) {
+        clearStartupOverlayTimers();
+        return;
+      }
+      renderStartupOverlay();
+    }, 500);
+  }
+
+  function renderStartupOverlay() {
+    const refs = ensureStartupOverlayRefs();
+    if (!refs) return;
+    const stateNode = startupOverlayState;
+    const elapsedMs = stateNode.startedAt ? Date.now() - stateNode.startedAt : 0;
+    const slow = !stateNode.ready && !stateNode.failed && elapsedMs >= 12000;
+    const safePercent = Math.max(0, Math.min(100, Number(stateNode.percent || 0)));
+    refs.root.classList.toggle('is-hidden', !stateNode.active);
+    refs.root.classList.toggle('is-ready', !!stateNode.ready);
+    refs.root.classList.toggle('is-error', !!stateNode.failed);
+    if (refs.title) refs.title.textContent = safe(stateNode.title);
+    if (refs.detail) refs.detail.textContent = safe(stateNode.detail);
+    if (refs.bar) refs.bar.style.width = String(safePercent) + '%';
+    if (refs.percent) refs.percent.textContent = String(Math.round(safePercent)) + '%';
+    if (refs.elapsed) refs.elapsed.textContent = formatStartupOverlayElapsed(elapsedMs);
+    if (refs.hint) {
+      refs.hint.textContent = slow
+        ? '当前启动时间偏长，通常是首次部署、数据库回填或会话数据恢复较慢；如果长时间不动，可刷新页面并查看启动窗口。'
+        : safe(stateNode.hint);
+      refs.hint.classList.toggle('is-slow', slow);
+    }
+    if (refs.error) {
+      refs.error.textContent = safe(stateNode.error);
+    }
+    const currentIndex = startupOverlayStages.indexOf(safe(stateNode.stage).trim().toLowerCase());
+    refs.stages.forEach((node) => {
+      const key = safe(node.getAttribute('data-stage')).trim().toLowerCase();
+      const index = startupOverlayStages.indexOf(key);
+      node.classList.toggle('is-done', index >= 0 && index < currentIndex);
+      node.classList.toggle('is-active', index === currentIndex && !stateNode.failed);
+      node.classList.toggle('is-error', index === currentIndex && !!stateNode.failed);
+    });
+  }
+
+  function setStartupProgress(payload) {
+    const next = payload && typeof payload === 'object' ? payload : {};
+    const stage = safe(next.stage).trim().toLowerCase();
+    clearTimeout(startupOverlayState.hideTimer);
+    startupOverlayState = Object.assign({}, startupOverlayState, next, {
+      active: true,
+      startedAt: startupOverlayState.startedAt || Date.now(),
+      stage: startupOverlayStages.includes(stage) ? stage : startupOverlayState.stage,
+      ready: !!next.ready,
+      failed: !!next.failed,
+      error: safe(next.error || ''),
+    });
+    ensureStartupOverlayTicker();
+    renderStartupOverlay();
+  }
+
+  function finishStartupProgress(detail) {
+    setStartupProgress({
+      stage: 'ready',
+      title: '工作台已准备完成',
+      detail: safe(detail).trim() || '基础界面与最近工作状态已恢复完成。',
+      percent: 100,
+      ready: true,
+      failed: false,
+      error: '',
+      hint: '页面已就绪，后续角色分析和局部模块刷新会在后台继续进行。',
+    });
+    startupOverlayState.hideTimer = window.setTimeout(() => {
+      startupOverlayState.active = false;
+      renderStartupOverlay();
+      clearStartupOverlayTimers();
+    }, 520);
+  }
+
+  function failStartupProgress(error) {
+    const message = safe(error).trim() || '启动失败，请刷新页面后重试。';
+    setStartupProgress({
+      failed: true,
+      ready: false,
+      error: message,
+      percent: Math.max(12, Number(startupOverlayState.percent || 0)),
+      detail: '页面启动过程中发生错误，工作台暂未准备完成。',
+      hint: '可以先刷新页面；如果仍失败，请回看启动窗口里的报错原文。',
+    });
   }
 
   function layoutProbeTab() {

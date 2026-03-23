@@ -1,0 +1,11 @@
+{
+  "session_id": "rcs-20260323-184019-e23dec",
+  "operator": "smoke-http",
+  "dialogue_agent": {
+    "agent_name": "Analyst",
+    "workspace_path": "C:/work/J-Agents/Analyst",
+    "provider": "codex",
+    "source": "workspace_analyst"
+  },
+  "timeout_s": 180
+}

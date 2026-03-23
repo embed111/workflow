@@ -8,6 +8,51 @@
 
 </head>
 <body>
+<div id='startupOverlay' class='startup-overlay' role='status' aria-live='polite' aria-label='系统启动进度'>
+  <div class='startup-overlay-card'>
+    <div class='startup-overlay-eyebrow'>workflow startup</div>
+    <div id='startupOverlayTitle' class='startup-overlay-title'>正在准备工作台</div>
+    <div id='startupOverlayDetail' class='startup-overlay-detail'>正在初始化布局、连接运行时并恢复最近的工作状态。</div>
+    <div class='startup-overlay-progress' aria-hidden='true'>
+      <div id='startupOverlayBar' class='startup-overlay-progress-fill'></div>
+    </div>
+    <div class='startup-overlay-meta'>
+      <span id='startupOverlayPercent'>0%</span>
+      <span id='startupOverlayElapsed'>刚开始</span>
+    </div>
+    <div id='startupOverlayStages' class='startup-overlay-stages'>
+      <div class='startup-overlay-stage is-active' data-stage='shell'>
+        <span class='startup-overlay-stage-dot'>1</span>
+        <span class='startup-overlay-stage-text'>准备页面</span>
+      </div>
+      <div class='startup-overlay-stage' data-stage='connect'>
+        <span class='startup-overlay-stage-dot'>2</span>
+        <span class='startup-overlay-stage-text'>连接服务</span>
+      </div>
+      <div class='startup-overlay-stage' data-stage='agents'>
+        <span class='startup-overlay-stage-dot'>3</span>
+        <span class='startup-overlay-stage-text'>加载角色</span>
+      </div>
+      <div class='startup-overlay-stage' data-stage='sessions'>
+        <span class='startup-overlay-stage-dot'>4</span>
+        <span class='startup-overlay-stage-text'>恢复数据</span>
+      </div>
+      <div class='startup-overlay-stage' data-stage='workspace'>
+        <span class='startup-overlay-stage-dot'>5</span>
+        <span class='startup-overlay-stage-text'>恢复工作台</span>
+      </div>
+      <div class='startup-overlay-stage' data-stage='ready'>
+        <span class='startup-overlay-stage-dot'>6</span>
+        <span class='startup-overlay-stage-text'>启动完成</span>
+      </div>
+    </div>
+    <div id='startupOverlayHint' class='startup-overlay-hint'>首次启动通常会更慢，因为需要做环境检查、运行态恢复和数据预热。</div>
+    <div id='startupOverlayError' class='startup-overlay-error'></div>
+    <div class='startup-overlay-actions'>
+      <a class='startup-overlay-link' href='.'>刷新页面</a>
+    </div>
+  </div>
+</div>
 <div id='appRoot' class='app'>
   <aside class='rail'>
     <div class='brand'>

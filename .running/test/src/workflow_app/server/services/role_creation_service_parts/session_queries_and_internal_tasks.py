@@ -24,6 +24,21 @@ def get_role_creation_session_detail(root: Path, session_id: str) -> dict[str, A
         task_refs = _list_task_refs(conn, session_key)
     finally:
         conn.close()
+    message_counts = _role_creation_user_message_counts(messages)
+    queue_status = _normalize_role_creation_queue_state(
+        session_summary.get("message_processing_status"),
+        default="idle",
+    )
+    if message_counts["processing"] > 0 and queue_status != "failed":
+        queue_status = "running"
+    elif message_counts["unhandled"] > 0 and queue_status not in {"running", "failed"}:
+        queue_status = "pending"
+    elif message_counts["unhandled"] <= 0 and queue_status != "failed":
+        queue_status = "idle"
+    session_summary["user_message_count"] = int(message_counts["total"] or 0)
+    session_summary["unhandled_user_message_count"] = int(message_counts["unhandled"] or 0)
+    session_summary["message_processing_status"] = queue_status
+    session_summary["message_processing_status_text"] = _role_creation_queue_state_text(queue_status)
     role_spec, missing_fields = _build_role_spec(messages)
     assignment_graph = {}
     if session_summary.get("assignment_ticket_id"):
@@ -70,6 +85,12 @@ def get_role_creation_session_detail(root: Path, session_id: str) -> dict[str, A
         session_summary["session_title"] = _role_creation_title_from_spec(role_spec, session_summary.get("session_title") or "")
         session_summary["missing_fields"] = list(missing_fields)
     created_agent = _current_agent_runtime_payload(root, session_summary.get("created_agent_id") or "")
+    dialogue_agent = {
+        "agent_name": str(session_summary.get("dialogue_agent_name") or "").strip(),
+        "workspace_path": str(session_summary.get("dialogue_agent_workspace_path") or "").strip(),
+        "provider": str(session_summary.get("dialogue_provider") or "").strip(),
+        "trace_ref": str(session_summary.get("last_dialogue_trace_ref") or "").strip(),
+    }
     return {
         "session": {
             **session_summary,
@@ -85,6 +106,7 @@ def get_role_creation_session_detail(root: Path, session_id: str) -> dict[str, A
         "task_refs": task_refs,
         "assignment_graph": assignment_graph,
         "created_agent": created_agent,
+        "dialogue_agent": dialogue_agent,
     }
 
 

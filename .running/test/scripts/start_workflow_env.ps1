@@ -31,6 +31,82 @@ function ConvertTo-WorkflowProcessArgument {
     return '"' + $escaped + '"'
 }
 
+function Test-EnvironmentDeploymentTrusted {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceRoot,
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('dev', 'test', 'prod')]
+        [string]$Environment,
+        [Parameter(Mandatory = $true)]
+        [string]$BindHost,
+        [Parameter(Mandatory = $true)]
+        [int]$Port
+    )
+
+    $descriptor = Resolve-WorkflowEnvironmentDescriptor `
+        -SourceRoot $SourceRoot `
+        -Environment $Environment `
+        -BindHost $BindHost `
+        -Port $Port
+    $launchScript = Join-Path ([string]$descriptor.deploy_root) 'scripts\launch_workflow.ps1'
+    $deploymentMetadataPath = Join-Path ([string]$descriptor.deploy_root) '.workflow-deployment.json'
+    $localMarkerPath = Get-WorkflowEnvironmentLocalDeploymentMarkerPath -SourceRoot $SourceRoot -Environment $Environment
+
+    if (-not (Test-Path -LiteralPath $launchScript)) {
+        return @{ ok = $false; reason = 'launch_script_missing'; descriptor = $descriptor }
+    }
+    if (-not (Test-Path -LiteralPath $deploymentMetadataPath)) {
+        return @{ ok = $false; reason = 'deployment_metadata_missing'; descriptor = $descriptor }
+    }
+    if (-not (Test-Path -LiteralPath $localMarkerPath)) {
+        return @{ ok = $false; reason = 'local_marker_missing'; descriptor = $descriptor }
+    }
+
+    $deploymentMetadata = Read-WorkflowJson -Path $deploymentMetadataPath -Default @{}
+    $localMarker = Read-WorkflowJson -Path $localMarkerPath -Default @{}
+    $deploymentVersion = [string]$deploymentMetadata['version']
+    $markerVersion = [string]$localMarker['version']
+
+    if ([string]$deploymentMetadata['environment'] -ne $Environment) {
+        return @{ ok = $false; reason = 'deployment_environment_mismatch'; descriptor = $descriptor }
+    }
+    if (-not (Test-WorkflowSamePath -Left ([string]$deploymentMetadata['source_root']) -Right $SourceRoot)) {
+        return @{ ok = $false; reason = 'deployment_source_root_mismatch'; descriptor = $descriptor }
+    }
+    if (-not (Test-WorkflowSamePath -Left ([string]$deploymentMetadata['control_root']) -Right ([string]$descriptor.control_root))) {
+        return @{ ok = $false; reason = 'deployment_control_root_mismatch'; descriptor = $descriptor }
+    }
+    if (-not (Test-WorkflowSamePath -Left ([string]$deploymentMetadata['manifest_path']) -Right ([string]$descriptor.manifest_path))) {
+        return @{ ok = $false; reason = 'deployment_manifest_mismatch'; descriptor = $descriptor }
+    }
+    if ([string]$localMarker['marker_kind'] -ne 'local_deployment') {
+        return @{ ok = $false; reason = 'local_marker_invalid'; descriptor = $descriptor }
+    }
+    if ([string]$localMarker['environment'] -ne $Environment) {
+        return @{ ok = $false; reason = 'local_marker_environment_mismatch'; descriptor = $descriptor }
+    }
+    if (-not (Test-WorkflowSamePath -Left ([string]$localMarker['source_root']) -Right $SourceRoot)) {
+        return @{ ok = $false; reason = 'local_marker_source_root_mismatch'; descriptor = $descriptor }
+    }
+    if (-not (Test-WorkflowSamePath -Left ([string]$localMarker['deploy_root']) -Right ([string]$descriptor.deploy_root))) {
+        return @{ ok = $false; reason = 'local_marker_deploy_root_mismatch'; descriptor = $descriptor }
+    }
+    if (-not (Test-WorkflowSamePath -Left ([string]$localMarker['control_root']) -Right ([string]$descriptor.control_root))) {
+        return @{ ok = $false; reason = 'local_marker_control_root_mismatch'; descriptor = $descriptor }
+    }
+    if (-not (Test-WorkflowSamePath -Left ([string]$localMarker['runtime_root']) -Right ([string]$descriptor.runtime_root))) {
+        return @{ ok = $false; reason = 'local_marker_runtime_root_mismatch'; descriptor = $descriptor }
+    }
+    if (-not (Test-WorkflowSamePath -Left ([string]$localMarker['manifest_path']) -Right ([string]$descriptor.manifest_path))) {
+        return @{ ok = $false; reason = 'local_marker_manifest_mismatch'; descriptor = $descriptor }
+    }
+    if ((-not [string]::IsNullOrWhiteSpace($deploymentVersion)) -and (-not [string]::IsNullOrWhiteSpace($markerVersion)) -and $deploymentVersion -ne $markerVersion) {
+        return @{ ok = $false; reason = 'local_marker_version_mismatch'; descriptor = $descriptor }
+    }
+    return @{ ok = $true; reason = 'trusted'; descriptor = $descriptor }
+}
+
 function Ensure-EnvironmentDeployment {
     param(
         [Parameter(Mandatory = $true)]
@@ -44,12 +120,15 @@ function Ensure-EnvironmentDeployment {
         [int]$Port
     )
 
-    $deployRoot = Join-Path (Get-WorkflowRunningRoot -SourceRoot $SourceRoot) $Environment
-    $launchScript = Join-Path $deployRoot 'scripts\launch_workflow.ps1'
-    if (Test-Path -LiteralPath $launchScript) {
+    $deploymentState = Test-EnvironmentDeploymentTrusted `
+        -SourceRoot $SourceRoot `
+        -Environment $Environment `
+        -BindHost $BindHost `
+        -Port $Port
+    if ([bool]$deploymentState.ok) {
         return
     }
-    Write-Host "[workflow-start] deploy $Environment because running copy is missing ..."
+    Write-Host "[workflow-start] deploy $Environment because running copy is missing or untrusted ($($deploymentState.reason)) ..."
     & (Join-Path $SourceRoot 'scripts\deploy_workflow_env.ps1') `
         -Environment $Environment `
         -BindHost $BindHost `
@@ -98,6 +177,19 @@ function Wait-WorkflowHealth {
         reason    = 'health_timeout'
         exit_code = if ($LauncherProcess.HasExited) { $LauncherProcess.ExitCode } else { -1 }
     }
+}
+
+function Get-WorkflowStartupSplashPath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceRoot
+    )
+
+    $candidate = Join-Path $SourceRoot 'scripts\assets\workflow_startup_splash.html'
+    if (Test-Path -LiteralPath $candidate) {
+        return [System.IO.Path]::GetFullPath($candidate)
+    }
+    return ''
 }
 
 function Set-ProcessEnvironment {
@@ -243,11 +335,39 @@ function Open-WorkflowBrowser {
         [Parameter(Mandatory = $true)]
         [string]$BindHost,
         [Parameter(Mandatory = $true)]
-        [int]$Port
+        [int]$Port,
+        [Parameter()]
+        [ValidateSet('dev', 'test', 'prod')]
+        [string]$Environment = 'prod',
+        [Parameter()]
+        [string]$SourceRoot = '',
+        [switch]$UseSplash
     )
 
     $url = "http://$BindHost`:$Port"
+    if ($UseSplash) {
+        $splashPath = ''
+        if (-not [string]::IsNullOrWhiteSpace($SourceRoot)) {
+            $splashPath = Get-WorkflowStartupSplashPath -SourceRoot $SourceRoot
+        }
+        if (-not [string]::IsNullOrWhiteSpace($splashPath)) {
+            try {
+                $builder = New-Object System.UriBuilder ([System.Uri]::new($splashPath))
+                $builder.Fragment = @(
+                    'target=' + [System.Uri]::EscapeDataString($url),
+                    'environment=' + [System.Uri]::EscapeDataString($Environment)
+                ) -join '&'
+                Start-Process $builder.Uri.AbsoluteUri | Out-Null
+                return $true
+            }
+            catch {
+                return $false
+            }
+        }
+        return $false
+    }
     Start-Process $url | Out-Null
+    return $true
 }
 
 function Stop-WorkflowServerFromDescriptor {
@@ -331,6 +451,7 @@ function Prepare-ProdUpgrade {
     Copy-WorkflowTree -SourcePath $candidateAppRoot -TargetPath ([string]$Descriptor.deploy_root)
     $descriptor.version = [string]$candidate['version']
     $appliedAt = (Get-Date).ToUniversalTime().ToString('o')
+    $localDeploymentMarkerPath = Write-WorkflowLocalDeploymentMarker -Descriptor $Descriptor -Version ([string]$candidate['version']) -DeployedAt $appliedAt
     Write-WorkflowJson -Path (Join-Path ([string]$Descriptor.deploy_root) '.workflow-deployment.json') -Payload @{
         environment   = 'prod'
         version       = [string]$candidate['version']
@@ -346,6 +467,7 @@ function Prepare-ProdUpgrade {
         upgrade_requested_at = [string]$request['requested_at']
         upgrade_candidate_version = [string]$candidate['version']
         upgrade_candidate_evidence_path = [string]$candidate['evidence_path']
+        local_deployment_marker_path = $localDeploymentMarkerPath
         backup_app_root      = $backupAppRoot
     } | Out-Null
     Update-ProdLastAction -SourceRoot $sourceRoot -Payload @{
@@ -389,6 +511,7 @@ function Restore-ProdBackup {
     }
     Copy-WorkflowTree -SourcePath $backupAppRoot -TargetPath ([string]$Descriptor.deploy_root)
     $descriptor.version = [string]$UpgradeContext.previous_version
+    $localDeploymentMarkerPath = Write-WorkflowLocalDeploymentMarker -Descriptor $Descriptor -Version ([string]$UpgradeContext.previous_version) -DeployedAt ((Get-Date).ToUniversalTime().ToString('o'))
     Write-WorkflowEnvironmentManifest -Descriptor $Descriptor -Extra @{
         current_version      = [string]$UpgradeContext.previous_version
         current_version_rank = [string]$UpgradeContext.previous_version
@@ -397,11 +520,16 @@ function Restore-ProdBackup {
         upgrade_requested_at = ''
         upgrade_candidate_version = ''
         upgrade_candidate_evidence_path = ''
+        local_deployment_marker_path = $localDeploymentMarkerPath
         backup_app_root      = $backupAppRoot
     } | Out-Null
 }
 
 $sourceRoot = Get-WorkflowSourceRoot -ScriptRoot $PSScriptRoot
+$prodGitProtection = Protect-WorkflowProdGitRuntimeState -SourceRoot $sourceRoot
+if (-not [bool]$prodGitProtection.ok) {
+    Write-Host "[workflow-start] warning: prod git protection skipped: $($prodGitProtection.reason) $($prodGitProtection.error)"
+}
 $effectiveHost = if ([string]::IsNullOrWhiteSpace($BindHost)) { '127.0.0.1' } else { $BindHost }
 $effectivePort = if ($Port -gt 0) { $Port } else { Get-WorkflowEnvironmentPort -Environment $Environment }
 
@@ -416,10 +544,18 @@ Assert-WorkflowArtifactIsolation -Descriptor $descriptor
 
 $pendingUpgrade = $null
 $openedBrowser = $false
+if ($OpenBrowser) {
+    $openedBrowser = Open-WorkflowBrowser `
+        -BindHost ([string]$descriptor.host) `
+        -Port ([int]$descriptor.port) `
+        -Environment $Environment `
+        -SourceRoot $sourceRoot `
+        -UseSplash
+}
 
 while ($true) {
     $launcher = Start-EnvironmentLauncher -Descriptor $descriptor -SkipBackfill:$SkipBackfill -OpenBrowser:$false
-    $healthTimeoutSeconds = if ($pendingUpgrade -and $Environment -eq 'prod') { 60 } else { 30 }
+    $healthTimeoutSeconds = 60
     $health = Wait-WorkflowHealth -BindHost ([string]$descriptor.host) -Port ([int]$descriptor.port) -LauncherProcess $launcher -TimeoutSeconds $healthTimeoutSeconds
 
     if (-not $health.ok) {
@@ -451,8 +587,7 @@ while ($true) {
     }
 
     if ($OpenBrowser -and (-not $openedBrowser)) {
-        Open-WorkflowBrowser -BindHost ([string]$descriptor.host) -Port ([int]$descriptor.port)
-        $openedBrowser = $true
+        $openedBrowser = Open-WorkflowBrowser -BindHost ([string]$descriptor.host) -Port ([int]$descriptor.port)
     }
 
     Write-Host "[workflow-start] environment: $Environment"

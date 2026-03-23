@@ -705,3 +705,28 @@ def try_handle_post(handler, cfg, state, ctx: dict) -> bool:
 
     return False
 
+
+def try_handle_delete(handler, cfg, state, ctx: dict) -> bool:
+    path = str(ctx.get("path") or "")
+    body = ctx.get("body") or {}
+
+    if path.startswith("/api/training") and not handler.ensure_root_ready():
+        return True
+
+    mrcsd = re.fullmatch(r"/api/training/role-creation/sessions/([0-9A-Za-z._:-]+)", path)
+    if mrcsd:
+        try:
+            data = ws.delete_role_creation_session(
+                cfg,
+                ws.safe_token(mrcsd.group(1), "", 160),
+                body,
+            )
+            handler.send_json(200, {"ok": True, **data})
+        except ws.TrainingCenterError as exc:
+            payload = {"ok": False, "error": str(exc), "code": exc.code}
+            payload.update(exc.extra)
+            handler.send_json(exc.status_code, payload)
+        return True
+
+    return False
+

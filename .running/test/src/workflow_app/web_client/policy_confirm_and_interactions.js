@@ -529,7 +529,10 @@
     }
   }
 
-  async function refreshSessions() {
+  async function refreshSessions(options) {
+    const opts = options && typeof options === 'object' ? options : {};
+    const preferredSessionId = safe(opts.preferredSessionId).trim();
+    const skipInitialMessages = !!opts.skipInitialMessages;
     const data = await getJSON('/api/chat/sessions');
     const rows = Array.isArray(data.sessions) ? data.sessions : [];
     const oldSelected = state.selectedSessionId;
@@ -559,7 +562,9 @@
         delete state.sessionTaskRuns[sid];
       }
     }
-    if (oldSelected && visibleSet.has(oldSelected) && state.sessionsById[oldSelected]) {
+    if (preferredSessionId && visibleSet.has(preferredSessionId) && state.sessionsById[preferredSessionId]) {
+      state.selectedSessionId = preferredSessionId;
+    } else if (oldSelected && visibleSet.has(oldSelected) && state.sessionsById[oldSelected]) {
       state.selectedSessionId = oldSelected;
     } else if (state.sessionOrder.length) {
       state.selectedSessionId = state.sessionOrder[0];
@@ -572,7 +577,7 @@
       trySelectAgentFromSessionIfMissing(selectedSession);
     }
     renderSessionList();
-    if (state.selectedSessionId) {
+    if (state.selectedSessionId && !skipInitialMessages) {
       await loadSessionMessages(state.selectedSessionId);
     } else {
       renderFeed();

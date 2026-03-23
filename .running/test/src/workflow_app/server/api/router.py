@@ -91,6 +91,8 @@ def dispatch_delete(handler, cfg, state) -> None:
         "body": body,
     }
 
+    if training.try_handle_delete(handler, cfg, state, ctx):
+        return
     if assignments.try_handle_delete(handler, cfg, state, ctx):
         return
 

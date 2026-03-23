@@ -162,6 +162,10 @@ function Publish-ProdCandidate {
 }
 
 $sourceRoot = Get-WorkflowSourceRoot -ScriptRoot $PSScriptRoot
+$prodGitProtection = Protect-WorkflowProdGitRuntimeState -SourceRoot $sourceRoot
+if (-not [bool]$prodGitProtection.ok) {
+    Write-Host "[workflow-deploy] warning: prod git protection skipped: $($prodGitProtection.reason) $($prodGitProtection.error)"
+}
 $descriptor = Resolve-WorkflowEnvironmentDescriptor `
     -SourceRoot $sourceRoot `
     -Environment $Environment `
@@ -190,6 +194,7 @@ Write-Host "[workflow-deploy] version: $version"
 
 Copy-WorkflowTree -SourcePath $sourceRoot -TargetPath ([string]$descriptor.deploy_root) -ExcludeDirs $script:WorkflowCopyExcludeDirs
 $metadataPath = Write-DeploymentMetadata -Descriptor $descriptor -Version $version -DeployedAt $deployedAt
+$localDeploymentMarkerPath = Write-WorkflowLocalDeploymentMarker -Descriptor $descriptor -Version $version -DeployedAt $deployedAt
 
 $runtimeConfigPatch = @{
     agent_search_root = [string]$descriptor.agent_search_root
@@ -221,6 +226,7 @@ $manifest = Write-WorkflowEnvironmentManifest -Descriptor $descriptor -Extra @{
     deploy_status        = 'deployed'
     deployed_at          = $deployedAt
     deployment_metadata_path = $metadataPath
+    local_deployment_marker_path = $localDeploymentMarkerPath
     runtime_config_path  = (Get-WorkflowRuntimeConfigPath -RuntimeRoot ([string]$descriptor.runtime_root))
     show_test_data       = $showTestData
 }
@@ -242,6 +248,7 @@ $deployReport = @{
     show_test_data      = [bool]$showTestData
     runtime_config_path = [string](Get-WorkflowRuntimeConfigPath -RuntimeRoot ([string]$descriptor.runtime_root))
     deployment_metadata_path = $metadataPath
+    local_deployment_marker_path = $localDeploymentMarkerPath
     result              = 'success'
 }
 

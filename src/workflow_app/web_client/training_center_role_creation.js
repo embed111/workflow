@@ -58,9 +58,183 @@
     return Array.isArray(detail.messages) ? detail.messages : [];
   }
 
+  function roleCreationOptimisticMessages(sessionId) {
+    const key = safe(sessionId).trim();
+    if (!key) return [];
+    const store = state.tcRoleCreationOptimisticMessages && typeof state.tcRoleCreationOptimisticMessages === 'object'
+      ? state.tcRoleCreationOptimisticMessages
+      : {};
+    return Array.isArray(store[key]) ? store[key] : [];
+  }
+
+  function roleCreationReplaceOptimisticMessages(sessionId, messages) {
+    const key = safe(sessionId).trim();
+    if (!key) return;
+    const store = state.tcRoleCreationOptimisticMessages && typeof state.tcRoleCreationOptimisticMessages === 'object'
+      ? Object.assign({}, state.tcRoleCreationOptimisticMessages)
+      : {};
+    const rows = Array.isArray(messages) ? messages.slice() : [];
+    if (rows.length) {
+      store[key] = rows;
+    } else {
+      delete store[key];
+    }
+    state.tcRoleCreationOptimisticMessages = store;
+  }
+
+  function roleCreationPushOptimisticMessage(sessionId, message) {
+    const key = safe(sessionId).trim();
+    if (!key || !message || typeof message !== 'object') return;
+    const rows = roleCreationOptimisticMessages(key).slice();
+    rows.push(Object.assign({}, message));
+    roleCreationReplaceOptimisticMessages(key, rows);
+  }
+
+  function roleCreationDropOptimisticMessage(sessionId, clientMessageId) {
+    const key = safe(sessionId).trim();
+    const clientId = safe(clientMessageId).trim();
+    if (!key || !clientId) return;
+    const rows = roleCreationOptimisticMessages(key)
+      .filter((item) => safe(item && item.client_message_id).trim() !== clientId);
+    roleCreationReplaceOptimisticMessages(key, rows);
+  }
+
+  function roleCreationPruneOptimisticMessages(sessionId, serverMessages) {
+    const key = safe(sessionId).trim();
+    if (!key) return;
+    const seen = new Set(
+      (Array.isArray(serverMessages) ? serverMessages : [])
+        .map((item) => safe(item && (item.client_message_id || (item.meta && item.meta.client_message_id))).trim())
+        .filter((item) => !!item)
+    );
+    if (!seen.size) return;
+    const rows = roleCreationOptimisticMessages(key)
+      .filter((item) => !seen.has(safe(item && item.client_message_id).trim()));
+    roleCreationReplaceOptimisticMessages(key, rows);
+  }
+
+  function roleCreationSessionProcessingInfo(sessionSummary) {
+    const summary = sessionSummary && typeof sessionSummary === 'object' ? sessionSummary : {};
+    const sessionId = safe(summary.session_id).trim();
+    const optimisticCount = roleCreationOptimisticMessages(sessionId).length;
+    const serverUnhandled = Math.max(0, Number(summary.unhandled_user_message_count || 0));
+    const totalUnhandled = serverUnhandled + optimisticCount;
+    let status = safe(summary.message_processing_status).trim().toLowerCase();
+    if (optimisticCount > 0 && (!status || status === 'idle')) {
+      status = 'pending';
+    }
+    if (!status) {
+      status = totalUnhandled > 0 ? 'pending' : 'idle';
+    }
+    if (status === 'running' && totalUnhandled <= 0) {
+      status = 'idle';
+    } else if (status === 'pending' && totalUnhandled <= 0) {
+      status = 'idle';
+    } else if (status === 'idle' && totalUnhandled > 0) {
+      status = 'pending';
+    }
+    let text = safe(summary.message_processing_status_text).trim();
+    if (!text) {
+      if (status === 'running') text = '分析中';
+      else if (status === 'pending') text = '待分析';
+      else if (status === 'failed') text = '分析失败';
+      else text = '空闲';
+    }
+    return {
+      status: status,
+      text: text,
+      active: status === 'pending' || status === 'running',
+      failed: status === 'failed',
+      unhandledCount: totalUnhandled,
+      error: safe(summary.message_processing_error).trim(),
+    };
+  }
+
+  function roleCreationCurrentProcessingInfo() {
+    return roleCreationSessionProcessingInfo(roleCreationCurrentSession());
+  }
+
+  function roleCreationDisplayMessages() {
+    const session = roleCreationCurrentSession();
+    const serverRows = roleCreationCurrentMessages().slice();
+    const optimisticRows = roleCreationOptimisticMessages(session.session_id);
+    const merged = serverRows.slice();
+    optimisticRows.forEach((item) => {
+      merged.push(Object.assign({}, item));
+    });
+    merged.sort((a, b) => {
+      const at = safe(a && a.created_at).trim();
+      const bt = safe(b && b.created_at).trim();
+      if (at !== bt) return at.localeCompare(bt);
+      return safe(a && (a.message_id || a.client_message_id)).localeCompare(safe(b && (b.message_id || b.client_message_id)));
+    });
+    const processing = roleCreationCurrentProcessingInfo();
+    if (safe(session.session_id).trim() && processing.active) {
+      merged.push({
+        message_id: 'local-processing-placeholder',
+        role: 'assistant',
+        content: processing.status === 'pending' ? '已收到，正在合并本轮消息…' : '分析中…',
+        attachments: [],
+        message_type: 'chat',
+        created_at: new Date().toISOString(),
+        processing_placeholder: true,
+      });
+    }
+    return merged;
+  }
+
+  function roleCreationShouldPoll() {
+    const sessionId = safe(state.tcRoleCreationSelectedSessionId).trim();
+    if (!sessionId) return false;
+    return roleCreationCurrentProcessingInfo().active || roleCreationOptimisticMessages(sessionId).length > 0;
+  }
+
+  function stopRoleCreationPoller() {
+    if (state.tcRoleCreationPoller) {
+      clearInterval(state.tcRoleCreationPoller);
+      state.tcRoleCreationPoller = 0;
+    }
+  }
+
+  function startRoleCreationPoller() {
+    if (state.tcRoleCreationPoller) return;
+    state.tcRoleCreationPoller = window.setInterval(() => {
+      if (state.tcRoleCreationPollBusy) return;
+      const sessionId = safe(state.tcRoleCreationSelectedSessionId).trim();
+      if (!sessionId) {
+        stopRoleCreationPoller();
+        return;
+      }
+      state.tcRoleCreationPollBusy = true;
+      refreshRoleCreationSessionDetail(sessionId, { skipRender: true, background: true })
+        .catch((err) => {
+          setRoleCreationError(err.message || String(err));
+        })
+        .finally(() => {
+          state.tcRoleCreationPollBusy = false;
+          if (!roleCreationShouldPoll()) {
+            stopRoleCreationPoller();
+          }
+        });
+    }, 900);
+  }
+
+  function syncRoleCreationPoller() {
+    if (roleCreationShouldPoll()) {
+      startRoleCreationPoller();
+    } else {
+      stopRoleCreationPoller();
+    }
+  }
+
   function roleCreationCurrentCreatedAgent() {
     const detail = roleCreationCurrentDetail();
     return detail.created_agent && typeof detail.created_agent === 'object' ? detail.created_agent : {};
+  }
+
+  function roleCreationCurrentDialogueAgent() {
+    const detail = roleCreationCurrentDetail();
+    return detail.dialogue_agent && typeof detail.dialogue_agent === 'object' ? detail.dialogue_agent : {};
   }
 
   function setRoleCreationError(text) {
@@ -135,11 +309,13 @@
     const session = data.session && typeof data.session === 'object' ? data.session : {};
     const sessionId = safe(session.session_id).trim();
     if (!sessionId) return null;
+    roleCreationPruneOptimisticMessages(sessionId, data.messages);
     clearRoleCreationTaskPreview();
     state.tcRoleCreationDetail = data;
     state.tcRoleCreationSelectedSessionId = sessionId;
     writeSavedRoleCreationSessionId(sessionId);
     syncRoleCreationSessionSummary(session);
+    syncRoleCreationPoller();
     if (!(options && options.skipRender)) {
       renderRoleCreationWorkbench();
     }
@@ -149,15 +325,19 @@
   async function refreshRoleCreationSessionDetail(sessionId, options) {
     const key = safe(sessionId).trim();
     const opts = options && typeof options === 'object' ? options : {};
+    const background = !!opts.background;
     if (!key) {
       state.tcRoleCreationDetail = null;
       state.tcRoleCreationSelectedSessionId = '';
       writeSavedRoleCreationSessionId('');
+      syncRoleCreationPoller();
       renderRoleCreationWorkbench();
       return null;
     }
-    state.tcRoleCreationLoading = true;
-    if (!opts.skipRender) {
+    if (!background) {
+      state.tcRoleCreationLoading = true;
+    }
+    if (!opts.skipRender && !background) {
       renderRoleCreationWorkbench();
     }
     try {
@@ -168,7 +348,10 @@
       setRoleCreationError('');
       return applyRoleCreationDetailPayload(data, opts);
     } finally {
-      state.tcRoleCreationLoading = false;
+      if (!background) {
+        state.tcRoleCreationLoading = false;
+      }
+      syncRoleCreationPoller();
       renderRoleCreationWorkbench();
     }
   }
@@ -183,6 +366,7 @@
       safe(roleCreationCurrentSession().session_id).trim() === key &&
       !(options && options.force)
     ) {
+      syncRoleCreationPoller();
       renderRoleCreationWorkbench();
       return state.tcRoleCreationDetail;
     }
@@ -197,6 +381,7 @@
       state.tcRoleCreationSelectedSessionId = '';
       state.tcRoleCreationDetail = null;
       writeSavedRoleCreationSessionId('');
+      syncRoleCreationPoller();
       renderRoleCreationWorkbench();
       return { items: [], total: 0 };
     }
@@ -229,11 +414,13 @@
         state.tcRoleCreationDetail = null;
         writeSavedRoleCreationSessionId('');
         setRoleCreationError('');
+        syncRoleCreationPoller();
         return data;
       }
       return await refreshRoleCreationSessionDetail(next, { skipRender: true });
     } finally {
       state.tcRoleCreationLoading = false;
+      syncRoleCreationPoller();
       renderRoleCreationWorkbench();
     }
   }
@@ -244,6 +431,37 @@
     });
     setRoleCreationError('');
     applyRoleCreationDetailPayload(data);
+    return data;
+  }
+
+  async function deleteRoleCreationSession(sessionId) {
+    const key = safe(sessionId).trim();
+    if (!key) return null;
+    const rows = Array.isArray(state.tcRoleCreationSessions) ? state.tcRoleCreationSessions : [];
+    const session = rows.find((item) => safe(item && item.session_id).trim() === key) || {};
+    const status = safe(session && session.status).trim().toLowerCase();
+    const processing = roleCreationSessionProcessingInfo(session);
+    if (status === 'creating') {
+      throw new Error('创建中的角色不能直接删除，请先完成当前创建流程');
+    }
+    if (processing.active) {
+      throw new Error('当前对话仍在分析中，请等待处理完成后再删除');
+    }
+    const title = safe(session && session.session_title).trim() || '未命名角色草稿';
+    const confirmed = window.confirm(
+      status === 'completed'
+        ? ('确认从创建角色列表中删除“' + title + '”吗？已创建的角色工作区和任务图不会被删除。')
+        : ('确认删除草稿“' + title + '”吗？当前对话记录会一并删除。')
+    );
+    if (!confirmed) return null;
+    const data = await deleteJSON(
+      '/api/training/role-creation/sessions/' + encodeURIComponent(key),
+      { operator: 'web-user' },
+    );
+    roleCreationReplaceOptimisticMessages(key, []);
+    clearRoleCreationTaskPreview();
+    setRoleCreationError('');
+    await refreshRoleCreationSessions();
     return data;
   }
 
@@ -260,21 +478,56 @@
       throw new Error('请先创建或选择一个角色草稿');
     }
     const content = safe($('rcInput') ? $('rcInput').value : '').trim();
-    const attachments = Array.isArray(state.tcRoleCreationDraftAttachments) ? state.tcRoleCreationDraftAttachments : [];
+    const attachments = Array.isArray(state.tcRoleCreationDraftAttachments) ? state.tcRoleCreationDraftAttachments.slice() : [];
     if (!content && !attachments.length) {
       throw new Error('请先输入内容，或添加一张图片');
     }
-    const data = await postJSON(
-      '/api/training/role-creation/sessions/' + encodeURIComponent(sessionId) + '/messages',
-      {
-        content: content,
-        attachments: attachments,
-        operator: 'web-user',
-      },
-    );
+    const clientMessageId = 'rc-local-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    roleCreationPushOptimisticMessage(sessionId, {
+      message_id: clientMessageId,
+      client_message_id: clientMessageId,
+      session_id: sessionId,
+      role: 'user',
+      content: content,
+      attachments: attachments,
+      message_type: 'chat',
+      created_at: new Date().toISOString(),
+      processing_state: 'pending',
+      processing_state_text: '待处理',
+      local_only: true,
+    });
     resetRoleCreationDraft();
+    syncRoleCreationPoller();
+    renderRoleCreationWorkbench();
+    let data;
+    try {
+      data = await postJSON(
+        '/api/training/role-creation/sessions/' + encodeURIComponent(sessionId) + '/messages',
+        {
+          content: content,
+          attachments: attachments,
+          operator: 'web-user',
+          client_message_id: clientMessageId,
+        },
+      );
+    } catch (err) {
+      roleCreationDropOptimisticMessage(sessionId, clientMessageId);
+      if ($('rcInput') && !safe($('rcInput').value).trim()) {
+        $('rcInput').value = content;
+      }
+      state.tcRoleCreationDraftAttachments = attachments.slice();
+      renderRoleCreationDraftAttachments();
+      syncRoleCreationPoller();
+      renderRoleCreationWorkbench();
+      throw err;
+    }
     setRoleCreationError('');
-    applyRoleCreationDetailPayload(data);
+    try {
+      await refreshRoleCreationSessionDetail(sessionId, { skipRender: true });
+    } catch (_) {
+      applyRoleCreationDetailPayload(data, { skipRender: true });
+    }
+    renderRoleCreationWorkbench();
     return data;
   }
 
@@ -399,14 +652,29 @@
     const role = safe(message && message.role).trim().toLowerCase();
     if (role === 'user') return '用户';
     if (role === 'system') return '系统';
-    return '分析师';
+    const dialogueAgent = roleCreationCurrentDialogueAgent();
+    return safe(dialogueAgent.agent_name).trim() || '分析师';
+  }
+
+  function roleCreationMessageProcessingState(message) {
+    const item = message && typeof message === 'object' ? message : {};
+    return safe(item.processing_state || (item.meta && item.meta.processing_state)).trim().toLowerCase();
+  }
+
+  function roleCreationMessageProcessingText(message) {
+    const stateKey = roleCreationMessageProcessingState(message);
+    if (stateKey === 'processing') return '处理中';
+    if (stateKey === 'processed') return '已处理';
+    if (stateKey === 'failed') return '处理失败';
+    if (stateKey === 'pending') return '待处理';
+    return '';
   }
 
   function renderRoleCreationMessages() {
     const box = $('rcMessages');
     if (!box) return;
     const session = roleCreationCurrentSession();
-    const rows = roleCreationCurrentMessages();
+    const rows = roleCreationDisplayMessages();
     if (!safe(session.session_id).trim()) {
       box.innerHTML = "<div class='rc-empty'>还没有创建草稿。点击左侧“新建”后，直接用对话描述你要的角色即可。</div>";
       return;
@@ -419,16 +687,22 @@
       const cls = roleCreationMessageRoleClass(message);
       const attachmentsHtml = roleCreationMessageAttachmentsHtml(message.attachments);
       const content = safe(message && message.content);
+      const processingState = roleCreationMessageProcessingState(message);
+      const processingText = roleCreationMessageProcessingText(message);
+      const processingChip = cls === 'user' && processingText
+        ? ("<span class='rc-message-processing " + roleCreationEscapeHtml(processingState || 'processed') + "'>" + roleCreationEscapeHtml(processingText) + '</span>')
+        : '';
       const metaHtml = cls === 'system'
         ? ''
         : (
           "<div class='rc-message-meta'>" +
             "<span class='rc-message-sender'>" + roleCreationEscapeHtml(roleCreationMessageSenderText(message)) + '</span>' +
+            processingChip +
             "<span>" + roleCreationEscapeHtml(formatDateTime(message.created_at)) + '</span>' +
           '</div>'
         );
       return (
-        "<div class='message " + cls + "'>" +
+        "<div class='message " + cls + (message && message.processing_placeholder ? ' pending' : '') + "'>" +
           (cls === 'system' ? '' : "<div class='message-role'>" + roleCreationEscapeHtml(roleCreationMessageSenderText(message).slice(0, 1)) + '</div>') +
           "<div class='message-body'>" +
             metaHtml +
@@ -443,6 +717,15 @@
 
   function roleCreationSessionSubtitle(session) {
     const summary = session && typeof session === 'object' ? session : {};
+    const processing = roleCreationSessionProcessingInfo(summary);
+    if (processing.active) {
+      return processing.unhandledCount > 0
+        ? (processing.text + ' · 待处理 ' + String(processing.unhandledCount) + ' 条')
+        : processing.text;
+    }
+    if (processing.failed && processing.unhandledCount > 0) {
+      return '有 ' + String(processing.unhandledCount) + ' 条消息处理失败，继续发送会自动重试';
+    }
     const preview = safe(summary.last_message_preview).trim();
     if (preview) return preview;
     const missing = Array.isArray(summary.missing_fields) ? summary.missing_fields.length : 0;
@@ -464,22 +747,39 @@
       const sessionId = safe(session && session.session_id).trim();
       const current = sessionId && sessionId === safe(state.tcRoleCreationSelectedSessionId).trim();
       const missing = Array.isArray(session && session.missing_fields) ? session.missing_fields.length : 0;
+      const status = safe(session && session.status).trim().toLowerCase();
+      const processing = roleCreationSessionProcessingInfo(session);
+      const canDelete = (status === 'draft' || status === 'completed') && !processing.active;
       return (
-        "<button class='rc-session-card" + (current ? ' active' : '') + "' type='button' data-session-id='" + roleCreationEscapeHtml(sessionId) + "'>" +
-          "<div class='rc-session-card-top'>" +
-            "<div class='rc-session-card-title'>" + roleCreationEscapeHtml(safe(session && session.session_title).trim() || '未命名角色草稿') + '</div>' +
-            "<span class='rc-chip " + roleCreationStatusTone(session && session.status) + "'>" + roleCreationEscapeHtml(roleCreationSessionStatusText(session && session.status)) + '</span>' +
-          '</div>' +
-          "<div class='rc-session-card-sub'>" + roleCreationEscapeHtml(roleCreationSessionSubtitle(session)) + '</div>' +
-          "<div class='rc-session-card-meta'>" +
-            "<span>" + roleCreationEscapeHtml(formatDateTime(session && session.updated_at)) + '</span>' +
-            (
-              missing > 0 && safe(session && session.status).trim().toLowerCase() === 'draft'
-                ? "<span>缺失 " + roleCreationEscapeHtml(String(missing)) + ' 项</span>'
-                : ''
-            ) +
-          '</div>' +
-        '</button>'
+        "<div class='rc-session-card" + (current ? ' active' : '') + "'>" +
+          "<button class='rc-session-card-main' type='button' data-session-id='" + roleCreationEscapeHtml(sessionId) + "'>" +
+            "<div class='rc-session-card-top'>" +
+              "<div class='rc-session-card-title'>" + roleCreationEscapeHtml(safe(session && session.session_title).trim() || '未命名角色草稿') + '</div>' +
+              "<div class='rc-session-card-statuses'>" +
+                "<span class='rc-chip " + roleCreationStatusTone(session && session.status) + "'>" + roleCreationEscapeHtml(roleCreationSessionStatusText(session && session.status)) + '</span>' +
+                (
+                  processing.active || processing.failed
+                    ? "<span class='rc-chip " + roleCreationStatusTone(processing.status) + "'>" + roleCreationEscapeHtml(processing.text) + '</span>'
+                    : ''
+                ) +
+              '</div>' +
+            '</div>' +
+            "<div class='rc-session-card-sub'>" + roleCreationEscapeHtml(roleCreationSessionSubtitle(session)) + '</div>' +
+            "<div class='rc-session-card-meta'>" +
+              "<span>" + roleCreationEscapeHtml(formatDateTime(session && session.updated_at)) + '</span>' +
+              (
+                missing > 0 && status === 'draft'
+                  ? "<span>缺失 " + roleCreationEscapeHtml(String(missing)) + ' 项</span>'
+                  : ''
+              ) +
+            '</div>' +
+          '</button>' +
+          (
+            canDelete
+              ? "<div class='rc-session-card-actions'><button class='bad rc-session-card-delete' type='button' data-rc-delete-session='" + roleCreationEscapeHtml(sessionId) + "'>" + roleCreationEscapeHtml(status === 'completed' ? '删除记录' : '删除草稿') + '</button></div>'
+              : ''
+          ) +
+        '</div>'
       );
     }).join('');
   }
@@ -499,6 +799,8 @@
     const session = roleCreationCurrentSession();
     const profile = roleCreationCurrentProfile();
     const createdAgent = roleCreationCurrentCreatedAgent();
+    const dialogueAgent = roleCreationCurrentDialogueAgent();
+    const processing = roleCreationCurrentProcessingInfo();
     const draftMeta = $('rcDraftMeta');
     const sessionTitle = $('rcSessionTitle');
     const sessionMeta = $('rcSessionMeta');
@@ -529,11 +831,22 @@
         sessionMeta.textContent = '先创建草稿，再通过对话补齐角色目标、能力边界和场景';
       } else if (safe(session.status).trim().toLowerCase() === 'draft') {
         const missingLabels = Array.isArray(profile.missing_labels) ? profile.missing_labels : [];
-        sessionMeta.textContent = missingLabels.length
-          ? '当前草稿还缺：' + missingLabels.join('、')
-          : '草稿信息已齐，可直接开始创建';
+        const draftSegments = [
+          safe(dialogueAgent.agent_name).trim() ? '对话分析师：' + safe(dialogueAgent.agent_name).trim() : '',
+          processing.active
+            ? ('当前状态：' + processing.text + (processing.unhandledCount > 0 ? '（' + String(processing.unhandledCount) + ' 条待处理）' : ''))
+            : '',
+          missingLabels.length
+            ? '当前草稿还缺：' + missingLabels.join('、')
+            : '草稿信息已齐，可直接开始创建',
+        ].filter((item) => !!item);
+        sessionMeta.textContent = draftSegments.join(' · ');
       } else if (safe(session.status).trim().toLowerCase() === 'creating') {
         const segments = [
+          safe(dialogueAgent.agent_name).trim() ? '对话分析师：' + safe(dialogueAgent.agent_name).trim() : '',
+          processing.active
+            ? ('当前状态：' + processing.text + (processing.unhandledCount > 0 ? '（' + String(processing.unhandledCount) + ' 条待处理）' : ''))
+            : '',
           safe(session.current_stage_title).trim() ? '当前阶段：' + safe(session.current_stage_title).trim() : '',
           safe(session.assignment_ticket_id).trim() ? '任务图：' + safe(session.assignment_ticket_id).trim() : '',
           safe(createdAgent.agent_name).trim() ? '执行主体：' + safe(createdAgent.agent_name).trim() : '',
@@ -547,12 +860,27 @@
     }
     if (composerMeta) {
       const count = Array.isArray(state.tcRoleCreationDraftAttachments) ? state.tcRoleCreationDraftAttachments.length : 0;
-      composerMeta.textContent = count > 0
-        ? '当前消息已挂载 ' + String(count) + ' 张图片'
-        : '同一条消息可同时发送图片和文字';
+      if (processing.active) {
+        composerMeta.textContent = processing.unhandledCount > 0
+          ? (processing.text + ' · 当前累计待处理 ' + String(processing.unhandledCount) + ' 条，可继续追加消息')
+          : (processing.text + ' · 可继续追加消息');
+      } else if (processing.failed && processing.unhandledCount > 0) {
+        composerMeta.textContent = '上一轮处理失败，继续发送会自动重试未处理消息';
+      } else {
+        composerMeta.textContent = count > 0
+          ? '当前消息已挂载 ' + String(count) + ' 张图片'
+          : '同一条消息可同时发送图片和文字';
+      }
     }
-    const canStart = !!profile.can_start && safe(session.status).trim().toLowerCase() === 'draft' && state.agentSearchRootReady;
-    const canComplete = roleCreationCanComplete(roleCreationCurrentDetail()) && state.agentSearchRootReady;
+    const canStart = !!profile.can_start
+      && safe(session.status).trim().toLowerCase() === 'draft'
+      && state.agentSearchRootReady
+      && !processing.active
+      && processing.unhandledCount <= 0;
+    const canComplete = roleCreationCanComplete(roleCreationCurrentDetail())
+      && state.agentSearchRootReady
+      && !processing.active
+      && processing.unhandledCount <= 0;
     if (startBtn) startBtn.disabled = !canStart;
     if (completeBtn) completeBtn.disabled = !canComplete;
     const inputLocked = !safe(session.session_id).trim() || safe(session.status).trim().toLowerCase() === 'completed' || !state.agentSearchRootReady;
@@ -585,6 +913,7 @@
     const session = detail.session && typeof detail.session === 'object' ? detail.session : {};
     const profile = roleCreationCurrentProfile();
     const createdAgent = roleCreationCurrentCreatedAgent();
+    const dialogueAgent = roleCreationCurrentDialogueAgent();
     if (!safe(session.session_id).trim()) {
       box.innerHTML = "<div class='rc-empty'>先创建或选择一个草稿，角色画像会在这里持续收口。</div>";
       return;
@@ -614,6 +943,9 @@
     addText('协作方式', profile.collaboration_style, '当前还没有明确协作方式');
     addList('示例资产', profile.example_assets, '当前还没有提交示例资产');
     addList('缺失信息', profile.missing_labels, '当前草稿已满足开工条件');
+    addText('对话分析师', dialogueAgent.agent_name, '当前未解析到对话分析师');
+    addText('对话工作区', dialogueAgent.workspace_path, '当前未解析到对话工作区');
+    addText('对话 Provider', dialogueAgent.provider, 'codex');
     addText('工作区路径', createdAgent.workspace_path, safe(session.created_agent_workspace_path).trim() || '启动创建后会自动生成工作区');
     addText('运行态', createdAgent.runtime_status_text || '', safe(createdAgent.runtime_status).trim() || 'idle');
     box.innerHTML = sections.join('');
@@ -1071,9 +1403,7 @@
     };
     $('rcSendBtn').onclick = async () => {
       try {
-        await withButtonLock('rcSendBtn', async () => {
-          await postRoleCreationMessage();
-        });
+        await postRoleCreationMessage();
       } catch (err) {
         setRoleCreationError(err.message || String(err));
       }
@@ -1168,7 +1498,16 @@
       sessionList.onclick = (event) => {
         const target = event.target;
         if (!(target instanceof Element)) return;
-        const sessionBtn = target.closest('.rc-session-card');
+        const deleteBtn = target.closest('[data-rc-delete-session]');
+        if (deleteBtn) {
+          event.preventDefault();
+          event.stopPropagation();
+          deleteRoleCreationSession(deleteBtn.getAttribute('data-rc-delete-session')).catch((err) => {
+            setRoleCreationError(err.message || String(err));
+          });
+          return;
+        }
+        const sessionBtn = target.closest('.rc-session-card-main');
         if (!sessionBtn) return;
         event.preventDefault();
         const sessionId = safe(sessionBtn.getAttribute('data-session-id')).trim();

@@ -80,6 +80,24 @@
   gap: 8px;
 }
 
+.rc-session-card-main {
+  width: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rc-session-card-main:hover {
+  transform: none;
+  background: transparent;
+}
+
 .rc-session-card:hover {
   transform: none;
   border-color: #cfd7e6;
@@ -96,6 +114,14 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
+}
+
+.rc-session-card-statuses {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .rc-session-card-title {
@@ -118,6 +144,16 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.rc-session-card-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rc-session-card-delete {
+  padding: 4px 10px;
+  font-size: 12px;
 }
 
 .rc-draft-handle {
@@ -244,6 +280,12 @@
   color: #245bdb;
 }
 
+.message.assistant.pending .message-text {
+  background: #f5f8fc;
+  border-color: #d9e3f4;
+  color: #4e5969;
+}
+
 .message.user {
   justify-content: flex-end;
 }
@@ -334,6 +376,40 @@
 .rc-message-sender {
   font-weight: 700;
   color: #2b2f36;
+}
+
+.rc-message-processing {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #eef2f8;
+  color: #516173;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.rc-message-processing.pending {
+  background: #edf3ff;
+  color: #245bdb;
+}
+
+.rc-message-processing.processing {
+  background: #eef8f1;
+  color: #0f7a42;
+}
+
+.rc-message-processing.processed {
+  background: #eef2f6;
+  color: #516173;
+}
+
+.rc-message-processing.failed {
+  background: #fff1f0;
+  color: #c23a2b;
 }
 
 .rc-message-assets {

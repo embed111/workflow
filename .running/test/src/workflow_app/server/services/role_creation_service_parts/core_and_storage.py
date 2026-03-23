@@ -96,6 +96,21 @@ ROLE_CREATION_RUNTIME_STATUS_LABELS = {
 }
 ROLE_CREATION_SESSION_STATUSES = {"draft", "creating", "completed"}
 ROLE_CREATION_MESSAGE_TYPES = {"chat", "system_task_update", "system_stage_update", "system_result"}
+ROLE_CREATION_MESSAGE_QUEUE_STATES = {"idle", "pending", "running", "failed"}
+ROLE_CREATION_MESSAGE_QUEUE_STATE_LABELS = {
+    "idle": "空闲",
+    "pending": "待分析",
+    "running": "分析中",
+    "failed": "分析失败",
+}
+ROLE_CREATION_USER_MESSAGE_PROCESSING_STATES = {"pending", "processing", "processed", "failed"}
+ROLE_CREATION_USER_MESSAGE_PROCESSING_LABELS = {
+    "pending": "待处理",
+    "processing": "处理中",
+    "processed": "已处理",
+    "failed": "处理失败",
+}
+ROLE_CREATION_MESSAGE_BATCH_DEBOUNCE_S = 0.9
 ROLE_CREATION_DELEGATE_PATTERN = re.compile(
     r"(另起(?:一个)?任务去|单独起(?:一个)?任务去|单独起个任务去|后台去跑|后台去做|后台去处理|去整理|去收集|去生成|去补)",
     re.IGNORECASE,
@@ -179,6 +194,72 @@ def _ensure_role_creation_tables(root: Path) -> None:
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_role_creation_sessions_updated ON role_creation_sessions(updated_at DESC)"
+        )
+        _ensure_column(
+            conn,
+            "role_creation_sessions",
+            "dialogue_agent_name",
+            "dialogue_agent_name TEXT NOT NULL DEFAULT ''",
+        )
+        _ensure_column(
+            conn,
+            "role_creation_sessions",
+            "dialogue_agent_workspace_path",
+            "dialogue_agent_workspace_path TEXT NOT NULL DEFAULT ''",
+        )
+        _ensure_column(
+            conn,
+            "role_creation_sessions",
+            "dialogue_provider",
+            "dialogue_provider TEXT NOT NULL DEFAULT ''",
+        )
+        _ensure_column(
+            conn,
+            "role_creation_sessions",
+            "last_dialogue_trace_ref",
+            "last_dialogue_trace_ref TEXT NOT NULL DEFAULT ''",
+        )
+        _ensure_column(
+            conn,
+            "role_creation_sessions",
+            "message_processing_status",
+            "message_processing_status TEXT NOT NULL DEFAULT 'idle'",
+        )
+        _ensure_column(
+            conn,
+            "role_creation_sessions",
+            "message_processing_error",
+            "message_processing_error TEXT NOT NULL DEFAULT ''",
+        )
+        _ensure_column(
+            conn,
+            "role_creation_sessions",
+            "message_processing_started_at",
+            "message_processing_started_at TEXT NOT NULL DEFAULT ''",
+        )
+        _ensure_column(
+            conn,
+            "role_creation_sessions",
+            "message_processing_updated_at",
+            "message_processing_updated_at TEXT NOT NULL DEFAULT ''",
+        )
+        _ensure_column(
+            conn,
+            "role_creation_sessions",
+            "message_processing_batch_id",
+            "message_processing_batch_id TEXT NOT NULL DEFAULT ''",
+        )
+        _ensure_column(
+            conn,
+            "role_creation_sessions",
+            "user_message_count",
+            "user_message_count INTEGER NOT NULL DEFAULT 0",
+        )
+        _ensure_column(
+            conn,
+            "role_creation_sessions",
+            "unhandled_user_message_count",
+            "unhandled_user_message_count INTEGER NOT NULL DEFAULT 0",
         )
         conn.execute(
             """
@@ -275,6 +356,32 @@ def _normalize_message_type(raw: Any) -> str:
     if text not in ROLE_CREATION_MESSAGE_TYPES:
         return "chat"
     return text
+
+
+def _normalize_role_creation_queue_state(raw: Any, *, default: str = "idle") -> str:
+    fallback = default if default in ROLE_CREATION_MESSAGE_QUEUE_STATES else "idle"
+    text = str(raw or "").strip().lower()
+    if text not in ROLE_CREATION_MESSAGE_QUEUE_STATES:
+        return fallback
+    return text
+
+
+def _normalize_role_creation_user_message_state(raw: Any, *, default: str = "processed") -> str:
+    fallback = default if default in ROLE_CREATION_USER_MESSAGE_PROCESSING_STATES else "processed"
+    text = str(raw or "").strip().lower()
+    if text not in ROLE_CREATION_USER_MESSAGE_PROCESSING_STATES:
+        return fallback
+    return text
+
+
+def _role_creation_queue_state_text(raw: Any) -> str:
+    key = _normalize_role_creation_queue_state(raw)
+    return ROLE_CREATION_MESSAGE_QUEUE_STATE_LABELS.get(key, "空闲")
+
+
+def _role_creation_user_message_state_text(raw: Any) -> str:
+    key = _normalize_role_creation_user_message_state(raw)
+    return ROLE_CREATION_USER_MESSAGE_PROCESSING_LABELS.get(key, "已处理")
 
 
 def _parse_bool_flag(value: Any, default: bool = False) -> bool:
@@ -386,6 +493,7 @@ def _session_row_to_summary(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]
     current = dict(row or {})
     role_spec = _json_loads_dict(current.get("role_spec_json"))
     missing_fields = [str(item).strip() for item in _json_loads_list(current.get("missing_fields_json")) if str(item).strip()]
+    message_processing_status = _normalize_role_creation_queue_state(current.get("message_processing_status"), default="idle")
     return {
         "session_id": str(current.get("session_id") or "").strip(),
         "session_title": str(current.get("session_title") or "").strip(),
@@ -400,6 +508,18 @@ def _session_row_to_summary(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]
         "created_agent_workspace_path": str(current.get("created_agent_workspace_path") or "").strip(),
         "workspace_init_status": str(current.get("workspace_init_status") or "").strip(),
         "workspace_init_ref": str(current.get("workspace_init_ref") or "").strip(),
+        "dialogue_agent_name": str(current.get("dialogue_agent_name") or "").strip(),
+        "dialogue_agent_workspace_path": str(current.get("dialogue_agent_workspace_path") or "").strip(),
+        "dialogue_provider": str(current.get("dialogue_provider") or "").strip(),
+        "last_dialogue_trace_ref": str(current.get("last_dialogue_trace_ref") or "").strip(),
+        "message_processing_status": message_processing_status,
+        "message_processing_status_text": _role_creation_queue_state_text(message_processing_status),
+        "message_processing_error": str(current.get("message_processing_error") or "").strip(),
+        "message_processing_started_at": str(current.get("message_processing_started_at") or "").strip(),
+        "message_processing_updated_at": str(current.get("message_processing_updated_at") or "").strip(),
+        "message_processing_batch_id": str(current.get("message_processing_batch_id") or "").strip(),
+        "user_message_count": int(current.get("user_message_count") or 0),
+        "unhandled_user_message_count": int(current.get("unhandled_user_message_count") or 0),
         "started_at": str(current.get("started_at") or "").strip(),
         "completed_at": str(current.get("completed_at") or "").strip(),
         "created_at": str(current.get("created_at") or "").strip(),
@@ -431,19 +551,122 @@ def _list_session_messages(conn: sqlite3.Connection, session_id: str) -> list[di
     ).fetchall()
     out: list[dict[str, Any]] = []
     for row in rows:
+        meta = _json_loads_dict(row["meta_json"])
+        role = str(row["role"] or "").strip().lower() or "assistant"
+        message_type = _normalize_message_type(row["message_type"])
+        processing_state = ""
+        if role == "user" and message_type == "chat":
+            processing_state = _normalize_role_creation_user_message_state(
+                meta.get("processing_state"),
+                default="processed",
+            )
         out.append(
             {
                 "message_id": str(row["message_id"] or "").strip(),
                 "session_id": str(row["session_id"] or "").strip(),
-                "role": str(row["role"] or "").strip().lower() or "assistant",
+                "role": role,
                 "content": str(row["content"] or ""),
                 "attachments": _json_loads_list(row["attachments_json"]),
-                "message_type": _normalize_message_type(row["message_type"]),
-                "meta": _json_loads_dict(row["meta_json"]),
+                "message_type": message_type,
+                "meta": meta,
+                "processing_state": processing_state,
+                "processing_state_text": _role_creation_user_message_state_text(processing_state) if processing_state else "",
+                "processing_batch_id": str(meta.get("processing_batch_id") or "").strip(),
+                "processing_error": str(meta.get("processing_error") or "").strip(),
+                "processing_started_at": str(meta.get("processing_started_at") or "").strip(),
+                "processed_at": str(meta.get("processed_at") or "").strip(),
+                "client_message_id": str(meta.get("client_message_id") or "").strip(),
                 "created_at": str(row["created_at"] or "").strip(),
             }
         )
     return out
+
+
+def _role_creation_user_message_counts(messages: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {
+        "total": 0,
+        "pending": 0,
+        "processing": 0,
+        "processed": 0,
+        "failed": 0,
+        "unhandled": 0,
+    }
+    for message in list(messages or []):
+        if str(message.get("role") or "").strip().lower() != "user":
+            continue
+        if _normalize_message_type(message.get("message_type")) != "chat":
+            continue
+        state = _normalize_role_creation_user_message_state(
+            message.get("processing_state") or (message.get("meta") or {}).get("processing_state"),
+            default="processed",
+        )
+        counts["total"] += 1
+        counts[state] += 1
+        if state != "processed":
+            counts["unhandled"] += 1
+    return counts
+
+
+def _update_role_creation_message_queue_state(
+    conn: sqlite3.Connection,
+    *,
+    session_id: str,
+    queue_status: str,
+    queue_error: str | None = None,
+    batch_id: str | None = None,
+    started_at: str | None = None,
+    updated_at: str = "",
+    messages: list[dict[str, Any]] | None = None,
+) -> dict[str, int]:
+    current_row = _fetch_session_row(conn, session_id)
+    current = dict(current_row or {})
+    next_status = _normalize_role_creation_queue_state(
+        queue_status,
+        default=str(current.get("message_processing_status") or "idle").strip().lower() or "idle",
+    )
+    current_error = str(current.get("message_processing_error") or "").strip()
+    current_batch_id = str(current.get("message_processing_batch_id") or "").strip()
+    current_started_at = str(current.get("message_processing_started_at") or "").strip()
+    rows = list(messages or _list_session_messages(conn, session_id))
+    counts = _role_creation_user_message_counts(rows)
+    updated_text = _normalize_text(updated_at or _tc_now_text(), max_len=40) or _tc_now_text()
+    next_error = current_error if queue_error is None else _normalize_text(queue_error, max_len=2000)
+    next_batch_id = current_batch_id if batch_id is None else _normalize_text(batch_id, max_len=120)
+    next_started_at = current_started_at if started_at is None else _normalize_text(started_at, max_len=40)
+    if next_status == "running":
+        next_started_at = next_started_at or updated_text
+    elif next_status == "pending":
+        next_error = ""
+        if counts["processing"] <= 0:
+            next_batch_id = ""
+    elif next_status == "idle":
+        next_error = ""
+        next_batch_id = ""
+        next_started_at = ""
+    if counts["unhandled"] <= 0 and next_status != "failed":
+        next_status = "idle"
+        next_error = ""
+        next_batch_id = ""
+        next_started_at = ""
+    conn.execute(
+        """
+        UPDATE role_creation_sessions
+        SET message_processing_status=?,message_processing_error=?,message_processing_started_at=?,
+            message_processing_updated_at=?,message_processing_batch_id=?,user_message_count=?,unhandled_user_message_count=?
+        WHERE session_id=?
+        """,
+        (
+            next_status,
+            next_error,
+            next_started_at,
+            updated_text,
+            next_batch_id,
+            counts["total"],
+            counts["unhandled"],
+            session_id,
+        ),
+    )
+    return counts
 
 
 def _list_task_refs(conn: sqlite3.Connection, session_id: str) -> list[dict[str, Any]]:

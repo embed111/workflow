@@ -190,7 +190,22 @@
     node.setAttribute('data-pass', output.pass ? '1' : '0');
   }
 
+  function waitForNextPaint() {
+    return new Promise((resolve) => {
+      window.requestAnimationFrame(() => {
+        window.setTimeout(resolve, 0);
+      });
+    });
+  }
+
   async function bootstrap() {
+    setStartupProgress({
+      stage: 'shell',
+      title: '正在准备工作台',
+      detail: '初始化页面布局、基础交互和本地缓存。',
+      percent: 6,
+      hint: '首次启动通常会更慢，因为需要做环境检查、运行态恢复和数据预热。',
+    });
     initSplitters();
     bindEvents();
     setupSessionEntryToolbarIcons();
@@ -220,15 +235,52 @@
     updateShowTestDataMeta();
     updateClearPolicyCacheButton();
     setWorkflowQueueMode('records');
+    await waitForNextPaint();
+    setStartupProgress({
+      stage: 'connect',
+      title: '正在连接运行时',
+      detail: '读取环境信息、升级状态和基础配置。',
+      percent: 14,
+    });
+    const cachedSession = safe(localStorage.getItem(sessionCacheKey)).trim();
     const runtimeUpgradeReady = refreshRuntimeUpgradeStatus({ silent: true }).catch(() => {});
-    await refreshAgents(false);
-    await refreshSessions();
-    await refreshWorkflows();
-    await refreshDashboard();
-    await runtimeUpgradeReady;
-    const cachedSession = localStorage.getItem(sessionCacheKey) || '';
-    if (cachedSession && state.sessionsById[cachedSession]) {
-      await selectSession(cachedSession);
+    await refreshAgents(false, { autoAnalyze: false });
+    setStartupProgress({
+      stage: 'agents',
+      title: '角色与环境策略已加载',
+      detail: state.agentSearchRootReady
+        ? '角色池已刷新，正在恢复最近的会话与工作记录。'
+        : '环境策略已读取完成，接下来恢复基础页面数据。',
+      percent: 36,
+    });
+    const sessionRefreshPromise = refreshSessions({
+      skipInitialMessages: true,
+      preferredSessionId: cachedSession,
+    });
+    const workflowRefreshPromise = refreshWorkflows();
+    const dashboardRefreshPromise = refreshDashboard();
+    setStartupProgress({
+      stage: 'sessions',
+      title: '正在恢复数据',
+      detail: '并行加载会话列表、工作记录和仪表盘概览。',
+      percent: 58,
+    });
+    await Promise.all([
+      sessionRefreshPromise,
+      workflowRefreshPromise,
+      dashboardRefreshPromise,
+      runtimeUpgradeReady,
+    ]);
+    setStartupProgress({
+      stage: 'workspace',
+      title: '正在恢复工作台',
+      detail: state.selectedSessionId
+        ? '恢复最近一次会话内容和上次停留的页面位置。'
+        : '恢复上次停留的页面位置并准备基础交互。',
+      percent: 84,
+    });
+    if (state.selectedSessionId) {
+      await loadSessionMessages(state.selectedSessionId);
     } else {
       renderFeed();
     }
@@ -236,7 +288,18 @@
     applyGateState();
     startWorkflowPoller();
     startRuntimeUpgradePoller();
-    setStatus(state.agentSearchRootReady ? '就绪' : '等待设置 agent路径');
+    const finalStatus = state.agentSearchRootReady ? '就绪' : '等待设置 agent路径';
+    setStatus(finalStatus);
+    finishStartupProgress(
+      state.agentSearchRootReady
+        ? '基础界面与最近工作状态已恢复完成。'
+        : '基础界面已加载完成，请先到设置页配置有效的 agent路径。'
+    );
+    if (state.agentSearchRootReady && visibleAgents().length > 0) {
+      window.setTimeout(() => {
+        startPolicyAnalysisForSelection();
+      }, 0);
+    }
     if (isLayoutProbeEnabled()) {
       await runLayoutProbe();
     }
@@ -260,5 +323,6 @@
   bootstrap().catch((err) => {
     setChatError(err.message || String(err));
     setStatus('失败');
+    failStartupProgress(err.message || String(err));
   });
 })();
