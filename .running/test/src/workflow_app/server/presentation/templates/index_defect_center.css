@@ -72,6 +72,22 @@
   padding: 12px;
 }
 
+.defect-composer-card {
+  flex: 0 0 auto;
+}
+
+.defect-composer-head {
+  margin-bottom: 0;
+}
+
+.defect-composer-body {
+  margin-top: 8px;
+}
+
+.defect-composer-card.is-collapsed .defect-composer-body {
+  display: none;
+}
+
 .defect-detail-scroll {
   height: 100%;
   overflow-y: auto;
@@ -98,6 +114,14 @@
   min-height: 0;
   overflow: auto;
   padding-right: 2px;
+}
+
+.defect-list-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .defect-list-item {
@@ -184,6 +208,18 @@
   color: #06794f;
 }
 
+.defect-status-chip.dispute {
+  background: #f4f1ff;
+  border-color: #ddd6ff;
+  color: #7257cb;
+}
+
+.defect-status-chip.returned {
+  background: #fff7eb;
+  border-color: #ffd8a8;
+  color: #ad6800;
+}
+
 .defect-status-chip.warn {
   background: #fff7eb;
   border-color: #ffd8a8;
@@ -206,6 +242,11 @@
 .defect-meta-item,
 .defect-field {
   min-width: 0;
+}
+
+.defect-paste-tip {
+  margin-top: 8px;
+  line-height: 1.5;
 }
 
 .defect-meta-key {
@@ -232,6 +273,116 @@
   line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.defect-issue-card,
+.defect-section-card {
+  padding: 12px;
+}
+
+.defect-issue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.defect-issue-title {
+  margin-top: 2px;
+  font-size: 18px;
+  line-height: 1.35;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.defect-facts-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.defect-facts-grid .defect-meta-item {
+  min-width: 140px;
+  flex: 1 1 0;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.defect-issue-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.defect-section-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.defect-evidence-layout {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.defect-evidence-layout-editable {
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+
+.defect-evidence-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.defect-evidence-shot {
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.defect-evidence-shot-image {
+  width: 100%;
+  height: 88px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line-soft);
+  background: #fff;
+}
+
+.defect-evidence-shot-name {
+  font-size: 12px;
+  color: #33465a;
+  word-break: break-word;
+}
+
+.defect-text-block,
+.defect-empty-note {
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: #f8fafc;
+  font-size: 13px;
+  color: #33465a;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.defect-empty-note {
+  margin-top: 10px;
 }
 
 .defect-image-list,
@@ -294,6 +445,12 @@
   flex-wrap: wrap;
 }
 
+.defect-supplement-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .defect-history-images {
   margin-top: 8px;
   display: grid;
@@ -318,6 +475,61 @@
   padding: 20px;
 }
 
+.defect-timeline {
+  position: relative;
+  margin-top: 8px;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.defect-timeline::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: #d9dfeb;
+}
+
+.defect-timeline-item {
+  position: relative;
+  padding-left: 14px;
+}
+
+.defect-timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px #edf3ff;
+}
+
+.defect-timeline-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.defect-timeline-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2329;
+}
+
+.defect-timeline-time {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 @media (max-width: 1180px) {
   .defect-shell {
     grid-template-columns: 1fr;
@@ -325,6 +537,11 @@
 
   .defect-detail-scroll {
     max-height: none;
+  }
+
+  .defect-evidence-layout,
+  .defect-evidence-layout-editable {
+    grid-template-columns: 1fr;
   }
 }
 

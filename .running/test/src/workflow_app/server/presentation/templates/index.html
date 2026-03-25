@@ -8,14 +8,11 @@
 
 </head>
 <body>
-<div id='startupOverlay' class='startup-overlay' role='status' aria-live='polite' aria-label='系统启动进度'>
+<div id='startupOverlay' class='startup-overlay is-hidden' role='status' aria-live='polite' aria-label='系统启动进度'>
   <div class='startup-overlay-card'>
     <div class='startup-overlay-eyebrow'>workflow startup</div>
     <div id='startupOverlayTitle' class='startup-overlay-title'>正在准备工作台</div>
     <div id='startupOverlayDetail' class='startup-overlay-detail'>正在初始化布局、连接运行时并恢复最近的工作状态。</div>
-    <div class='startup-overlay-progress' aria-hidden='true'>
-      <div id='startupOverlayBar' class='startup-overlay-progress-fill'></div>
-    </div>
     <div class='startup-overlay-meta'>
       <span id='startupOverlayPercent'>0%</span>
       <span id='startupOverlayElapsed'>刚开始</span>
@@ -704,7 +701,7 @@
                 <div id='schedulePlanList' class='schedule-plan-list'></div>
               </div>
             </aside>
-            <section class='schedule-detail-panel'>
+            <section class='schedule-card schedule-detail-panel'>
               <div class='schedule-panel-head'>
                 <div>
                   <div class='card-title'>计划详情</div>
@@ -873,30 +870,31 @@
         <div id='rbModuleDefect' class='rb-module active'>
           <div class='defect-shell'>
             <aside class='defect-side'>
-              <div class='defect-card'>
-                <div class='card-title'>提交缺陷</div>
-                <div class='hint'>同一条记录同时提交文字描述与图片证据，先由 workflow agent 预判定。</div>
-                <div style='height:8px'></div>
-                <label class='defect-field'>
-                  <span class='hint'>缺陷摘要（选填）</span>
-                  <input id='defectSummaryInput' type='text' placeholder='可留空，默认取描述首行' />
-                </label>
-                <div style='height:8px'></div>
-                <label class='defect-field'>
-                  <span class='hint'>缺陷描述</span>
-                  <textarea id='defectReportTextInput' rows='6' placeholder='请描述现象、复现路径和你的判断'></textarea>
-                </label>
-                <div style='height:8px'></div>
-                <label class='defect-field'>
-                  <span class='hint'>图片证据</span>
-                  <input id='defectReportImageInput' type='file' multiple accept='.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp' />
-                </label>
-                <div id='defectDraftImageList' class='defect-image-list'></div>
-                <div style='height:8px'></div>
-                <div class='row'>
-                  <button id='defectSubmitBtn' type='button'>提交缺陷</button>
+              <div id='defectComposerCard' class='defect-card defect-composer-card'>
+                <div class='row between defect-composer-head'>
+                  <div class='card-title'>提交缺陷</div>
+                  <button id='defectComposerToggleBtn' class='alt' type='button'>收起</button>
                 </div>
-                <div id='defectSubmitError' class='error'></div>
+                <div id='defectComposerBody' class='defect-composer-body'>
+                  <div class='hint'>同一条记录同时提交文字描述与图片证据；可直接在描述框中粘贴截图，先由 workflow agent 预判定。</div>
+                  <div style='height:8px'></div>
+                  <label class='defect-field'>
+                    <span class='hint'>缺陷摘要（选填）</span>
+                    <input id='defectSummaryInput' type='text' placeholder='可留空，默认取描述首行' />
+                  </label>
+                  <div style='height:8px'></div>
+                  <label class='defect-field'>
+                    <span class='hint'>缺陷描述</span>
+                    <textarea id='defectReportTextInput' rows='5' placeholder='请描述现象、复现路径和你的判断；可直接在此粘贴截图'></textarea>
+                  </label>
+                  <div class='hint defect-paste-tip'>在描述框中直接 Ctrl+V 粘贴图片，系统会自动收进下方图片证据。</div>
+                  <div id='defectDraftImageList' class='defect-image-list'></div>
+                  <div style='height:8px'></div>
+                  <div class='row'>
+                    <button id='defectSubmitBtn' type='button'>提交缺陷</button>
+                  </div>
+                  <div id='defectSubmitError' class='error'></div>
+                </div>
               </div>
               <div class='defect-card defect-list-wrap'>
                 <div>
@@ -918,6 +916,10 @@
                   <div id='defectError' class='error'></div>
                 </div>
                 <div id='defectList' class='defect-list'></div>
+                <div class='defect-list-footer'>
+                  <button id='defectLoadMoreBtn' class='alt' type='button' hidden>加载更多</button>
+                  <span id='defectListMoreMeta' class='hint'></span>
+                </div>
               </div>
             </aside>
             <section class='defect-detail'>

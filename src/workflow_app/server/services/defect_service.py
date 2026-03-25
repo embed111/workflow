@@ -505,41 +505,55 @@ def list_defect_reports(
     include_test_data: bool = True,
     status_filter: str = "",
     keyword: str = "",
-    limit: int = 200,
+    limit: int = 100,
+    offset: int = 0,
 ) -> dict[str, Any]:
     _ensure_defect_tables(root)
-    limit_value = max(1, min(500, int(limit or 200)))
+    limit_value = max(1, min(200, int(limit or 100)))
+    offset_value = max(0, int(offset or 0))
     status_key = str(status_filter or "").strip().lower()
     keyword_text = str(keyword or "").strip().lower()
-    sql = "SELECT * FROM defect_reports WHERE 1=1"
+    sql = " FROM defect_reports WHERE 1=1"
     params: list[Any] = []
     if not include_test_data:
         sql += " AND is_test_data=0"
     if status_key and status_key != "all":
         sql += " AND status=?"
         params.append(status_key)
-    sql += " ORDER BY updated_at DESC, created_at DESC, report_id DESC LIMIT ?"
-    params.append(limit_value)
+    if keyword_text:
+        keyword_like = f"%{keyword_text}%"
+        sql += (
+            " AND ("
+            "LOWER(COALESCE(report_id,'')) LIKE ?"
+            " OR LOWER(COALESCE(dts_id,'')) LIKE ?"
+            " OR LOWER(COALESCE(defect_summary,'')) LIKE ?"
+            " OR LOWER(COALESCE(report_text,'')) LIKE ?"
+            " OR LOWER(COALESCE(current_decision_json,'')) LIKE ?"
+            ")"
+        )
+        params.extend([keyword_like] * 5)
     conn = connect_db(root)
     try:
-        rows = conn.execute(sql, tuple(params)).fetchall()
+        count_row = conn.execute("SELECT COUNT(*) AS total" + sql, tuple(params)).fetchone()
+        total = int(count_row["total"] if count_row is not None and count_row["total"] is not None else 0)
+        rows = conn.execute(
+            "SELECT *" + sql + " ORDER BY updated_at DESC, created_at DESC, report_id DESC LIMIT ? OFFSET ?",
+            tuple(params + [limit_value, offset_value]),
+        ).fetchall()
         items = [_report_row_to_payload(row) for row in rows]
-        if keyword_text:
-            items = [
-                item
-                for item in items
-                if keyword_text in "\n".join(
-                    [
-                        str(item.get("report_id") or ""),
-                        str(item.get("dts_id") or ""),
-                        str(item.get("defect_summary") or ""),
-                        str(item.get("report_text") or ""),
-                        str(item.get("decision_title") or ""),
-                        str(item.get("decision_summary") or ""),
-                    ]
-                ).lower()
-            ]
-        return {"items": items, "total": len(items), "status_filter": status_key, "keyword": keyword_text}
+        returned = len(items)
+        next_offset = offset_value + returned
+        return {
+            "items": items,
+            "total": total,
+            "returned": returned,
+            "offset": offset_value,
+            "limit": limit_value,
+            "next_offset": next_offset,
+            "has_more": next_offset < total,
+            "status_filter": status_key,
+            "keyword": keyword_text,
+        }
     finally:
         conn.close()
 

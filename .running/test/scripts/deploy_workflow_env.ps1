@@ -8,7 +8,8 @@ param(
     [string]$ArtifactRoot = '',
     [switch]$SkipTestGate,
     [switch]$StartAfterDeploy,
-    [switch]$OpenBrowser
+    [switch]$OpenBrowser,
+    [switch]$AllowDirectProdDeploy
 )
 
 $ErrorActionPreference = 'Stop'
@@ -48,6 +49,65 @@ function Test-RunningProcess {
     catch {
         return $null
     }
+}
+
+function Get-RunningProcessCommandLine {
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$ProcessId
+    )
+
+    try {
+        $process = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction Stop
+        return [string]$process.CommandLine
+    }
+    catch {
+        return ''
+    }
+}
+
+function Test-RunningProcessMatchesDescriptor {
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Descriptor,
+        [Parameter(Mandatory = $true)]
+        [System.Diagnostics.Process]$Process
+    )
+
+    $instance = Read-WorkflowJson -Path ([string]$Descriptor.instance_file) -Default @{}
+    if ($instance.Count -gt 0) {
+        if ([string]$instance['environment'] -ne [string]$Descriptor.environment) {
+            return @{ match = $false; reason = 'instance_environment_mismatch' }
+        }
+        if (-not (Test-WorkflowSamePath -Left ([string]$instance['control_root']) -Right ([string]$Descriptor.control_root))) {
+            return @{ match = $false; reason = 'instance_control_root_mismatch' }
+        }
+        if (-not (Test-WorkflowSamePath -Left ([string]$instance['deploy_root']) -Right ([string]$Descriptor.deploy_root))) {
+            return @{ match = $false; reason = 'instance_deploy_root_mismatch' }
+        }
+        if (-not (Test-WorkflowSamePath -Left ([string]$instance['manifest_path']) -Right ([string]$Descriptor.manifest_path))) {
+            return @{ match = $false; reason = 'instance_manifest_path_mismatch' }
+        }
+    }
+
+    $commandLine = Get-RunningProcessCommandLine -ProcessId $Process.Id
+    if (-not [string]::IsNullOrWhiteSpace($commandLine) -and $commandLine -match 'workflow_web_server\.py') {
+        $runtimeRootPattern = [regex]::Escape([string]$Descriptor.runtime_root)
+        if ($commandLine -notmatch $runtimeRootPattern) {
+            return @{ match = $false; reason = 'process_runtime_root_mismatch' }
+        }
+    }
+    return @{ match = $true; reason = 'trusted' }
+}
+
+function Clear-StaleEnvironmentInstanceState {
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Descriptor
+    )
+
+    Remove-Item -LiteralPath ([string]$Descriptor.pid_file) -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath ([string]$Descriptor.instance_file) -Force -ErrorAction SilentlyContinue
 }
 
 function Write-DeploymentMetadata {
@@ -166,6 +226,11 @@ $prodGitProtection = Protect-WorkflowProdGitRuntimeState -SourceRoot $sourceRoot
 if (-not [bool]$prodGitProtection.ok) {
     Write-Host "[workflow-deploy] warning: prod git protection skipped: $($prodGitProtection.reason) $($prodGitProtection.error)"
 }
+
+if ($Environment -eq 'prod' -and -not $AllowDirectProdDeploy) {
+    throw "direct prod deploy is disabled by default; deploy test to generate a candidate and upgrade prod from the runtime UI, or pass -AllowDirectProdDeploy for explicit maintenance"
+}
+
 $descriptor = Resolve-WorkflowEnvironmentDescriptor `
     -SourceRoot $sourceRoot `
     -Environment $Environment `
@@ -176,6 +241,14 @@ $descriptor = Resolve-WorkflowEnvironmentDescriptor `
 Assert-WorkflowArtifactIsolation -Descriptor $descriptor
 
 $runningProcess = Test-RunningProcess -PidFile ([string]$descriptor.pid_file)
+if ($runningProcess) {
+    $runningState = Test-RunningProcessMatchesDescriptor -Descriptor $descriptor -Process $runningProcess
+    if (-not [bool]$runningState.match) {
+        Write-Host "[workflow-deploy] clear stale $Environment instance state: $($runningState.reason) (PID=$($runningProcess.Id))"
+        Clear-StaleEnvironmentInstanceState -Descriptor $descriptor
+        $runningProcess = $null
+    }
+}
 if ($runningProcess) {
     throw "环境 $Environment 当前正在运行（PID=$($runningProcess.Id)），请先停止后再部署。"
 }

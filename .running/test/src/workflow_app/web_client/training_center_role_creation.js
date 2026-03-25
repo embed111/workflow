@@ -906,48 +906,269 @@
     return "<ul class='rc-profile-list'>" + rows.map((item) => '<li>' + roleCreationEscapeHtml(item) + '</li>').join('') + '</ul>';
   }
 
+  function roleCreationProfileHasValue(value) {
+    if (Array.isArray(value)) {
+      return value.some((item) => {
+        if (item && typeof item === 'object') {
+          return !!safe(item.file_name || item.name || item.attachment_id).trim();
+        }
+        return !!safe(item).trim();
+      });
+    }
+    return !!safe(value).trim();
+  }
+
+  function roleCreationProfileChipHtml(tone, text) {
+    return "<span class='rc-chip " + roleCreationEscapeHtml(tone) + "'>" + roleCreationEscapeHtml(text) + '</span>';
+  }
+
+  function roleCreationProfileStageLine(session, detail) {
+    const currentTitle = safe(session.current_stage_title || (detail.stage_meta && detail.stage_meta.current_stage_title)).trim();
+    const currentIndex = Number(session.current_stage_index || (detail.stage_meta && detail.stage_meta.current_stage_index) || 2) || 2;
+    if (!currentTitle) {
+      return '角色画像收集 · 2 / 6';
+    }
+    return currentTitle + ' · ' + String(Math.max(1, currentIndex)) + ' / 6';
+  }
+
+  function roleCreationProfileDraftStatus(session, profile, processing) {
+    const status = safe(session.status).trim().toLowerCase();
+    const missingLabels = Array.isArray(profile.missing_labels) ? profile.missing_labels.filter((item) => !!safe(item).trim()) : [];
+    if (status === 'completed') {
+      return { chipTone: 'done', chipText: '已完成', text: '已完成创建，画像收口结果已落到角色工作区。' };
+    }
+    if (status === 'creating') {
+      return { chipTone: 'active', chipText: '创建中', text: '已开始创建，当前按真实任务和阶段推进。' };
+    }
+    if (processing && processing.failed) {
+      return { chipTone: 'danger', chipText: '待重试', text: '最近一轮分析失败，仍需继续对齐草稿字段。' };
+    }
+    if ((processing && processing.active) || missingLabels.length) {
+      return { chipTone: 'pending', chipText: '待对齐', text: '待对齐，尚未收口。' };
+    }
+    return { chipTone: 'done', chipText: '已收口', text: '当前草稿字段已收口，可进入开始前确认。' };
+  }
+
+  function roleCreationProfileStartStatus(session, profile) {
+    const status = safe(session.status).trim().toLowerCase();
+    const missingLabels = Array.isArray(profile.missing_labels) ? profile.missing_labels.filter((item) => !!safe(item).trim()) : [];
+    if (status === 'completed') {
+      return { chipTone: 'done', chipText: '已完成创建', text: '角色已经完成创建，可继续进入训练和发布治理。' };
+    }
+    if (status === 'creating') {
+      return { chipTone: 'active', chipText: '已开始创建', text: '已点击开始创建，真实任务图和工作区都已建立。' };
+    }
+    if (profile.can_start) {
+      return { chipTone: 'active', chipText: '可开始未开始', text: '最小字段已满足，但尚未真正开始创建。' };
+    }
+    return {
+      chipTone: 'pending',
+      chipText: '未达开始门槛',
+      text: missingLabels.length
+        ? ('仍需补齐：' + missingLabels.join(' / '))
+        : '仍需补齐角色名、角色目标和至少一条核心能力后才能开始。',
+    };
+  }
+
+  function roleCreationProfileTaskStatus(session, detail) {
+    const ticketId = safe((detail.stage_meta && detail.stage_meta.ticket_id) || session.assignment_ticket_id).trim();
+    if (!ticketId) {
+      return { chipTone: 'pending', chipText: '当前无任务图', text: '--' };
+    }
+    return { chipTone: 'active', chipText: '任务图已建立', text: ticketId };
+  }
+
+  function roleCreationProfileAttachmentSummary(profile) {
+    const assets = Array.isArray(profile.example_assets) ? profile.example_assets : [];
+    const count = assets.filter((item) => {
+      if (item && typeof item === 'object') {
+        return !!safe(item.file_name || item.name || item.attachment_id).trim();
+      }
+      return !!safe(item).trim();
+    }).length;
+    if (count <= 0) {
+      return '当前暂无附件引用。';
+    }
+    return String(count) + ' 项附件/引用，仅用于字段对齐，不直接写进角色正文。';
+  }
+
+  function roleCreationFieldStateConfig(fieldKey, profile) {
+    const missingFields = Array.isArray(profile.missing_fields)
+      ? profile.missing_fields.map((item) => safe(item).trim()).filter(Boolean)
+      : [];
+    const has = (value) => roleCreationProfileHasValue(value);
+    const isMissing = missingFields.includes(fieldKey);
+    if (fieldKey === 'example_assets') {
+      return has(profile.example_assets)
+        ? { tone: 'active', text: '仅作参考', action: '轻量引用' }
+        : { tone: 'pending', text: '暂无附件', action: '可继续补充' };
+    }
+    if (fieldKey === 'role_name') {
+      return has(profile.role_name)
+        ? { tone: 'done', text: '已确认', action: '直接沿用' }
+        : { tone: 'pending', text: '待补充', action: '继续补齐' };
+    }
+    if (fieldKey === 'role_goal') {
+      return isMissing || !has(profile.role_goal)
+        ? { tone: 'pending', text: '待修正', action: '继续收口' }
+        : { tone: 'done', text: '已确认', action: '保持当前稿' };
+    }
+    if (fieldKey === 'core_capabilities') {
+      return isMissing || !has(profile.core_capabilities)
+        ? { tone: 'pending', text: '待补充', action: '继续补齐' }
+        : { tone: 'done', text: '已确认', action: '保留当前稿' };
+    }
+    if (fieldKey === 'boundaries') {
+      return isMissing || !has(profile.boundaries)
+        ? { tone: 'pending', text: '待补充', action: '补一条即可' }
+        : { tone: 'done', text: '已确认', action: '继续微调' };
+    }
+    if (fieldKey === 'collaboration_style') {
+      return isMissing || !has(profile.collaboration_style)
+        ? { tone: 'pending', text: '待确认', action: '二选一' }
+        : { tone: 'done', text: '已确认', action: '保持当前稿' };
+    }
+    return { tone: 'pending', text: '待补充', action: '继续收口' };
+  }
+
+  function roleCreationProfileTextBody(text, emptyText) {
+    const content = safe(text).trim();
+    if (!content) {
+      return "<div class='rc-profile-empty'>" + roleCreationEscapeHtml(emptyText) + '</div>';
+    }
+    return "<div class='rc-field-note'>" + roleCreationEscapeHtml(content) + '</div>';
+  }
+
+  function roleCreationProfileSectionHtml(title, bodyHtml, options) {
+    const opts = options && typeof options === 'object' ? options : {};
+    const chip = opts.chip && typeof opts.chip === 'object' ? opts.chip : {};
+    const actionText = safe(opts.action).trim();
+    const sectionKind = safe(opts.kind).trim() || 'field';
+    return (
+      "<section class='rc-profile-card' data-rc-profile-kind='" + roleCreationEscapeHtml(sectionKind) + "' data-rc-profile-title='" + roleCreationEscapeHtml(title) + "'>" +
+        "<div class='rc-field-head'>" +
+          "<div class='rc-field-title-row'>" +
+            "<div class='rc-profile-section-title'>" + roleCreationEscapeHtml(title) + '</div>' +
+            roleCreationProfileChipHtml(safe(chip.tone).trim() || 'pending', safe(chip.text).trim() || '待补充') +
+          '</div>' +
+          (
+            actionText
+              ? ("<div class='rc-field-actions'><span class='rc-field-action'>" + roleCreationEscapeHtml(actionText) + '</span></div>')
+              : ''
+          ) +
+        '</div>' +
+        bodyHtml +
+      '</section>'
+    );
+  }
+
   function renderRoleCreationProfile() {
     const box = $('rcProfileView');
     if (!box) return;
     const detail = roleCreationCurrentDetail();
     const session = detail.session && typeof detail.session === 'object' ? detail.session : {};
     const profile = roleCreationCurrentProfile();
-    const createdAgent = roleCreationCurrentCreatedAgent();
-    const dialogueAgent = roleCreationCurrentDialogueAgent();
+    const processing = roleCreationCurrentProcessingInfo();
     if (!safe(session.session_id).trim()) {
       box.innerHTML = "<div class='rc-empty'>先创建或选择一个草稿，角色画像会在这里持续收口。</div>";
       return;
     }
     const sections = [];
-    const addText = (label, text, emptyText) => {
-      sections.push(
-        "<section class='rc-profile-card'>" +
-          "<div class='rc-profile-k'>" + roleCreationEscapeHtml(label) + '</div>' +
-          "<div class='rc-profile-v'>" + roleCreationEscapeHtml(safe(text).trim() || emptyText) + '</div>' +
-        '</section>'
-      );
-    };
-    const addList = (label, rows, emptyText) => {
-      sections.push(
-        "<section class='rc-profile-card'>" +
-          "<div class='rc-profile-k'>" + roleCreationEscapeHtml(label) + '</div>' +
-          "<div class='rc-profile-v'>" + roleCreationListHtml(rows, emptyText) + '</div>' +
-        '</section>'
-      );
-    };
-    addText('角色名称', profile.role_name || session.session_title || '未命名角色', '未命名角色');
-    addText('角色目标', profile.role_goal, '继续通过对话补充目标和交付边界');
-    addList('核心能力', profile.core_capabilities, '继续通过对话补充关键能力');
-    addList('能力边界', profile.boundaries, '当前还没有明确能力边界');
-    addList('适用场景', profile.applicable_scenarios, '当前还没有明确适用场景');
-    addText('协作方式', profile.collaboration_style, '当前还没有明确协作方式');
-    addList('示例资产', profile.example_assets, '当前还没有提交示例资产');
-    addList('缺失信息', profile.missing_labels, '当前草稿已满足开工条件');
-    addText('对话分析师', dialogueAgent.agent_name, '当前未解析到对话分析师');
-    addText('对话工作区', dialogueAgent.workspace_path, '当前未解析到对话工作区');
-    addText('对话 Provider', dialogueAgent.provider, 'codex');
-    addText('工作区路径', createdAgent.workspace_path, safe(session.created_agent_workspace_path).trim() || '启动创建后会自动生成工作区');
-    addText('运行态', createdAgent.runtime_status_text || '', safe(createdAgent.runtime_status).trim() || 'idle');
+    const draftStatus = roleCreationProfileDraftStatus(session, profile, processing);
+    const startStatus = roleCreationProfileStartStatus(session, profile);
+    const taskStatus = roleCreationProfileTaskStatus(session, detail);
+    const missingLabels = Array.isArray(profile.missing_labels) ? profile.missing_labels.filter((item) => !!safe(item).trim()) : [];
+    sections.push(
+      "<section class='rc-profile-card rc-profile-card-summary' data-rc-profile-kind='summary' data-rc-profile-title='summary'>" +
+        "<div class='rc-profile-head'>" +
+          "<div class='rc-profile-head-main'>" +
+            "<div class='rc-profile-head-title'>" + roleCreationEscapeHtml((safe(profile.role_name).trim() || safe(session.session_title).trim() || '未命名角色') + ' 草稿') + '</div>' +
+          '</div>' +
+          "<div class='rc-chip-row'>" +
+            roleCreationProfileChipHtml(draftStatus.chipTone, draftStatus.chipText) +
+            roleCreationProfileChipHtml(startStatus.chipTone, startStatus.chipText) +
+            roleCreationProfileChipHtml(taskStatus.chipTone, taskStatus.chipText) +
+          '</div>' +
+        '</div>' +
+        "<div class='rc-profile-summary'>" +
+          "<div class='rc-profile-kv'><div class='rc-profile-k'>当前阶段</div><div class='rc-profile-v'>" + roleCreationEscapeHtml(roleCreationProfileStageLine(session, detail)) + '</div></div>' +
+          "<div class='rc-profile-kv'><div class='rc-profile-k'>草稿状态</div><div class='rc-profile-v'>" + roleCreationEscapeHtml(draftStatus.text) + '</div></div>' +
+          "<div class='rc-profile-kv'><div class='rc-profile-k'>开始状态</div><div class='rc-profile-v'>" + roleCreationEscapeHtml(startStatus.text) + '</div></div>' +
+          "<div class='rc-profile-kv'><div class='rc-profile-k'>待补字段</div><div class='rc-profile-v'>" + roleCreationEscapeHtml(missingLabels.length ? missingLabels.join(' / ') : '当前草稿已满足开工条件') + '</div></div>' +
+          "<div class='rc-profile-kv'><div class='rc-profile-k'>task_id</div><div class='rc-profile-v mono'>" + roleCreationEscapeHtml(taskStatus.text || '--') + '</div></div>' +
+          "<div class='rc-profile-kv'><div class='rc-profile-k'>附件状态</div><div class='rc-profile-v'>" + roleCreationEscapeHtml(roleCreationProfileAttachmentSummary(profile)) + '</div></div>' +
+        '</div>' +
+      '</section>'
+    );
+    sections.push(
+      roleCreationProfileSectionHtml(
+        '角色名',
+        roleCreationProfileTextBody(profile.role_name || session.session_title || '未命名角色', '未命名角色'),
+        {
+          kind: 'field',
+          chip: roleCreationFieldStateConfig('role_name', profile),
+          action: roleCreationFieldStateConfig('role_name', profile).action,
+        }
+      )
+    );
+    sections.push(
+      roleCreationProfileSectionHtml(
+        '角色目标',
+        roleCreationProfileTextBody(profile.role_goal, '继续通过对话补充目标和交付边界'),
+        {
+          kind: 'field',
+          chip: roleCreationFieldStateConfig('role_goal', profile),
+          action: roleCreationFieldStateConfig('role_goal', profile).action,
+        }
+      )
+    );
+    sections.push(
+      roleCreationProfileSectionHtml(
+        '核心能力',
+        roleCreationListHtml(profile.core_capabilities, '继续通过对话补充关键能力'),
+        {
+          kind: 'field',
+          chip: roleCreationFieldStateConfig('core_capabilities', profile),
+          action: roleCreationFieldStateConfig('core_capabilities', profile).action,
+        }
+      )
+    );
+    sections.push(
+      roleCreationProfileSectionHtml(
+        '边界',
+        roleCreationListHtml(profile.boundaries, '当前还没有明确边界，请继续补齐。'),
+        {
+          kind: 'field',
+          chip: roleCreationFieldStateConfig('boundaries', profile),
+          action: roleCreationFieldStateConfig('boundaries', profile).action,
+        }
+      )
+    );
+    sections.push(
+      roleCreationProfileSectionHtml(
+        '协作方式',
+        roleCreationProfileTextBody(profile.collaboration_style, '当前还没有明确协作方式。'),
+        {
+          kind: 'field',
+          chip: roleCreationFieldStateConfig('collaboration_style', profile),
+          action: roleCreationFieldStateConfig('collaboration_style', profile).action,
+        }
+      )
+    );
+    sections.push(
+      roleCreationProfileSectionHtml(
+        '附件与引用',
+        (
+          "<div class='rc-field-note'>" + roleCreationEscapeHtml(roleCreationProfileAttachmentSummary(profile)) + '</div>' +
+          roleCreationListHtml(profile.example_assets, '当前没有附带参考图片或引用。')
+        ),
+        {
+          kind: 'field',
+          chip: roleCreationFieldStateConfig('example_assets', profile),
+          action: roleCreationFieldStateConfig('example_assets', profile).action,
+        }
+      )
+    );
     box.innerHTML = sections.join('');
   }
 

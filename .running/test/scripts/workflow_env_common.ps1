@@ -480,6 +480,110 @@ function Get-WorkflowProdCandidatePath {
     return (Join-Path (Get-WorkflowControlRoot -SourceRoot $SourceRoot) 'prod-candidate.json')
 }
 
+function Get-WorkflowCandidateVersionRank {
+    param(
+        [Parameter()]
+        [hashtable]$Candidate = @{}
+    )
+
+    foreach ($key in @('version_rank', 'current_version_rank', 'version', 'current_version')) {
+        $value = [string]$Candidate[$key]
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            return $value.Trim()
+        }
+    }
+    return ''
+}
+
+function Test-WorkflowCandidateComplete {
+    param(
+        [Parameter()]
+        [hashtable]$Candidate = @{}
+    )
+
+    $evidencePath = [string]$Candidate['evidence_path']
+    $candidateAppRoot = [string]$Candidate['candidate_app_root']
+    if ([string]::IsNullOrWhiteSpace($evidencePath) -or [string]::IsNullOrWhiteSpace($candidateAppRoot)) {
+        return $false
+    }
+    return (Test-Path -LiteralPath $evidencePath) -and (Test-Path -LiteralPath $candidateAppRoot)
+}
+
+function Get-WorkflowTestManifestCandidate {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceRoot
+    )
+
+    $manifestPath = Get-WorkflowEnvironmentManifestPath -SourceRoot $SourceRoot -Environment 'test'
+    $manifest = Read-WorkflowJson -Path $manifestPath -Default @{}
+    $testGateStatus = [string]$manifest['latest_test_gate_status']
+    if ((-not [string]::IsNullOrWhiteSpace($testGateStatus)) -and ($testGateStatus.Trim().ToLowerInvariant() -ne 'passed')) {
+        return @{}
+    }
+    $version = [string]$manifest['latest_candidate_version']
+    $candidateAppRoot = [string]$manifest['latest_candidate_path']
+    $evidencePath = [string]$manifest['latest_test_gate_evidence']
+    if ([string]::IsNullOrWhiteSpace($version) -or [string]::IsNullOrWhiteSpace($candidateAppRoot) -or [string]::IsNullOrWhiteSpace($evidencePath)) {
+        return @{}
+    }
+    $controlRoot = [string]$manifest['control_root']
+    $candidateMetaPath = ''
+    if (-not [string]::IsNullOrWhiteSpace($controlRoot)) {
+        $candidateMetaPath = [System.IO.Path]::GetFullPath((Join-Path (Join-Path $controlRoot 'candidates') (Join-Path $version 'candidate.json')))
+    }
+    return @{
+        version              = $version.Trim()
+        version_rank         = $version.Trim()
+        source_environment   = 'test'
+        test_batch_id        = ('test-gate-' + $version.Trim())
+        passed_at            = [string]$manifest['latest_candidate_created_at']
+        evidence_path        = [System.IO.Path]::GetFullPath($evidencePath)
+        candidate_app_root   = [System.IO.Path]::GetFullPath($candidateAppRoot)
+        candidate_meta_path  = $candidateMetaPath
+        source_root          = [string]$manifest['source_root']
+        source_control_root  = $controlRoot
+        source_manifest_path = [string]$manifest['manifest_path']
+    }
+}
+
+function Sync-WorkflowProdCandidateFromTest {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceRoot
+    )
+
+    $candidatePath = Get-WorkflowProdCandidatePath -SourceRoot $SourceRoot
+    $localCandidate = Read-WorkflowJson -Path $candidatePath -Default @{}
+    $testCandidate = Get-WorkflowTestManifestCandidate -SourceRoot $SourceRoot
+    $localRank = Get-WorkflowCandidateVersionRank -Candidate $localCandidate
+    $testRank = Get-WorkflowCandidateVersionRank -Candidate $testCandidate
+    $localComplete = Test-WorkflowCandidateComplete -Candidate $localCandidate
+    $testComplete = Test-WorkflowCandidateComplete -Candidate $testCandidate
+
+    $preferred = $localCandidate
+    $preferTestCandidate = $false
+    if (($testCandidate.Count -gt 0) -and $testComplete) {
+        if (-not $localComplete) {
+            $preferTestCandidate = $true
+        }
+        elseif ($testRank -gt $localRank) {
+            $preferTestCandidate = $true
+        }
+        elseif (($testRank -eq $localRank) -and ($localCandidate.Count -eq 0)) {
+            $preferTestCandidate = $true
+        }
+    }
+    if ($preferTestCandidate) {
+        $preferred = $testCandidate
+        Write-WorkflowJson -Path $candidatePath -Payload $preferred
+    }
+    if ($preferred.Count -gt 0) {
+        $preferred['candidate_record_path'] = $candidatePath
+    }
+    return $preferred
+}
+
 function Get-WorkflowProdUpgradeRequestPath {
     param(
         [Parameter(Mandatory = $true)]

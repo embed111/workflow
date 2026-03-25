@@ -26,7 +26,8 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                 include_test_data=include_test_data,
                 status_filter=str((query.get("status") or [""])[0] or "").strip(),
                 keyword=str((query.get("keyword") or [""])[0] or "").strip(),
-                limit=int((query.get("limit") or ["200"])[0] or "200"),
+                limit=int((query.get("limit") or ["100"])[0] or "100"),
+                offset=int((query.get("offset") or ["0"])[0] or "0"),
             )
             handler.send_json(200, {"ok": True, "include_test_data": include_test_data, **policy_fields, **data})
         except Exception as exc:

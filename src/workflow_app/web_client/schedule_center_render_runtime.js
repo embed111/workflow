@@ -3,6 +3,146 @@
     return "<span class='schedule-status-chip " + escapeHtml(tone) + "'>" + escapeHtml(text || '-') + '</span>';
   }
 
+  function scheduleGuidePointHtml(title, text) {
+    return (
+      "<div class='schedule-empty-point'>" +
+        "<div class='schedule-empty-point-title'>" + escapeHtml(title || '-') + '</div>' +
+        "<div class='schedule-plan-sub'>" + escapeHtml(text || '-') + '</div>' +
+      '</div>'
+    );
+  }
+
+  function scheduleEmptyGuideHtml(title, text, points, options) {
+    const opts = options && typeof options === 'object' ? options : {};
+    const kicker = safe(opts.kicker).trim();
+    const ctaLabel = safe(opts.ctaLabel).trim();
+    const classes = ['schedule-empty', 'schedule-empty-guide'];
+    if (opts.compact) classes.push('compact');
+    return (
+      "<div class='" + classes.join(' ') + "'>" +
+        (kicker ? "<div class='schedule-empty-kicker'>" + escapeHtml(kicker) + '</div>' : '') +
+        "<div class='schedule-plan-title'>" + escapeHtml(title || '-') + '</div>' +
+        "<div class='schedule-plan-sub'>" + escapeHtml(text || '-') + '</div>' +
+        "<div class='schedule-empty-points'>" +
+          (Array.isArray(points) ? points.map((item) => scheduleGuidePointHtml(item && item.title, item && item.text)).join('') : '') +
+        '</div>' +
+        (ctaLabel ? "<button class='alt schedule-empty-cta' type='button' data-schedule-create='1'>" + escapeHtml(ctaLabel) + '</button>' : '') +
+      '</div>'
+    );
+  }
+
+  function scheduleEmptyCardHtml(title, text, extraClass) {
+    const classes = ['schedule-empty'];
+    if (extraClass) classes.push(extraClass);
+    return (
+      "<div class='" + classes.join(' ') + "'>" +
+        "<div class='schedule-plan-title'>" + escapeHtml(title || '-') + '</div>' +
+        "<div class='schedule-plan-sub'>" + escapeHtml(text || '-') + '</div>' +
+      '</div>'
+    );
+  }
+
+  function schedulePlaceholderListHtml(items) {
+    return (
+      "<div class='schedule-list schedule-placeholder-list'>" +
+        items.map((item) => (
+          "<div class='schedule-list-item schedule-placeholder-item'>" +
+            "<div class='schedule-plan-title'>" + escapeHtml(item && item.title) + '</div>' +
+            "<div class='schedule-plan-sub'>" + escapeHtml(item && item.text) + '</div>' +
+          '</div>'
+        )).join('') +
+      '</div>'
+    );
+  }
+
+  function scheduleEmptyDetailBodyHtml() {
+    return (
+      "<section class='schedule-hero schedule-hero-empty'>" +
+        "<div class='schedule-hero-head'>" +
+          "<div>" +
+            "<div class='schedule-plan-title'>先创建一条定时任务</div>" +
+            "<div class='schedule-plan-sub'>空态仍保持和原型图一致的左右双栏结构。保存后，这里会展开计划详情、发起内容、规则、未来触发和执行结果。</div>" +
+          '</div>' +
+          scheduleStatusChipHtml('pending', '待配置', 'pending') +
+        '</div>' +
+        "<div class='schedule-actions'>" +
+          "<button class='alt' type='button' data-schedule-create='1'>新建定时任务</button>" +
+        '</div>' +
+        "<div class='schedule-hero-grid'>" +
+          scheduleStatHtml('执行 Agent', '保存后选择') +
+          scheduleStatHtml('优先级', '默认 P1，可编辑') +
+          scheduleStatHtml('下一次触发', '配置规则后自动计算') +
+          scheduleStatHtml('最近结果', '首次触发后展示') +
+        '</div>' +
+      '</section>' +
+      "<section class='schedule-section'>" +
+        "<div class='schedule-section-head'><div class='card-title'>发起任务内容预览</div></div>" +
+        schedulePlaceholderListHtml([
+          { title: '本次目标', text: '例如：固定巡检、发布预检、账单复核等可重复工作。' },
+          { title: '执行清单', text: '把命中后要做的关键动作写清楚，避免只留下抽象任务名。' },
+          { title: '完成标准', text: '明确什么结果才算完成，后续会原样快照到任务中心实例。' },
+        ]) +
+      '</section>' +
+      "<section class='schedule-section'>" +
+        "<div class='card-title'>触发规则</div>" +
+        "<div class='schedule-plan-rules'>" +
+          "<span class='schedule-rule-chip'>每月</span>" +
+          "<span class='schedule-rule-chip'>每周</span>" +
+          "<span class='schedule-rule-chip'>每日</span>" +
+          "<span class='schedule-rule-chip'>定时</span>" +
+        '</div>' +
+        "<div class='schedule-plan-sub schedule-section-note'>支持混合启用；同一分钟多条规则命中时，仍只会向任务中心创建一条实例。</div>" +
+      '</section>' +
+      "<section class='schedule-section'><div class='card-title'>未来触发</div>" +
+        schedulePlaceholderListHtml([
+          { title: '暂无未来触发', text: '保存并启用后，系统会按北京时间计算未来触发时间。' },
+        ]) +
+      '</section>' +
+      "<section class='schedule-section'><div class='card-title'>最近执行结果</div>" +
+        schedulePlaceholderListHtml([
+          { title: '暂无执行记录', text: '计划首次命中并完成建单后，这里会展示真实等待、运行、成功或失败结果。' },
+        ]) +
+      '</section>' +
+      "<section class='schedule-section'><div class='card-title'>关联任务中心实例</div>" +
+        schedulePlaceholderListHtml([
+          { title: '暂无关联实例', text: '定时任务只负责计划配置与命中建单，真实执行链路继续以任务中心为准。' },
+        ]) +
+      '</section>'
+    );
+  }
+
+  function scheduleEmptyCalendarDetailBodyHtml() {
+    return (
+      "<section class='schedule-section'>" +
+        "<div class='schedule-calendar-day-head'>" +
+          "<div>" +
+            "<div class='schedule-plan-title'>本月暂无计划排期</div>" +
+            "<div class='schedule-plan-sub'>空态下也保留原型图中的右侧详情结构。先创建计划，随后从这里回看当月计划与真实结果。</div>" +
+          '</div>' +
+        '</div>' +
+        "<div class='schedule-actions'>" +
+          "<button class='alt' type='button' data-schedule-create='1'>新建定时任务</button>" +
+        '</div>' +
+      '</section>' +
+      "<section class='schedule-section'><div class='card-title'>发起内容预览</div>" +
+        schedulePlaceholderListHtml([
+          { title: '本次目标', text: '计划命中后要发起什么任务，会在这里提前预览。' },
+          { title: '关键动作', text: '把关键检查动作和交付要求写清楚，避免只知道“会触发”但不知道“触发什么”。' },
+        ]) +
+      '</section>' +
+      "<section class='schedule-section'><div class='card-title'>当月计划</div>" +
+        schedulePlaceholderListHtml([
+          { title: '暂无当月计划', text: '保存后，日历会同时展示未来计划与已经发生的执行结果。' },
+        ]) +
+      '</section>' +
+      "<section class='schedule-section'><div class='card-title'>实际结果</div>" +
+        schedulePlaceholderListHtml([
+          { title: '暂无实际结果', text: '首次命中建单后，这里会回显任务中心里的真实状态和关联实例。' },
+        ]) +
+      '</section>'
+    );
+  }
+
   function schedulePlanCardHtml(item, isActive) {
     const labels = Array.isArray(item && item.rule_labels) ? item.rule_labels : [];
     const tone = !!(item && item.enabled) ? safe(item && item.last_result_status).trim().toLowerCase() || 'pending' : 'disabled';
@@ -57,10 +197,15 @@
     const meta = $('scheduleDetailMeta');
     if (!body) return;
     const detail = state.scheduleDetail && typeof state.scheduleDetail === 'object' ? state.scheduleDetail : {};
-    const schedule = detail.schedule && typeof detail.schedule === 'object' ? detail.schedule : selectedSchedulePlan();
+    const selectedId = safe(state.scheduleSelectedId).trim();
+    const selectedPlan = selectedSchedulePlan();
+    const detailSchedule = detail.schedule && typeof detail.schedule === 'object' ? detail.schedule : null;
+    const schedule = selectedId
+      ? (safe(detailSchedule && detailSchedule.schedule_id).trim() === selectedId ? detailSchedule : (selectedPlan || detailSchedule))
+      : null;
     if (!schedule || !safe(schedule.schedule_id).trim()) {
-      if (meta) meta.textContent = '请选择定时计划';
-      body.innerHTML = "<div class='schedule-empty'><div class='schedule-plan-title'>暂无计划详情</div><div class='schedule-plan-sub'>从左侧选择计划后，在这里查看规则、未来触发、最近结果和关联任务中心实例。</div></div>";
+      if (meta) meta.textContent = '暂无定时计划';
+      body.innerHTML = scheduleEmptyDetailBodyHtml();
       return;
     }
     if (meta) meta.textContent = 'source_schedule_id: ' + safe(schedule.schedule_id).trim();
@@ -125,7 +270,7 @@
     const calendarData = state.scheduleCalendar && typeof state.scheduleCalendar === 'object' ? state.scheduleCalendar : {};
     if (label) label.textContent = safe(calendarData.month_title).trim() || '-';
     const days = Array.isArray(calendarData.days) ? calendarData.days : [];
-    grid.innerHTML = [
+    const headerNodes = [
       "<div class='schedule-weekday'>周一</div>",
       "<div class='schedule-weekday'>周二</div>",
       "<div class='schedule-weekday'>周三</div>",
@@ -133,6 +278,24 @@
       "<div class='schedule-weekday'>周五</div>",
       "<div class='schedule-weekday'>周六</div>",
       "<div class='schedule-weekday'>周日</div>",
+    ];
+    if (!state.agentSearchRootReady) {
+      grid.innerHTML = headerNodes.concat(
+        "<div class='schedule-calendar-empty'>" +
+          scheduleEmptyCardHtml('功能已锁定', '请先在设置页配置有效的 agent 路径，定时任务日历才会解锁。') +
+        '</div>',
+      ).join('');
+      return;
+    }
+    if (!scheduleCalendarHasEntries(calendarData)) {
+      grid.innerHTML = headerNodes.concat(
+        "<div class='schedule-calendar-empty'>" +
+          scheduleEmptyCardHtml('本月暂无定时计划', '先在列表视角创建计划；保存后，这里会展示未来计划和真实执行结果。') +
+        '</div>',
+      ).join('');
+      return;
+    }
+    grid.innerHTML = headerNodes.concat(
       days.map((day) => {
         const classes = ['schedule-day'];
         if (!day.is_current_month) classes.push('is-muted');
@@ -141,18 +304,29 @@
         const planEvents = (Array.isArray(day.plans) ? day.plans : []).slice(0, 2).map((item) => "<div class='schedule-day-event plan'>" + escapeHtml(safe(item.planned_trigger_at).trim().slice(11, 16) + ' ' + safe(item.schedule_name).trim()) + '</div>').join('');
         const resultEvents = (Array.isArray(day.results) ? day.results : []).slice(0, 2).map((item) => "<div class='schedule-day-event " + escapeHtml(scheduleResultTone(item.result_status)) + "'>" + escapeHtml(safe(item.planned_trigger_at).trim().slice(11, 16) + ' ' + safe(item.schedule_name_snapshot || item.assignment_node_name || item.schedule_id).trim()) + '</div>').join('');
         return "<button class='" + classes.join(' ') + "' type='button' data-schedule-day='" + escapeHtml(safe(day.date).trim()) + "'><div class='schedule-day-num'>" + escapeHtml(String(day.day || '')) + "</div><div class='schedule-day-events'>" + planEvents + resultEvents + "</div></button>";
-      }).join('')
-    ].join('');
+      }).join(''),
+    ).join('');
   }
 
   function renderScheduleCalendarDetail() {
     const body = $('scheduleCalendarDetailBody');
     const meta = $('scheduleCalendarDetailMeta');
     if (!body) return;
+    const calendarData = state.scheduleCalendar && typeof state.scheduleCalendar === 'object' ? state.scheduleCalendar : {};
+    if (!state.agentSearchRootReady) {
+      if (meta) meta.textContent = '功能已锁定';
+      body.innerHTML = scheduleEmptyCardHtml('功能已锁定', '请先在设置页配置有效的 agent 路径。');
+      return;
+    }
+    if (!scheduleCalendarHasEntries(calendarData)) {
+      if (meta) meta.textContent = '本月暂无计划';
+      body.innerHTML = scheduleEmptyCalendarDetailBodyHtml();
+      return;
+    }
     const day = scheduleSelectedCalendarDay();
     if (!day) {
       if (meta) meta.textContent = '请选择日期';
-      body.innerHTML = "<div class='schedule-empty'><div class='schedule-plan-sub'>暂无日历数据</div></div>";
+      body.innerHTML = scheduleEmptyCardHtml('请选择日期', '点击左侧有事件的日期后，在这里查看当日计划和实际结果。');
       return;
     }
     if (meta) meta.textContent = safe(day.date).trim();
@@ -235,6 +409,8 @@
         meta.textContent = 'agent路径未设置或无效，定时任务模块已锁定。';
       } else if (state.scheduleLoading) {
         meta.textContent = '计划加载中...';
+      } else if (!Array.isArray(state.schedulePlans) || !state.schedulePlans.length) {
+        meta.textContent = '暂无计划，可点击 + 新建';
       } else {
         meta.textContent = '共 ' + String(Array.isArray(state.schedulePlans) ? state.schedulePlans.length : 0) + ' 条计划';
       }
@@ -246,7 +422,16 @@
       if (!state.agentSearchRootReady) {
         list.innerHTML = "<div class='schedule-empty'><div class='schedule-plan-title'>功能已锁定</div><div class='schedule-plan-sub'>请先在设置页配置有效的 agent 路径。</div></div>";
       } else if (!Array.isArray(state.schedulePlans) || !state.schedulePlans.length) {
-        list.innerHTML = "<div class='schedule-empty'><div class='schedule-plan-title'>暂无定时计划</div><div class='schedule-plan-sub'>从右上角 + 开始新建，保存后可真实命中并向任务中心建单。</div></div>";
+        list.innerHTML = scheduleEmptyGuideHtml(
+          '暂无定时计划',
+          '当前还没有可执行的定时计划。先创建一条计划，后续会在这里看到下一次触发、最近结果和规则摘要。',
+          [
+            { title: '计划配置', text: '填写计划名称、执行 agent、发起摘要、执行清单和完成标准。' },
+            { title: '规则混合', text: '支持每月 / 每周 / 每日 / 定时混合启用，并自动合并同分钟命中。' },
+            { title: '结果回看', text: '命中后会向任务中心建单，这里再同步展示真实执行结果。' },
+          ],
+          { kicker: '列表视角', ctaLabel: '新建定时任务' },
+        );
       } else {
         list.innerHTML = state.schedulePlans.map((item) => schedulePlanCardHtml(item, safe(item && item.schedule_id).trim() === safe(state.scheduleSelectedId).trim())).join('');
       }

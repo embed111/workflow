@@ -1,8 +1,8 @@
 {
-  "date": "2026-03-18",
+  "date": "2026-03-24",
   "status": "running",
   "samples": [],
   "p95_first_token_ms": null,
   "p95_total_ms": null,
-  "updated_at": "2026-03-18T12:48:10+08:00"
+  "updated_at": "2026-03-24T10:31:04+08:00"
 }

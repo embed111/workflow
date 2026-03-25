@@ -58,10 +58,33 @@
     return safe(value).trim() ? assignmentFormatBeijingTime(value) : '-';
   }
 
+  function scheduleDayHasEntries(day) {
+    const plans = Array.isArray(day && day.plans) ? day.plans : [];
+    const results = Array.isArray(day && day.results) ? day.results : [];
+    return plans.length > 0 || results.length > 0;
+  }
+
+  function scheduleCalendarHasEntries(calendarData) {
+    const calendar = calendarData && typeof calendarData === 'object' ? calendarData : {};
+    const days = Array.isArray(calendar.days) ? calendar.days : [];
+    return days.some((item) => scheduleDayHasEntries(item));
+  }
+
+  function scheduleFirstCalendarEntryDate(calendarData) {
+    const calendar = calendarData && typeof calendarData === 'object' ? calendarData : {};
+    const days = Array.isArray(calendar.days) ? calendar.days : [];
+    const matched = days.find((item) => scheduleDayHasEntries(item));
+    return safe(matched && matched.date).trim();
+  }
+
   function scheduleSelectedCalendarDay() {
     const calendar = state.scheduleCalendar && typeof state.scheduleCalendar === 'object' ? state.scheduleCalendar : {};
     const days = Array.isArray(calendar.days) ? calendar.days : [];
-    return days.find((item) => safe(item && item.date).trim() === safe(state.scheduleCalendarSelectedDate).trim()) || days[0] || null;
+    const selectedDate = safe(state.scheduleCalendarSelectedDate).trim();
+    if (!selectedDate) {
+      return null;
+    }
+    return days.find((item) => safe(item && item.date).trim() === selectedDate) || null;
   }
 
   function setScheduleView(view) {
@@ -114,6 +137,9 @@
       if (!previous || !exists || !opts.preserveSelection) {
         state.scheduleSelectedId = state.schedulePlans.length ? safe(state.schedulePlans[0].schedule_id).trim() : '';
       }
+      if (!state.scheduleSelectedId) {
+        state.scheduleDetail = null;
+      }
       setScheduleError('');
       renderScheduleCenter();
       if (state.scheduleSelectedId) {
@@ -130,6 +156,7 @@
     if (!state.agentSearchRootReady) {
       state.scheduleCalendar = null;
       state.scheduleCalendarMonth = '';
+      state.scheduleCalendarSelectedDate = '';
       renderScheduleCenter();
       return null;
     }
@@ -144,9 +171,12 @@
       const selected = safe(state.scheduleCalendarSelectedDate).trim();
       const days = Array.isArray(data.days) ? data.days : [];
       const exists = days.some((item) => safe(item && item.date).trim() === selected);
+      const preferredDate = safe(data.selected_date).trim();
+      const preferredHasEntries = days.some((item) => safe(item && item.date).trim() === preferredDate && scheduleDayHasEntries(item));
+      const firstEntryDate = scheduleFirstCalendarEntryDate(data);
       state.scheduleCalendarSelectedDate = exists
         ? selected
-        : (safe(data.selected_date).trim() || safe((days[0] || {}).date).trim());
+        : (preferredHasEntries ? preferredDate : firstEntryDate);
       setScheduleError('');
       renderScheduleCenter();
       return data;

@@ -284,7 +284,27 @@
       calendar_plan_count: 0,
       calendar_result_count: 0,
       calendar_edit_btn_count: 0,
+      list_empty_visible: false,
+      list_empty_text: '',
+      detail_empty_text: '',
+      detail_empty_title: '',
+      calendar_empty_visible: false,
+      calendar_empty_text: '',
+      calendar_detail_empty_text: '',
+      calendar_detail_empty_title: '',
+      empty_create_btn_count: 0,
     };
+  }
+
+  async function prepareScheduleEmptyProbe() {
+    switchTab('schedule-center');
+    setScheduleView('list');
+    state.scheduleSelectedId = '';
+    state.scheduleDetail = null;
+    await refreshSchedulePlans({ preserveSelection: false });
+    await refreshScheduleCalendar(state.scheduleCalendarMonth || scheduleCurrentMonthKey());
+    setScheduleView('calendar');
+    await scheduleProbeWait(80);
   }
 
   async function prepareScheduleListProbe() {
@@ -370,6 +390,34 @@
     output.calendar_plan_count = Array.isArray(day && day.plans) ? day.plans.length : 0;
     output.calendar_result_count = Array.isArray(day && day.results) ? day.results.length : 0;
     output.calendar_edit_btn_count = document.querySelectorAll('#scheduleCalendarDetailBody [data-schedule-action="edit"]').length;
+    output.list_empty_visible = !!document.querySelector('#schedulePlanList .schedule-empty');
+    output.list_empty_text = safe(document.querySelector('#schedulePlanList .schedule-empty') ? document.querySelector('#schedulePlanList .schedule-empty').textContent : '').trim();
+    output.detail_empty_text = safe(document.querySelector('#scheduleDetailBody .schedule-empty') ? document.querySelector('#scheduleDetailBody .schedule-empty').textContent : '').trim();
+    output.detail_empty_title = safe(document.querySelector('#scheduleDetailBody .schedule-hero-empty .schedule-plan-title') ? document.querySelector('#scheduleDetailBody .schedule-hero-empty .schedule-plan-title').textContent : '').trim();
+    output.calendar_empty_visible = !!document.querySelector('#scheduleCalendarGrid .schedule-calendar-empty');
+    output.calendar_empty_text = safe(document.querySelector('#scheduleCalendarGrid .schedule-calendar-empty') ? document.querySelector('#scheduleCalendarGrid .schedule-calendar-empty').textContent : '').trim();
+    output.calendar_detail_empty_text = safe(document.querySelector('#scheduleCalendarDetailBody .schedule-empty') ? document.querySelector('#scheduleCalendarDetailBody .schedule-empty').textContent : '').trim();
+    output.calendar_detail_empty_title = safe(document.querySelector('#scheduleCalendarDetailBody .schedule-section .schedule-plan-title') ? document.querySelector('#scheduleCalendarDetailBody .schedule-section .schedule-plan-title').textContent : '').trim();
+    output.empty_create_btn_count = document.querySelectorAll('[data-schedule-create]').length;
+  }
+
+  function scheduleEmptyStateProbePass(output) {
+    return output.active_tab === 'schedule-center' &&
+      output.plan_count === 0 &&
+      output.list_card_count === 0 &&
+      output.list_empty_visible &&
+      output.list_empty_text.indexOf('暂无定时计划') >= 0 &&
+      (
+        output.detail_empty_text.indexOf('暂无定时计划') >= 0 ||
+        output.detail_empty_title.indexOf('先创建一条定时任务') >= 0
+      ) &&
+      output.calendar_empty_visible &&
+      output.calendar_empty_text.indexOf('本月暂无定时计划') >= 0 &&
+      (
+        output.calendar_detail_empty_text.indexOf('本月暂无计划') >= 0 ||
+        output.calendar_detail_empty_title.indexOf('本月暂无计划') >= 0
+      ) &&
+      output.empty_create_btn_count >= 1;
   }
 
   function scheduleListDefaultProbePass(output) {
@@ -430,7 +478,9 @@
     const output = createScheduleCenterProbeOutput();
     try {
       const probeCase = output.case;
-      if (probeCase === 'editor_edit') {
+      if (probeCase === 'empty_state') {
+        await prepareScheduleEmptyProbe();
+      } else if (probeCase === 'editor_edit') {
         await prepareScheduleEditorProbe();
       } else if (probeCase === 'calendar_month' || probeCase === 'calendar_shifted') {
         await prepareScheduleCalendarProbe();
@@ -442,7 +492,9 @@
         await scheduleProbeWait(delayMs);
       }
       collectScheduleCenterProbe(output);
-      if (probeCase === 'list_default') {
+      if (probeCase === 'empty_state') {
+        output.pass = scheduleEmptyStateProbePass(output);
+      } else if (probeCase === 'list_default') {
         output.pass = scheduleListDefaultProbePass(output);
       } else if (probeCase === 'list_detail') {
         output.pass = scheduleListDetailProbePass(output);
@@ -520,6 +572,13 @@
       $('schedulePlanList').addEventListener('click', (event) => {
         const target = event.target;
         if (!(target instanceof Element)) return;
+        const createBtn = target.closest('[data-schedule-create]');
+        if (createBtn) {
+          openScheduleEditorForMode('create').catch((err) => {
+            setScheduleError(err.message || String(err));
+          });
+          return;
+        }
         const button = target.closest('[data-schedule-select]');
         if (!button) return;
         const scheduleId = safe(button.getAttribute('data-schedule-select')).trim();
@@ -532,6 +591,13 @@
     const handleScheduleActionClick = (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
+      const createBtn = target.closest('[data-schedule-create]');
+      if (createBtn) {
+        openScheduleEditorForMode('create').catch((err) => {
+          setScheduleError(err.message || String(err));
+        });
+        return;
+      }
       const openTaskBtn = target.closest('[data-open-task-center]');
       if (openTaskBtn) {
         openScheduleNodeInTaskCenter(

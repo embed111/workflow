@@ -15,6 +15,7 @@ _USER_MESSAGE_ROLES = {"user", "assistant"}
 _ROOT_RUNTIME_CONFIG = Path("state") / "runtime-config.json"
 _WORKFLOW_PROJECT_ROOT = Path(__file__).resolve().parents[4]
 _DEFAULT_ARTIFACT_ROOT = (_WORKFLOW_PROJECT_ROOT.parent / ".output").resolve(strict=False)
+_ABSOLUTE_RECORD_REF_TOP_LEVELS = {"sessions", "analysis", "runs", "audit", "system"}
 
 
 def _now_ts() -> str:
@@ -321,6 +322,28 @@ def system_runs_root(root: Path) -> Path:
 from . import work_record_store_index as _record_index
 
 
+def _map_absolute_work_record_ref(root: Path, ref: str) -> str:
+    text = str(ref or "").strip()
+    if not text:
+        return ""
+    candidate = Path(text)
+    if not candidate.is_absolute():
+        return ""
+    parts = [part for part in text.replace("\\", "/").split("/") if part]
+    for index, part in enumerate(parts):
+        lowered = part.lower()
+        if lowered == "records" and index + 1 < len(parts):
+            next_part = parts[index + 1].lower()
+            if next_part in _ABSOLUTE_RECORD_REF_TOP_LEVELS:
+                return (artifact_root(root) / Path(*parts[index:])).as_posix()
+        if lowered == "workspace" and index + 1 < len(parts):
+            next_part = parts[index + 1].lower()
+            if next_part == "assignments":
+                tail = parts[index + 2 :]
+                return (artifact_root(root) / "tasks" / Path(*tail)).as_posix()
+    return ""
+
+
 def normalize_work_record_ref(
     root: Path,
     ref: str,
@@ -331,7 +354,7 @@ def normalize_work_record_ref(
     text = str(ref or "").strip()
     if not text:
         return ""
-    normalized = text.replace("\\", "/")
+    normalized = _map_absolute_work_record_ref(root, text) or text.replace("\\", "/")
     artifact_prefix = artifact_root(root).as_posix().rstrip("/")
     normalized = normalized.replace(f"{artifact_prefix}/workspace/assignments/", f"{artifact_prefix}/tasks/")
     normalized = normalized.replace("workspace/assignments/", "tasks/")

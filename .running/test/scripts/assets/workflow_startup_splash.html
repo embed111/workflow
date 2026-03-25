@@ -107,48 +107,43 @@
     color: var(--accent);
   }
 
-  .progress-track {
-    position: relative;
-    overflow: hidden;
-    height: 10px;
-    margin-top: 14px;
-    border-radius: 999px;
-    background: #e9edf4;
-  }
-
-  .progress-fill {
-    position: relative;
-    height: 100%;
-    width: 4%;
-    min-width: 18px;
-    border-radius: inherit;
-    background: linear-gradient(90deg, #1c64f2, #4c8dff);
-    transition: width 0.45s ease;
-  }
-
-  .progress-fill::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    transform: translateX(-120%);
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.42), transparent);
-    animation: shimmer 1.8s linear infinite;
-  }
-
   .stage-list {
-    margin-top: 18px;
+    margin-top: 16px;
     display: grid;
-    gap: 10px;
+    gap: 0;
   }
 
   .stage-item {
+    position: relative;
     display: grid;
     grid-template-columns: 28px minmax(0, 1fr);
     gap: 12px;
     align-items: start;
+    padding-bottom: 12px;
+  }
+
+  .stage-item:last-child {
+    padding-bottom: 0;
+  }
+
+  .stage-item::before {
+    content: "";
+    position: absolute;
+    left: 13px;
+    top: 30px;
+    bottom: 0;
+    width: 2px;
+    border-radius: 999px;
+    background: #dfe5ef;
+  }
+
+  .stage-item:last-child::before {
+    display: none;
   }
 
   .stage-dot {
+    position: relative;
+    z-index: 1;
     width: 28px;
     height: 28px;
     border-radius: 999px;
@@ -162,10 +157,18 @@
     font-weight: 700;
   }
 
+  .stage-item.is-done::before {
+    background: linear-gradient(180deg, rgba(0, 168, 113, 0.34), rgba(0, 168, 113, 0.16));
+  }
+
   .stage-item.is-done .stage-dot {
     border-color: rgba(0, 168, 113, 0.24);
     background: rgba(0, 168, 113, 0.12);
     color: var(--ok);
+  }
+
+  .stage-item.is-active::before {
+    background: linear-gradient(180deg, rgba(51, 112, 255, 0.34), rgba(223, 229, 239, 0.9));
   }
 
   .stage-item.is-active .stage-dot {
@@ -253,16 +256,6 @@
     color: var(--ok);
   }
 
-  .ready .progress-fill {
-    background: linear-gradient(90deg, #00a871, #0fc48a);
-  }
-
-  @keyframes shimmer {
-    100% {
-      transform: translateX(120%);
-    }
-  }
-
   @media (max-width: 640px) {
     .startup-shell {
       padding: 18px;
@@ -285,9 +278,6 @@
       <div class="progress-meta">
         <div class="progress-label" id="progressLabel">正在检查运行环境</div>
         <div class="progress-value" id="progressValue">4%</div>
-      </div>
-      <div class="progress-track" aria-hidden="true">
-        <div id="progressFill" class="progress-fill"></div>
       </div>
       <div class="stage-list" id="stageList">
         <div class="stage-item is-active" data-stage="prepare">
@@ -345,7 +335,6 @@
       const openTargetBtn = document.getElementById('openTargetBtn');
       const progressLabel = document.getElementById('progressLabel');
       const progressValue = document.getElementById('progressValue');
-      const progressFill = document.getElementById('progressFill');
       const elapsedLabel = document.getElementById('elapsedLabel');
       const hint = document.getElementById('hint');
       const title = document.getElementById('title');
@@ -369,7 +358,6 @@
 
       function setStage(stageKey, percent, label) {
         const nextPercent = Math.max(4, Math.min(100, Number(percent || 0)));
-        progressFill.style.width = nextPercent + '%';
         progressValue.textContent = nextPercent + '%';
         progressLabel.textContent = label || '正在启动';
         const stageOrder = ['prepare', 'launch', 'probe', 'ready'];

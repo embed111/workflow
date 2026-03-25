@@ -323,9 +323,33 @@ def _node_delivery_inbox_relative_paths(
 
 def _assignment_write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    tmp.replace(path)
+    import time as _time
+    import uuid as _uuid
+
+    content = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    last_error: BaseException | None = None
+    for attempt in range(6):
+        tmp = path.with_name(path.name + "." + _uuid.uuid4().hex + ".tmp")
+        try:
+            tmp.write_text(content, encoding="utf-8")
+            tmp.replace(path)
+            return
+        except PermissionError as exc:
+            last_error = exc
+        except OSError as exc:
+            if int(getattr(exc, "winerror", 0) or 0) != 5:
+                raise
+            last_error = exc
+        finally:
+            try:
+                if tmp.exists():
+                    tmp.unlink()
+            except Exception:
+                pass
+        _time.sleep(0.05 * (attempt + 1))
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"assignment json write failed: {path.as_posix()}")
 
 
 def _assignment_read_json(path: Path, fallback: dict[str, Any] | None = None) -> dict[str, Any]:

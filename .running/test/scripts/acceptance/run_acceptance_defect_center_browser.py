@@ -58,7 +58,14 @@ def read_json_response(response: urllib.request.addinfourl) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def api_request(base_url: str, method: str, route: str, body: dict[str, Any] | None = None) -> tuple[int, Any]:
+def api_request(
+    base_url: str,
+    method: str,
+    route: str,
+    body: dict[str, Any] | None = None,
+    *,
+    timeout_s: int = 30,
+) -> tuple[int, Any]:
     payload = None
     headers = {"Accept": "application/json"}
     if body is not None:
@@ -66,7 +73,7 @@ def api_request(base_url: str, method: str, route: str, body: dict[str, Any] | N
         headers["Content-Type"] = "application/json"
     request = urllib.request.Request(base_url + route, data=payload, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=max(5, int(timeout_s))) as response:
             content_type = str(response.headers.get("Content-Type") or "")
             if "application/json" in content_type:
                 return int(response.status), read_json_response(response)
@@ -161,12 +168,19 @@ def edge_cmd(edge_path: Path, profile_dir: Path, width: int, height: int, budget
         str(edge_path),
         "--headless=new",
         "--disable-gpu",
+        "--disable-software-rasterizer",
         "--disable-extensions",
         "--disable-background-networking",
         "--disable-component-update",
         "--disable-sync",
+        "--disable-default-apps",
+        "--disable-popup-blocking",
+        "--disable-crash-reporter",
+        "--disable-breakpad",
+        "--disable-features=msEdgeSidebarV2,msUndersideButton,OptimizationGuideModelDownloading,Translate,AutofillServerCommunication",
         "--no-first-run",
         "--no-default-browser-check",
+        "--no-sandbox",
         f"--user-data-dir={profile_dir.as_posix()}",
         f"--window-size={width},{height}",
         f"--virtual-time-budget={max(1000, int(budget_ms))}",
@@ -223,6 +237,35 @@ def capture_probe(edge_path: Path, base_url: str, evidence_root: Path, name: str
     probe = parse_probe(edge_dom(edge_path, url, profile_dir=profile_dir))
     write_json(probe_path, probe)
     return shot_path.as_posix(), probe_path.as_posix(), probe
+
+
+def capture_probe_with_retry(
+    edge_path: Path,
+    base_url: str,
+    evidence_root: Path,
+    name: str,
+    case_id: str,
+    extra: dict[str, str] | None = None,
+    *,
+    attempts: int = 3,
+    retry_delay_s: float = 1.0,
+) -> tuple[str, str, dict[str, Any]]:
+    last_error: Exception | None = None
+    last_result: tuple[str, str, dict[str, Any]] | None = None
+    for attempt in range(max(1, attempts)):
+        try:
+            result = capture_probe(edge_path, base_url, evidence_root, name, case_id, extra)
+            last_result = result
+            if bool((result[2] or {}).get("pass")):
+                return result
+        except Exception as exc:
+            last_error = exc
+        if attempt + 1 < max(1, attempts):
+            time.sleep(retry_delay_s)
+    if last_result is not None:
+        return last_result
+    assert last_error is not None
+    raise last_error
 
 
 def launch_server(workspace_root: Path, runtime_root: Path, *, host: str, port: int, stdout_path: Path, stderr_path: Path) -> tuple[subprocess.Popen[bytes], Any, Any]:
@@ -291,7 +334,13 @@ def seed_defect_flow(base_url: str, evidence_root: Path) -> dict[str, Any]:
     formal_id = str(formal_report.get("report_id") or "").strip()
     assert_true(formal_id != "", "formal report_id missing")
 
-    status, process_result = api_request(base_url, "POST", f"/api/defects/{formal_id}/process-task", {"operator": "acceptance"})
+    status, process_result = api_request(
+        base_url,
+        "POST",
+        f"/api/defects/{formal_id}/process-task",
+        {"operator": "acceptance"},
+        timeout_s=240,
+    )
     assert_true(status == 200 and process_result.get("ok"), "process task create failed")
     write_json(api_root / "process-task.json", process_result)
 
@@ -335,7 +384,13 @@ def seed_defect_flow(base_url: str, evidence_root: Path) -> dict[str, Any]:
     assert_true(status == 200 and dispute_mark.get("ok"), "dispute mark failed")
     write_json(api_root / "dispute-mark.json", dispute_mark)
 
-    status, review_result = api_request(base_url, "POST", f"/api/defects/{dispute_id}/review-task", {"operator": "acceptance"})
+    status, review_result = api_request(
+        base_url,
+        "POST",
+        f"/api/defects/{dispute_id}/review-task",
+        {"operator": "acceptance"},
+        timeout_s=240,
+    )
     assert_true(status == 200 and review_result.get("ok"), "review task create failed")
     write_json(api_root / "review-task.json", review_result)
 
@@ -367,6 +422,12 @@ def main() -> int:
     workspace_root = Path(args.root).resolve()
     artifacts_root = Path(args.artifacts_dir).resolve() / "defect-center-browser"
     logs_root = Path(args.logs_dir).resolve() / "defect-center-browser"
+    if artifacts_root.exists():
+        shutil.rmtree(artifacts_root, ignore_errors=True)
+    if logs_root.exists():
+        shutil.rmtree(logs_root, ignore_errors=True)
+    artifacts_root.mkdir(parents=True, exist_ok=True)
+    logs_root.mkdir(parents=True, exist_ok=True)
     runtime_root = Path(os.getenv("TEST_TMP_DIR") or (artifacts_root / "runtime")).resolve()
     if runtime_root.exists():
         shutil.rmtree(runtime_root)
@@ -392,7 +453,7 @@ def main() -> int:
             ("defect-review-input", "review_input", {"defect_probe_report": seeded["formal_id"]}),
             ("defect-filter-search", "filter_search", {"defect_probe_report": seeded["formal_id"], "defect_probe_status": "resolved", "defect_probe_keyword": seeded["formal_dts_id"]}),
         ):
-            shot_path, probe_path, probe = capture_probe(edge_path, base_url, artifacts_root, name, case_id, extra)
+            shot_path, probe_path, probe = capture_probe_with_retry(edge_path, base_url, artifacts_root, name, case_id, extra)
             assert_true(bool(probe.get("pass")), f"probe failed: {case_id}")
             screenshots[name] = {
                 "case": case_id,

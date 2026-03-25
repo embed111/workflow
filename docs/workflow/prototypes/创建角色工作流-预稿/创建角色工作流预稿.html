@@ -3,7 +3,6 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="data:," />
   <title>创建角色工作流预稿</title>
   <style>
     :root {
@@ -1041,7 +1040,7 @@
     }
     .profile-summary {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: 1fr;
       gap: 8px;
     }
     .profile-kv {
@@ -1070,6 +1069,71 @@
       color: #4e5969;
       font-size: 12px;
       line-height: 1.6;
+    }
+    .field-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .field-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .field-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .field-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: #5e6878;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .field-note {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+    .field-diff {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      background: #fbfcfd;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .field-diff-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    .field-diff-block {
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      background: #fff;
+      padding: 8px;
+    }
+    .field-diff-k {
+      font-size: 11px;
+      color: #7a8290;
+    }
+    .field-diff-v {
+      margin-top: 4px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #2f3440;
     }
     .spec-desc { font-size: 12px; color: var(--muted); line-height: 1.55; }
     .mono { font-family: "Cascadia Mono","SFMono-Regular",Consolas,monospace; font-size: 12px; }
@@ -1134,14 +1198,14 @@
               <div class="scroll list-body">
                 <div class="card active">
                   <div class="draft-row">
-                    <div class="draft-avatar">增</div>
+                    <div class="draft-avatar">测</div>
                     <div class="draft-summary">
                       <div class="draft-topline">
-                        <div class="draft-name">增长分析师</div>
-                        <div class="draft-time">11:23</div>
+                        <div class="draft-name">workflow_tester</div>
+                        <div class="draft-time">13:31</div>
                       </div>
-                      <div class="draft-preview">已回传两张能力截图，等待你确认是否继续补实验排期和复盘模板。</div>
-                      <div class="draft-flags"><span class="chip active">阶段 4 / 6</span><span class="chip warn">创建中</span></div>
+                      <div class="draft-preview">名称已改成 `workflow_tester`。当前最小启动字段已齐，但角色目标和协作方式仍待对齐，尚未真正开始创建。</div>
+                      <div class="draft-flags"><span class="chip pending">待对齐</span><span class="chip active">可开始</span></div>
                     </div>
                   </div>
                 </div>
@@ -1175,12 +1239,12 @@
               <div class="draft-collapsed-body" aria-hidden="true">
                 <div class="draft-count">3</div>
                 <div class="draft-mini-stack">
-                  <div class="draft-mini-avatar active">增</div>
+                  <div class="draft-mini-avatar active">测</div>
                   <div class="draft-mini-avatar">品</div>
                   <div class="draft-mini-avatar">障</div>
                 </div>
                 <div class="draft-collapsed-label">会话</div>
-                <div class="helper">创建中</div>
+                <div class="helper">待对齐</div>
               </div>
             </section>
           </aside>
@@ -1189,102 +1253,103 @@
             <section class="panel chat-panel">
               <div class="panel-head chat-panel-head">
                   <div class="chat-identity">
-                    <div class="chat-avatar">增</div>
+                    <div class="chat-avatar">测</div>
                     <div>
-                      <div class="panel-title">增长分析师</div>
-                      <div class="chat-meta">阶段 4 / 6</div>
+                      <div class="panel-title">workflow_tester</div>
+                      <div class="chat-meta">角色画像收集 · 2 / 6</div>
                     </div>
                   </div>
-                <div class="chip-row"><span class="chip running">创建中</span><span class="chip warn">预发布态</span></div>
+                <div class="chip-row"><span class="chip pending">待对齐</span><span class="chip active">可开始未开始</span><span class="chip archive">当前无任务图</span></div>
               </div>
               <div class="main-body chat-main">
                   <div class="scroll conversation-scroll">
                     <div class="message user">
                       <div class="message-role">你</div>
                       <div class="message-body">
-                        <div class="message-meta"><span class="message-sender">你</span><span>11:16</span></div>
-                        <div class="message-text">我想创建一个“增长分析师”角色。它要能把模糊增长问题拆成指标、实验路径、优先级和复盘建议。</div>
+                        <div class="message-meta"><span class="message-sender">你</span><span>13:19</span></div>
+                        <div class="message-text">你好，帮我创建一个专门用于测试 workflow 的 agent。对了，你知道 workflow 是什么吧。</div>
+                      </div>
+                    </div>
+                    <div class="message assistant">
+                      <div class="message-role">助</div>
+                      <div class="message-body">
+                        <div class="message-meta"><span class="message-sender">Analyst</span><span>13:20</span></div>
+                        <div class="message-text">我先按当前描述收口成草案。现在先不进入后台阶段，优先把名称、角色目标、核心能力和协作方式收干净；这样后面开始创建时，用到的才是可信草稿。</div>
                       </div>
                     </div>
                     <div class="message user">
                       <div class="message-role">你</div>
                       <div class="message-body">
-                        <div class="message-meta"><span class="message-sender">你</span><span>11:17</span></div>
-                        <div class="message-text">希望它写出来像“问题树 + 指标漏斗 + 实验方案”。我上传两张参考图给它理解信息密度和表达方式。</div>
-                        <div class="asset-row">
-                          <div class="asset-card"><div class="mini-k">图片 A</div><div class="mini-v">拆解图</div><div class="helper">用于理解结构密度</div></div>
-                          <div class="asset-card"><div class="mini-k">图片 B</div><div class="mini-v">优先级画布</div><div class="helper">用于理解展示层级</div></div>
-                        </div>
+                        <div class="message-meta"><span class="message-sender">你</span><span>13:21</span></div>
+                        <div class="message-text">改成 workflow_tester。</div>
                       </div>
                     </div>
-                    <div class="message assistant">
-                      <div class="message-role">助</div>
+                    <div class="message system">
                       <div class="message-body">
-                        <div class="message-meta"><span class="message-sender">Analyst</span><span>11:18</span></div>
-                        <div class="message-text">已识别角色目标、核心能力、风格示例与禁止项。当前仍在补全：
-1. 输出边界是否允许直接给开发实现建议；
-2. 默认交付物是否包含实验排期；
-3. 该角色是否需要维护长期方法库。</div>
+                        <div class="message-text">草稿状态更新 · 已把角色名称改成 workflow_tester · 当前仍未开始创建</div>
                       </div>
                     </div>
                     <div class="message user">
                       <div class="message-role">你</div>
                       <div class="message-body">
-                        <div class="message-meta"><span class="message-sender">你</span><span>11:19</span></div>
-                        <div class="message-text">边界上不要直接写代码实现；默认交付物要有实验排期；需要能沉淀方法模板，但先别自动发布。</div>
-                      </div>
-                    </div>
-                    <div class="message system">
-                      <div class="message-body">
-                        <div class="message-text">系统任务更新 · 已创建 TC-214 收集行业案例资料、TC-215 沉淀增长画像资料</div>
+                        <div class="message-meta"><span class="message-sender">你</span><span>13:22</span></div>
+                        <div class="message-text">核心能力是能跟随 workflow 版本，对现有功能进行功能验收以及 bug 探测，偶尔可以做一些探索性测试，会标注 bug 紧急程度，让 workflow agent 更具优先级做 bug 修复。</div>
                       </div>
                     </div>
                     <div class="message assistant">
                       <div class="message-role">助</div>
                       <div class="message-body">
-                        <div class="message-meta"><span class="message-sender">Analyst</span><span>11:20</span></div>
-                        <div class="message-text">角色画像已经足够清晰，我切到“能力后台生成”。先让新角色在后台产出问题树和指标漏斗，再把结果回传给你看。</div>
+                        <div class="message-meta"><span class="message-sender">Analyst</span><span>13:23</span></div>
+                        <div class="message-text">核心能力我先收进草稿。当前最小启动字段已经齐了，但我先不把它直接推到“开始创建”，因为你下一轮已经指出角色目标写得不对；这时更应该进入字段差异对齐，而不是假装已经收口完成。</div>
                       </div>
                     </div>
-                    <div class="message system">
+                    <div class="message user">
+                      <div class="message-role">你</div>
                       <div class="message-body">
-                        <div class="message-text">系统任务更新 · 已切到结果回看与调向 · 当前后台任务：TC-217 整理能力截图与案例回传包 · 阶段 4 废案已收纳 3 个</div>
-                      </div>
-                    </div>
-                    <div class="message system" data-scenario="heavy" hidden>
-                      <div class="message-body">
-                        <div class="message-text">系统任务更新 · 阶段 2-4 已累计完成 13 个后台任务 · 当前阶段并行有效任务 6 个</div>
+                        <div class="message-meta"><span class="message-sender">你</span><span>13:24</span></div>
+                        <div class="message-text">当前角色画像中角色目标写得不对，你能帮我调整一下吗。</div>
                       </div>
                     </div>
                     <div class="message assistant">
                       <div class="message-role">助</div>
                       <div class="message-body">
-                        <div class="message-meta"><span class="message-sender">Analyst</span><span>11:23</span></div>
-                        <div class="message-text">我已经回传两张能力截图。你先看右侧统一图里的当前任务锚点，再告诉我要不要补“实验排期”和“复盘模板”。</div>
-                        <div class="asset-row">
-                          <div class="asset-card"><div class="mini-k">能力预览 A</div><div class="mini-v">问题树草图</div><div class="helper">已覆盖指标拆解与实验入口</div></div>
-                          <div class="asset-card"><div class="mini-k">能力预览 B</div><div class="mini-v">指标漏斗</div><div class="helper">已补充优先级与复盘挂点</div></div>
-                        </div>
+                        <div class="message-meta"><span class="message-sender">Analyst</span><span>13:25</span></div>
+                        <div class="message-text">我先进入“字段差异对齐”，只修角色目标，不动其他已确认字段。
+
+当前角色目标：
+你好，帮我创建一个专门用于测试 workflow 的 agent。对了，你知道 workflow 是什么吧。
+
+建议改成：
+围绕 workflow 的版本演进，对现有功能做功能验收、缺陷探测和少量探索性测试，标注 bug 紧急程度，并为 workflow agent 提供修复优先级依据。
+
+当前还待你确认：
+1. 协作方式是“主动跟随版本巡检”，还是“收到版本后再验收”；
+2. 边界里是否要明确“不直接修 bug，只给结论和优先级建议”。</div>
+                      </div>
+                    </div>
+                    <div class="message system">
+                      <div class="message-body">
+                        <div class="message-text">草稿状态更新 · 已满足最小启动字段 · 当前仍有 2 项待对齐 · 尚未创建任务图</div>
                       </div>
                     </div>
                   </div>
                   <div class="composer-card">
                     <div class="composer-box">
                       <div class="draft-inline-files">
-                        <span class="draft-file">问题树参考图</span>
-                        <span class="draft-file">漏斗样例图</span>
+                        <span class="draft-file">workflow 当前页截图</span>
                       </div>
-                      <textarea class="composer-input">把实验排期补进去，但不要替我假设研发资源；复盘模板先给一个轻量版。</textarea>
+                      <textarea class="composer-input">协作方式改成：主动跟随版本巡检并输出验收结论；边界补一条：不直接修 bug，只给优先级建议。</textarea>
                     </div>
                     <div class="composer-actions">
                       <div class="composer-left composer-toolbar">
                         <span class="toolbar-dot">+</span>
                         <span class="toolbar-dot">A</span>
                         <span class="toolbar-dot">#</span>
-                        <span class="attach-pill">2 张图片已附带</span>
+                        <span class="attach-pill">1 张图片已附带</span>
                       </div>
                       <div class="action-row">
-                        <span class="helper">Enter 发送</span>
+                        <span class="helper">当前仍有 2 项待对齐；可以开始，但建议先完成字段确认。</span>
+                        <button class="alt">开始创建</button>
                         <button>发送</button>
                       </div>
                     </div>
@@ -1294,7 +1359,7 @@
           </section>
 
           <aside class="column detail-column">
-            <section class="panel detail-panel" id="detailPanel">
+            <section class="panel detail-panel" id="detailPanelLegacy" hidden>
               <div class="panel-head">
                 <div>
                   <div class="panel-title">创建角色辅助区</div>
@@ -1305,8 +1370,8 @@
                 </div>
                 <div class="chip-row"><span class="chip running">阶段 4 / 6</span><span class="chip archive">已收纳废案 3</span><span class="chip active" data-scenario="heavy" hidden>当前有效任务 6</span><span class="chip done" data-scenario="heavy" hidden>已完成任务 13</span></div>
               </div>
-              <div class="scroll detail-body" id="detailBody">
-                <div class="detail-pane active" data-detail-pane="evolution">
+              <div class="scroll detail-body" id="detailBodyLegacy">
+                <div class="detail-pane active" data-detail-pane="evolution-legacy">
                   <div class="evolution-card">
                     <div class="evolution-head">
                       <div>
@@ -1832,7 +1897,7 @@
                     </div>
                   </div>
                 </div>
-                <div class="detail-pane" data-detail-pane="profile">
+                <div class="detail-pane" data-detail-pane="profile-legacy">
                   <div class="profile-card">
                     <div class="evolution-head">
                       <div>
@@ -1874,6 +1939,281 @@
                       <li>当前已引用两张参考图，作为信息密度与表达层级的对齐依据。</li>
                       <li>当前已回传问题树草图与指标漏斗预览，可继续基于聊天调向。</li>
                     </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="task-hover-float" id="taskHoverFloatLegacy" aria-hidden="true"></div>
+            </section>
+            <section class="panel detail-panel" id="detailPanel">
+              <div class="panel-head">
+                <div>
+                  <div class="panel-title">创建角色辅助区</div>
+                  <div class="detail-tabs" role="tablist" aria-label="创建角色辅助区视图切换">
+                    <button class="detail-tab active" type="button" data-detail-tab="evolution">阶段与任务演进</button>
+                    <button class="detail-tab" type="button" data-detail-tab="profile">角色画像</button>
+                  </div>
+                </div>
+                <div class="chip-row"><span class="chip warn">待对齐</span><span class="chip active">可开始未开始</span><span class="chip archive">当前无任务图</span></div>
+              </div>
+              <div class="scroll detail-body" id="detailBody">
+                <div class="detail-pane active" data-detail-pane="evolution">
+                  <div class="evolution-card">
+                    <div class="evolution-head">
+                      <div>
+                        <div class="evolution-title">workflow_tester</div>
+                        <div class="field-note">当前仍处于字段级草稿对齐，不展示伪造的任务中心任务图。只有真正点击“开始创建”并拿到真实 `task_id` 后，阶段执行态才继续推进。</div>
+                      </div>
+                      <div class="evolution-legend">
+                        <span class="legend-item"><span class="legend-dot running"></span>当前对齐</span>
+                        <span class="legend-item"><span class="legend-dot pending"></span>待开始</span>
+                      </div>
+                    </div>
+                    <div class="process-board">
+                      <div class="process-row pending">
+                        <div class="process-stage">
+                          <div class="process-index">阶段 1</div>
+                          <div class="process-name">初始化工作区</div>
+                          <div class="process-state">待真正开始后触发</div>
+                        </div>
+                        <div class="process-track">
+                          <div class="task-card pending" tabindex="0">
+                            <div class="task-top">
+                              <div class="task-status">待触发</div>
+                              <div class="task-source script">开始创建后触发</div>
+                            </div>
+                            <div class="task-title">初始化工作区与记忆骨架</div>
+                            <div class="task-desc">当前只是草稿对齐，还没有真正进入创建执行链，所以不会提前生成工作区或任务引用。</div>
+                            <div class="task-foot">
+                              <span class="task-ref">task_id: --</span>
+                              <span class="task-hover-hint">尚未执行</span>
+                            </div>
+                            <div class="task-hover">
+                              <div class="task-hover-title">初始化工作区与记忆骨架</div>
+                              <div class="task-hover-grid">
+                                <div class="task-hover-k">触发条件</div><div class="task-hover-v">用户点击“开始创建”且后台受理成功</div>
+                                <div class="task-hover-k">当前状态</div><div class="task-hover-v">`started_at` 为空，工作区初始化尚未发生</div>
+                                <div class="task-hover-k">输出物</div><div class="task-hover-v">真实 `task_id`、工作区骨架、记忆链与后续任务投影</div>
+                                <div class="task-hover-k">说明</div><div class="task-hover-v">阶段 1 是执行前置，不应在草稿期伪装成已完成</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="process-row current">
+                        <div class="process-stage">
+                          <div class="process-index">阶段 2</div>
+                          <div class="process-name">角色画像收集</div>
+                          <div class="process-state">草稿对齐中</div>
+                        </div>
+                        <div class="process-track">
+                          <div class="task-card running" tabindex="0">
+                            <div class="task-top">
+                              <div class="task-status">进行中</div>
+                              <div class="task-source">当前会话草稿</div>
+                            </div>
+                            <div class="task-title">字段差异对齐</div>
+                            <div class="task-desc">已确认角色名和核心能力，但 `角色目标 / 协作方式` 仍待收口，当前不应误判为“画像已完成”。</div>
+                            <div class="task-foot">
+                              <span class="task-ref">draft-only</span>
+                              <span class="task-hover-hint">无 task_id</span>
+                            </div>
+                            <div class="task-hover">
+                              <div class="task-hover-title">字段差异对齐</div>
+                              <div class="task-hover-grid">
+                                <div class="task-hover-k">来源</div><div class="task-hover-v">当前聊天会话中的字段级修正</div>
+                                <div class="task-hover-k">已确认</div><div class="task-hover-v">`role_name=workflow_tester`，核心能力描述已收进草稿</div>
+                                <div class="task-hover-k">待对齐</div><div class="task-hover-v">角色目标候选值确认、协作方式触发模式确认</div>
+                                <div class="task-hover-k">下一步</div><div class="task-hover-v">继续编辑字段或确认候选值；确认后再决定是否开始创建</div>
+                              </div>
+                            </div>
+                          </div>
+                          <div class="task-card pending" tabindex="0">
+                            <div class="task-top">
+                              <div class="task-status">待确认</div>
+                              <div class="task-source">当前会话草稿</div>
+                            </div>
+                            <div class="task-title">补齐协作方式与边界</div>
+                            <div class="task-desc">系统已识别到“主动巡检 / 收到版本后再验收”两种协作候选，还需要用户选定最终规则并补一条边界。</div>
+                            <div class="task-foot">
+                              <span class="task-ref">待对齐 2 项</span>
+                              <span class="task-hover-hint">字段未收口</span>
+                            </div>
+                            <div class="task-hover">
+                              <div class="task-hover-title">补齐协作方式与边界</div>
+                              <div class="task-hover-grid">
+                                <div class="task-hover-k">协作方式</div><div class="task-hover-v">主动跟随版本巡检；或收到版本通知后再验收</div>
+                                <div class="task-hover-k">边界候选</div><div class="task-hover-v">不直接修 bug，只给结论和优先级建议</div>
+                                <div class="task-hover-k">当前限制</div><div class="task-hover-v">未开始前不生成任务图、不写入 `started_at`、不展示废案统计</div>
+                                <div class="task-hover-k">完成标准</div><div class="task-hover-v">两项字段确认后，草稿可停留在“可开始未开始”待用户触发</div>
+                              </div>
+                            </div>
+                          </div>
+                          <div class="analyst-action">
+                            <div class="analyst-action-title">当前阶段说明</div>
+                            <div class="analyst-action-body">这一步只做草稿对象的字段编辑与差异对齐，不生成任务中心任务、不提前展示阶段 4 的结果卡，也不把“消息处理完成”冒充成“创建已推进”。</div>
+                            <div class="analyst-action-pills"><span class="analyst-pill">继续修字段</span><span class="analyst-pill">确认后再开始</span></div>
+                          </div>
+                          <div class="rollback-note">当前已满足最小启动字段，但在 `角色目标 / 协作方式` 收口前，建议继续停留在“待对齐”。</div>
+                        </div>
+                      </div>
+                      <div class="process-row pending">
+                        <div class="process-stage">
+                          <div class="process-index">阶段 3</div>
+                          <div class="process-name">能力后台生成</div>
+                          <div class="process-state">待进入</div>
+                        </div>
+                        <div class="process-track">
+                          <div class="analyst-action">
+                            <div class="analyst-action-title">进入条件</div>
+                            <div class="analyst-action-body">只在阶段 2 草稿确认后进入，届时基于干净的 `role_spec` 生成验收样例、探测策略与工作区骨架。</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="process-row pending">
+                        <div class="process-stage">
+                          <div class="process-index">阶段 4</div>
+                          <div class="process-name">结果回看与调向</div>
+                          <div class="process-state">待进入</div>
+                        </div>
+                        <div class="process-track">
+                          <div class="analyst-action">
+                            <div class="analyst-action-title">进入条件</div>
+                            <div class="analyst-action-body">只有阶段 3 真正产出第一版验收/探测结果后，才展示回看与调向。开始前不应伪造结果图或废案口袋。</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="process-row pending">
+                        <div class="process-stage">
+                          <div class="process-index">阶段 5</div>
+                          <div class="process-name">确认验收</div>
+                          <div class="process-state">待进入</div>
+                        </div>
+                        <div class="process-track">
+                          <div class="analyst-action">
+                            <div class="analyst-action-title">进入条件</div>
+                            <div class="analyst-action-body">等待用户明确确认角色是否满足预期；若不满足，再回到阶段 2 或 3 继续补齐。</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="process-row pending">
+                        <div class="process-stage">
+                          <div class="process-index">阶段 6</div>
+                          <div class="process-name">完成角色创建</div>
+                          <div class="process-state">待进入</div>
+                        </div>
+                        <div class="process-track">
+                          <div class="analyst-action">
+                            <div class="analyst-action-title">进入条件</div>
+                            <div class="analyst-action-body">验收通过后才回写完成态，并保留角色记忆与工作区骨架。当前阶段不会伪装成已在执行或已完成。</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="detail-pane" data-detail-pane="profile">
+                  <div class="profile-card">
+                    <div class="evolution-head">
+                      <div>
+                        <div class="evolution-title">workflow_tester 草稿</div>
+                      </div>
+                      <div class="chip-row"><span class="chip warn">待对齐</span><span class="chip active">可开始未开始</span></div>
+                    </div>
+                    <div class="profile-summary">
+                      <div class="profile-kv"><div class="profile-k">当前阶段</div><div class="profile-v">角色画像收集 · 2 / 6</div></div>
+                      <div class="profile-kv"><div class="profile-k">草稿状态</div><div class="profile-v">待对齐，尚未收口</div></div>
+                      <div class="profile-kv"><div class="profile-k">开始状态</div><div class="profile-v">最小字段已满足，但尚未真正开始创建</div></div>
+                      <div class="profile-kv"><div class="profile-k">待补字段</div><div class="profile-v">角色目标 / 协作方式</div></div>
+                      <div class="profile-kv"><div class="profile-k">task_id</div><div class="profile-v mono">--</div></div>
+                      <div class="profile-kv"><div class="profile-k">附件状态</div><div class="profile-v">1 张参考截图，仅用于对齐，不直接写进角色正文</div></div>
+                    </div>
+                  </div>
+                  <div class="profile-card">
+                    <div class="field-head">
+                      <div class="field-title-row">
+                        <div class="profile-section-title">角色名</div>
+                        <span class="chip done">已确认</span>
+                      </div>
+                      <div class="field-actions"><span class="field-action">直接沿用</span></div>
+                    </div>
+                    <div class="field-note">当前主标题、草稿名称与会话里的最新改名动作已经对齐到 `workflow_tester`，不再停留在最初的模糊测试文案。</div>
+                  </div>
+                  <div class="profile-card">
+                    <div class="field-head">
+                      <div class="field-title-row">
+                        <div class="profile-section-title">角色目标</div>
+                        <span class="chip warn">待修正</span>
+                      </div>
+                      <div class="field-actions"><span class="field-action">仅改此字段</span></div>
+                    </div>
+                    <div class="field-note">这项问题不是“缺字段”，而是当前值被原始聊天首句污染了，需要显式做差异对齐。</div>
+                    <div class="field-diff">
+                      <div class="field-diff-grid">
+                        <div class="field-diff-block">
+                          <div class="field-diff-k">当前值</div>
+                          <div class="field-diff-v">你好，帮我创建一个专门用于测试 workflow 的 agent。对了，你知道 workflow 是什么吧。</div>
+                        </div>
+                        <div class="field-diff-block">
+                          <div class="field-diff-k">建议改成</div>
+                          <div class="field-diff-v">围绕 workflow 的版本演进，对现有功能做功能验收、缺陷探测和少量探索性测试，标注 bug 紧急程度，并为 workflow agent 提供修复优先级依据。</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="profile-card">
+                    <div class="field-head">
+                      <div class="field-title-row">
+                        <div class="profile-section-title">核心能力</div>
+                        <span class="chip done">已确认</span>
+                      </div>
+                      <div class="field-actions"><span class="field-action">保留当前稿</span></div>
+                    </div>
+                    <ul class="profile-list">
+                      <li>跟随 workflow 版本变化，对现有功能做功能验收。</li>
+                      <li>进行缺陷探测，并在必要时补少量探索性测试。</li>
+                      <li>标注 bug 紧急程度，为 workflow agent 提供修复优先级依据。</li>
+                    </ul>
+                  </div>
+                  <div class="profile-card">
+                    <div class="field-head">
+                      <div class="field-title-row">
+                        <div class="profile-section-title">边界</div>
+                        <span class="chip warn">待补充</span>
+                      </div>
+                      <div class="field-actions"><span class="field-action">补一条即可</span></div>
+                    </div>
+                    <div class="field-note">当前建议新增一条明确边界：不直接修 bug，只给验收结论和优先级建议。系统抱怨语句不应写入这里。</div>
+                  </div>
+                  <div class="profile-card">
+                    <div class="field-head">
+                      <div class="field-title-row">
+                        <div class="profile-section-title">协作方式</div>
+                        <span class="chip warn">待确认</span>
+                      </div>
+                      <div class="field-actions"><span class="field-action">二选一</span></div>
+                    </div>
+                    <div class="field-diff">
+                      <div class="field-diff-grid">
+                        <div class="field-diff-block">
+                          <div class="field-diff-k">当前状态</div>
+                          <div class="field-diff-v">尚未收口。系统只知道该角色需要围绕 workflow 版本做验收，但还没有确定触发方式。</div>
+                        </div>
+                        <div class="field-diff-block">
+                          <div class="field-diff-k">待选方向</div>
+                          <div class="field-diff-v">主动跟随版本巡检并输出验收结论；或收到版本通知后再执行验收。</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="profile-card">
+                    <div class="field-head">
+                      <div class="field-title-row">
+                        <div class="profile-section-title">附件与引用</div>
+                        <span class="chip active">仅作参考</span>
+                      </div>
+                      <div class="field-actions"><span class="field-action">轻量引用</span></div>
+                    </div>
+                    <div class="field-note">当前已附带 `workflow 当前页截图`。这类图片应只保存元数据与可回取引用，供字段对齐时查看，不应以内联 base64 直接拼进上游上下文。</div>
                   </div>
                 </div>
               </div>

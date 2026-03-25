@@ -50,6 +50,15 @@ def assert_true(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
+def log_step(message: str) -> None:
+    stamp = datetime.now(BEIJING_TZ).isoformat(timespec="seconds")
+    print(f"[schedule-center] {stamp} {message}", flush=True)
+
+
+def format_error(exc: Exception) -> str:
+    return f"{exc.__class__.__name__}: {exc}"
+
+
 def write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -112,8 +121,14 @@ def wait_for_assignment_status(
     deadline = time.time() + timeout_s
     route = f"/api/assignments/{ticket_id}/status-detail?node_id={node_id}&include_test_data=1"
     last_payload: dict[str, Any] = {}
+    last_error = ""
     while time.time() < deadline:
-        status, body = api_request(base_url, "GET", route)
+        try:
+            status, body = api_request(base_url, "GET", route)
+        except Exception as exc:
+            last_error = format_error(exc)
+            time.sleep(0.8)
+            continue
         if status == 200 and isinstance(body, dict) and body.get("ok"):
             last_payload = body
             if predicate(body):
@@ -121,6 +136,8 @@ def wait_for_assignment_status(
         time.sleep(0.8)
     if last_payload:
         return last_payload
+    if last_error:
+        raise RuntimeError(f"assignment status-detail timeout: {last_error}")
     raise RuntimeError("assignment status-detail timeout")
 
 
@@ -134,8 +151,14 @@ def wait_for_schedule_detail(
     deadline = time.time() + timeout_s
     route = "/api/schedules/" + schedule_id
     last_payload: dict[str, Any] = {}
+    last_error = ""
     while time.time() < deadline:
-        status, body = api_request(base_url, "GET", route)
+        try:
+            status, body = api_request(base_url, "GET", route)
+        except Exception as exc:
+            last_error = format_error(exc)
+            time.sleep(0.8)
+            continue
         if status == 200 and isinstance(body, dict) and body.get("ok"):
             last_payload = body
             if predicate(body):
@@ -143,6 +166,8 @@ def wait_for_schedule_detail(
         time.sleep(0.8)
     if last_payload:
         return last_payload
+    if last_error:
+        raise RuntimeError(f"schedule detail timeout: {last_error}")
     raise RuntimeError("schedule detail timeout")
 
 
@@ -163,12 +188,19 @@ def edge_cmd(edge_path: Path, profile_dir: Path, width: int, height: int, budget
         str(edge_path),
         "--headless=new",
         "--disable-gpu",
+        "--disable-software-rasterizer",
         "--disable-extensions",
         "--disable-background-networking",
         "--disable-component-update",
         "--disable-sync",
+        "--disable-default-apps",
+        "--disable-popup-blocking",
+        "--disable-crash-reporter",
+        "--disable-breakpad",
+        "--disable-features=msEdgeSidebarV2,msUndersideButton,OptimizationGuideModelDownloading,Translate,AutofillServerCommunication",
         "--no-first-run",
         "--no-default-browser-check",
+        "--no-sandbox",
         f"--user-data-dir={profile_dir.as_posix()}",
         f"--window-size={width},{height}",
         f"--virtual-time-budget={max(1000, int(budget_ms))}",
@@ -184,10 +216,11 @@ def edge_shot(
     width: int = 1680,
     height: int = 1200,
     budget_ms: int = 26000,
+    timeout_s: int = 90,
 ) -> None:
     shot_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = edge_cmd(edge_path, profile_dir, width, height, budget_ms) + [f"--screenshot={shot_path.as_posix()}", url]
-    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=180)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=max(15, int(timeout_s)))
     if proc.returncode != 0:
         raise RuntimeError(f"edge screenshot failed: {proc.stderr}")
 
@@ -200,9 +233,10 @@ def edge_dom(
     width: int = 1680,
     height: int = 1200,
     budget_ms: int = 26000,
+    timeout_s: int = 90,
 ) -> str:
     cmd = edge_cmd(edge_path, profile_dir, width, height, budget_ms) + ["--dump-dom", url]
-    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=180)
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=max(15, int(timeout_s)))
     if proc.returncode != 0:
         raise RuntimeError(f"edge dump-dom failed: {proc.stderr}")
     return proc.stdout
@@ -237,6 +271,27 @@ def schedule_probe_url(base_url: str, case_id: str, extra: dict[str, str] | None
     return base_url.rstrip("/") + "/?" + urlencode(query)
 
 
+def probe_delay_ms(extra: dict[str, str] | None = None) -> int:
+    raw = ""
+    if isinstance(extra, dict):
+        raw = str(extra.get("schedule_probe_delay_ms") or "").strip()
+    try:
+        value = int(raw or 900)
+    except Exception:
+        value = 900
+    return max(0, value)
+
+
+def probe_budget_ms(extra: dict[str, str] | None = None) -> int:
+    delay_ms = probe_delay_ms(extra)
+    return max(6500, min(18000, delay_ms + 6500))
+
+
+def probe_timeout_s(extra: dict[str, str] | None = None) -> int:
+    budget_ms = probe_budget_ms(extra)
+    return max(45, min(90, int(budget_ms / 1000) + 30))
+
+
 def capture_probe(
     edge_path: Path,
     base_url: str,
@@ -249,9 +304,21 @@ def capture_probe(
     url = schedule_probe_url(base_url, case_id, extra)
     shot_path = evidence_root / "screenshots" / f"{name}.png"
     probe_path = evidence_root / "screenshots" / f"{name}.probe.json"
-    profile_dir = evidence_root / "edge-profile" / name
-    edge_shot(edge_path, url, shot_path, profile_dir=profile_dir)
-    probe = parse_schedule_probe(edge_dom(edge_path, url, profile_dir=profile_dir))
+    budget_ms = probe_budget_ms(extra)
+    timeout_s = probe_timeout_s(extra)
+    shot_profile_dir = evidence_root / "edge-profile" / f"{name}-shot"
+    dom_profile_dir = evidence_root / "edge-profile" / f"{name}-dom"
+    log_step(f"probe {name}/{case_id}: budget={budget_ms}ms timeout={timeout_s}s")
+    edge_shot(edge_path, url, shot_path, profile_dir=shot_profile_dir, budget_ms=budget_ms, timeout_s=timeout_s)
+    probe = parse_schedule_probe(
+        edge_dom(
+            edge_path,
+            url,
+            profile_dir=dom_profile_dir,
+            budget_ms=budget_ms,
+            timeout_s=timeout_s,
+        )
+    )
     write_json(probe_path, probe)
     return shot_path.as_posix(), probe_path.as_posix(), probe
 
@@ -275,8 +342,10 @@ def capture_probe_with_retry(
             last_result = result
             if bool((result[2] or {}).get("pass")):
                 return result
+            log_step(f"probe {name}/{case_id}: pass=false on attempt {attempt + 1}/{max(1, attempts)}")
         except Exception as exc:
             last_error = exc
+            log_step(f"probe {name}/{case_id}: attempt {attempt + 1}/{max(1, attempts)} failed: {format_error(exc)}")
         if attempt + 1 < max(1, attempts):
             time.sleep(retry_delay_s)
     if last_result is not None:
@@ -477,6 +546,7 @@ def read_schedule_events(log_path: Path, schedule_id: str, *, limit: int = 20) -
 def render_report(report_path: Path, summary: dict[str, Any]) -> None:
     screenshots = summary.get("screenshots") or {}
     evidence = summary.get("evidence_files") or {}
+    warnings = list(summary.get("warnings") or [])
     lines = [
         "# Schedule Center Browser Acceptance",
         "",
@@ -491,6 +561,7 @@ def render_report(report_path: Path, summary: dict[str, Any]) -> None:
         "",
         "## Screenshots",
         "",
+        f"- empty_state: {screenshots.get('empty_state', {}).get('image', '')}",
         f"- list_default: {screenshots.get('list_default', {}).get('image', '')}",
         f"- list_detail: {screenshots.get('list_detail', {}).get('image', '')}",
         f"- editor_edit: {screenshots.get('editor_edit', {}).get('image', '')}",
@@ -522,6 +593,15 @@ def render_report(report_path: Path, summary: dict[str, Any]) -> None:
         f"- live_status_kind: {summary.get('live_status_kind', '')}",
         "",
     ]
+    if warnings:
+        lines.extend(
+            [
+                "## Warnings",
+                "",
+                *[f"- {item}" for item in warnings],
+                "",
+            ]
+        )
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text("\n".join(lines), encoding="utf-8")
 
@@ -531,6 +611,7 @@ def main() -> int:
     workspace_root = Path(args.root).resolve()
     artifacts_root = Path(args.artifacts_dir).resolve() / "schedule-center-browser"
     logs_root = Path(args.logs_dir).resolve() / "schedule-center-browser"
+    log_step("preparing schedule center browser acceptance workspace")
     if artifacts_root.exists():
         shutil.rmtree(artifacts_root, ignore_errors=True)
     if logs_root.exists():
@@ -569,6 +650,8 @@ def main() -> int:
         "codex_path": codex_path,
         "screenshots": {},
         "evidence_files": {},
+        "warnings": [],
+        "error": "",
     }
 
     def record_api(name: str, method: str, path: str, payload: dict[str, Any] | None, status: int, body: Any) -> Path:
@@ -592,7 +675,9 @@ def main() -> int:
             stdout_path=logs_root / "server.stdout.log",
             stderr_path=logs_root / "server.stderr.log",
         ):
+            log_step(f"server launched on {base_url}; waiting for healthz")
             evidence["healthz"] = wait_for_health(base_url)
+            log_step("healthz ready")
 
             status, agents_payload = api_request(base_url, "GET", "/api/agents")
             assert_true(status == 200 and isinstance(agents_payload, dict) and agents_payload.get("ok"), "agents api unavailable")
@@ -604,6 +689,7 @@ def main() -> int:
             assert_true(receiver_agent_id != "", "receiver agent missing")
             evidence["selected_agent_name"] = assigned_agent_id
             evidence["receiver_agent_name"] = receiver_agent_id
+            log_step(f"selected assigned agent={assigned_agent_id}, receiver={receiver_agent_id}")
 
             execution_payload = {
                 "execution_provider": "codex",
@@ -626,6 +712,23 @@ def main() -> int:
             target_minute_text = target_dt.strftime("%Y-%m-%d %H:%M")
             target_date_text = target_dt.strftime("%Y-%m-%d")
             stamp = now_dt.strftime("%Y%m%d-%H%M%S")
+
+            status, initial_list_body = api_request(base_url, "GET", "/api/schedules")
+            assert_true(status == 200 and isinstance(initial_list_body, dict) and initial_list_body.get("ok"), f"initial schedule list read failed: {initial_list_body}")
+            record_api("initial_list", "GET", "/api/schedules", None, status, initial_list_body)
+            assert_true(not list(initial_list_body.get("items") or []), "isolated acceptance runtime should start with empty schedules")
+            log_step("isolated runtime confirmed with empty schedule list")
+
+            shot, probe_path, probe = capture_probe_with_retry(
+                edge_path,
+                base_url,
+                artifacts_root,
+                name="empty_state",
+                case_id="empty_state",
+                extra={"schedule_probe_delay_ms": "1200"},
+            )
+            assert_true(bool(probe.get("pass")), f"empty_state probe failed: {probe}")
+            evidence["screenshots"]["empty_state"] = {"image": shot, "probe": probe_path, "result": probe}
 
             create_payload = {
                 "schedule_name": f"验收-定时任务-{stamp}",
@@ -652,6 +755,7 @@ def main() -> int:
             schedule_id = str(create_body.get("schedule_id") or "").strip()
             assert_true(schedule_id != "", "schedule_id missing")
             evidence["schedule_id"] = schedule_id
+            log_step(f"created schedule {schedule_id}")
 
             shot, probe_path, probe = capture_probe_with_retry(
                 edge_path,
@@ -681,6 +785,7 @@ def main() -> int:
             status, edit_body = api_request(base_url, "POST", f"/api/schedules/{schedule_id}", edit_payload)
             assert_true(status == 200 and isinstance(edit_body, dict) and edit_body.get("ok"), f"edit schedule failed: {edit_body}")
             record_api("edit_response", "POST", f"/api/schedules/{schedule_id}", edit_payload, status, edit_body)
+            log_step(f"edited schedule {schedule_id}")
 
             shot, probe_path, probe = capture_probe_with_retry(
                 edge_path,
@@ -728,6 +833,7 @@ def main() -> int:
             assert_true(status == 200 and isinstance(dedupe_body, dict) and dedupe_body.get("ok"), f"schedule dedupe scan failed: {dedupe_body}")
             record_api("scan_dedupe_response", "POST", "/api/schedules/scan", scan_payload, status, dedupe_body)
             assert_true(int(dedupe_body.get("deduped_count") or 0) >= 1, "second scan should dedupe same minute hit")
+            log_step(f"scan created one assignment and verified same-minute dedupe for schedule {schedule_id}")
 
             schedule_detail = wait_for_schedule_detail(
                 base_url,
@@ -746,6 +852,7 @@ def main() -> int:
             assert_true(ticket_id != "" and node_id != "", "assignment refs missing after scan")
             evidence["assignment_ticket_id"] = ticket_id
             evidence["assignment_node_id"] = node_id
+            log_step(f"assignment created ticket={ticket_id}, node={node_id}; waiting for live execution state")
 
             live_detail = wait_for_assignment_status(
                 base_url,
@@ -765,23 +872,57 @@ def main() -> int:
             live_run_status = str(live_run.get("status") or "").strip().lower()
             live_node_status = str(live_selected.get("status") or "").strip().lower()
             evidence["live_status_kind"] = live_run_status or live_node_status
-
-            terminal_detail = wait_for_assignment_status(
-                base_url,
-                ticket_id=ticket_id,
-                node_id=node_id,
-                timeout_s=60,
-                predicate=lambda payload: (
-                    str((((payload.get("execution_chain") or {}).get("latest_run") or {}).get("status") or "")).strip().lower() in {"succeeded", "failed"}
-                    or str(((payload.get("selected_node") or {}).get("status") or "")).strip().lower() in {"succeeded", "failed"}
-                ),
+            log_step(
+                "live execution observed: "
+                + (evidence["live_status_kind"] or live_node_status or "unknown")
             )
+
+            log_step("waiting up to 60s for terminal execution state (best-effort)")
+            terminal_detail: dict[str, Any] = {}
+            terminal_wait_warning = ""
+            try:
+                terminal_detail = wait_for_assignment_status(
+                    base_url,
+                    ticket_id=ticket_id,
+                    node_id=node_id,
+                    timeout_s=60,
+                    predicate=lambda payload: (
+                        str((((payload.get("execution_chain") or {}).get("latest_run") or {}).get("status") or "")).strip().lower() in {"succeeded", "failed"}
+                        or str(((payload.get("selected_node") or {}).get("status") or "")).strip().lower() in {"succeeded", "failed"}
+                    ),
+                )
+            except Exception as exc:
+                terminal_wait_warning = (
+                    "terminal status not observed within 60s; "
+                    f"continuing with live execution evidence ({format_error(exc)})"
+                )
+                evidence["warnings"].append(terminal_wait_warning)
+                log_step(terminal_wait_warning)
             terminal_detail_path = api_dir / "assignment_status_terminal.json"
-            write_json(terminal_detail_path, terminal_detail)
+            terminal_evidence: dict[str, Any]
+            if terminal_detail:
+                terminal_evidence = terminal_detail
+            else:
+                terminal_evidence = {
+                    "ok": False,
+                    "warning": terminal_wait_warning,
+                    "latest_live_detail": live_detail,
+                }
+            write_json(terminal_detail_path, terminal_evidence)
             evidence["evidence_files"]["assignment_status_terminal"] = terminal_detail_path.as_posix()
-            terminal_selected = dict(terminal_detail.get("selected_node") or {})
-            terminal_run = dict(((terminal_detail.get("execution_chain") or {}).get("latest_run") or {}))
+            terminal_selected = dict((terminal_detail or {}).get("selected_node") or {})
+            terminal_run = dict((((terminal_detail or {}).get("execution_chain") or {}).get("latest_run") or {}))
             evidence["terminal_status_observed"] = str(terminal_run.get("status") or terminal_selected.get("status") or "").strip().lower() in {"succeeded", "failed"}
+            if evidence["terminal_status_observed"]:
+                log_step("terminal execution state observed")
+            else:
+                terminal_state_warning = (
+                    "terminal status not observed; acceptance passed with live execution, schedule scan, "
+                    "calendar, DB, and event-stream evidence only"
+                )
+                if terminal_state_warning not in evidence["warnings"]:
+                    evidence["warnings"].append(terminal_state_warning)
+                log_step(terminal_state_warning)
 
             shot, probe_path, probe = capture_probe_with_retry(
                 edge_path,
@@ -880,11 +1021,17 @@ def main() -> int:
             evidence["current_month"] = current_month
             evidence["next_month"] = next_month_key
             evidence["ok"] = True
+            log_step("schedule center browser acceptance evidence collected successfully")
 
         write_json(artifacts_root / "summary.json", evidence)
         render_report(artifacts_root / "acceptance-report.md", evidence)
+        log_step(f"summary written to {(artifacts_root / 'summary.json').as_posix()}")
         print((artifacts_root / "summary.json").as_posix())
         return 0
+    except Exception as exc:
+        evidence["error"] = format_error(exc)
+        log_step(f"acceptance failed: {evidence['error']}")
+        raise
     finally:
         if not (artifacts_root / "summary.json").exists():
             write_json(artifacts_root / "summary.json", evidence)

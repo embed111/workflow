@@ -1,4 +1,67 @@
   let defectKeywordTimer = 0;
+  const DEFECT_IMAGE_CONTENT_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+
+  function defectImageId() {
+    return 'img-' + String(Date.now()) + '-' + String(Math.floor(Math.random() * 100000));
+  }
+
+  function defectImageNameByType(contentType, fallbackName) {
+    const normalized = safe(contentType).trim().toLowerCase();
+    const nameText = safe(fallbackName).trim();
+    if (nameText) return nameText;
+    const extension = normalized === 'image/jpeg'
+      ? '.jpg'
+      : (normalized === 'image/webp' ? '.webp' : '.png');
+    return 'pasted-image-' + String(Date.now()) + extension;
+  }
+
+  async function normalizeDefectImageFile(file) {
+    const item = file || {};
+    const contentType = safe(item.type).trim().toLowerCase();
+    if (contentType && !DEFECT_IMAGE_CONTENT_TYPES.includes(contentType)) {
+      throw new Error('当前仅支持 png/jpg/webp 图片');
+    }
+    const dataUrl = await defectReadFileAsDataUrl(item);
+    return {
+      image_id: defectImageId(),
+      name: defectImageNameByType(contentType, item.name),
+      url: dataUrl,
+    };
+  }
+
+  function defectClipboardFiles(event) {
+    const clipboard = event && event.clipboardData;
+    if (!clipboard) return [];
+    const files = [];
+    if (clipboard.items && clipboard.items.length) {
+      Array.from(clipboard.items).forEach((item) => {
+        if (!item || item.kind !== 'file') return;
+        const file = item.getAsFile();
+        if (!file) return;
+        const contentType = safe(file.type || item.type).trim().toLowerCase();
+        if (contentType && !contentType.startsWith('image/')) return;
+        files.push(file);
+      });
+      if (files.length) return files;
+    }
+    return Array.from(clipboard.files || []).filter((file) => {
+      const contentType = safe(file && file.type).trim().toLowerCase();
+      return !contentType || contentType.startsWith('image/');
+    });
+  }
+
+  async function appendDefectClipboardImages(event, targetKey, setError) {
+    const files = defectClipboardFiles(event);
+    if (!files.length) return [];
+    try {
+      const rows = await appendDefectImagesFromFiles(files, targetKey);
+      if (typeof setError === 'function') setError('');
+      return rows;
+    } catch (err) {
+      if (typeof setError === 'function') setError(err.message || String(err));
+      return [];
+    }
+  }
 
   function removeDefectDraftImage(imageId) {
     const targetId = safe(imageId).trim();
@@ -16,23 +79,20 @@
 
   async function appendDefectImagesFromFiles(files, targetKey) {
     const list = Array.isArray(files) ? files : Array.from(files || []);
+    if (!list.length) return [];
     const nextRows = [];
     for (const file of list) {
       if (!file) continue;
-      const dataUrl = await defectReadFileAsDataUrl(file);
-      nextRows.push({
-        image_id: 'img-' + String(Date.now()) + '-' + String(Math.floor(Math.random() * 100000)),
-        name: safe(file.name),
-        url: dataUrl,
-      });
+      nextRows.push(await normalizeDefectImageFile(file));
     }
     if (targetKey === 'supplement') {
       state.defectSupplementDraftImages = (Array.isArray(state.defectSupplementDraftImages) ? state.defectSupplementDraftImages : []).concat(nextRows);
       renderDefectDraftImages('defectSharedImageList', state.defectSupplementDraftImages, 'removeDefectSupplementDraftImage');
-      return;
+      return nextRows;
     }
     state.defectDraftImages = (Array.isArray(state.defectDraftImages) ? state.defectDraftImages : []).concat(nextRows);
     renderDefectDraftImages('defectDraftImageList', state.defectDraftImages, 'removeDefectDraftImage');
+    return nextRows;
   }
 
   function ensureDefectProbeOutputNode() {
@@ -56,7 +116,9 @@
       pass: false,
       active_tab: readSavedAppTab(),
       active_module: safe(state.requirementBugModule).trim(),
-      list_total: Array.isArray(state.defectList) ? state.defectList.length : 0,
+      list_total: Number(state.defectListTotal || 0),
+      list_loaded_count: Array.isArray(state.defectList) ? state.defectList.length : 0,
+      list_has_more: !!state.defectListHasMore,
       selected_report_id: safe(report.report_id).trim(),
       selected_display_id: safe(report.display_id || report.dts_id || report.report_id).trim(),
       selected_status: safe(report.status).trim(),
@@ -148,6 +210,24 @@
         }
       };
     }
+    if ($('defectComposerToggleBtn')) {
+      $('defectComposerToggleBtn').onclick = () => {
+        state.defectComposerTouched = true;
+        state.defectComposerCollapsed = !state.defectComposerCollapsed;
+        renderDefectCenter();
+      };
+    }
+    if ($('defectLoadMoreBtn')) {
+      $('defectLoadMoreBtn').onclick = async () => {
+        try {
+          await withButtonLock('defectLoadMoreBtn', async () => {
+            await refreshDefectList({ append: true, skipDetail: true });
+          });
+        } catch (err) {
+          setDefectError(err.message || String(err));
+        }
+      };
+    }
     if ($('defectSubmitBtn')) {
       $('defectSubmitBtn').onclick = async () => {
         try {
@@ -178,14 +258,9 @@
         }, 220);
       });
     }
-    if ($('defectReportImageInput')) {
-      $('defectReportImageInput').addEventListener('change', async (event) => {
-        try {
-          const target = event.target;
-          await appendDefectImagesFromFiles(target && target.files ? target.files : [], 'draft');
-        } catch (err) {
-          setDefectSubmitError(err.message || String(err));
-        }
+    if ($('defectReportTextInput')) {
+      $('defectReportTextInput').addEventListener('paste', (event) => {
+        appendDefectClipboardImages(event, 'draft', setDefectSubmitError).catch(() => {});
       });
     }
     if ($('defectList')) {
@@ -248,15 +323,11 @@
           setDefectError(err.message || String(err));
         }
       });
-      $('defectDetailBody').addEventListener('change', async (event) => {
+      $('defectDetailBody').addEventListener('paste', (event) => {
         const target = event.target;
         if (!(target instanceof Element)) return;
-        if (target.id === 'defectSharedImageInput') {
-          try {
-            await appendDefectImagesFromFiles(target.files ? target.files : [], 'supplement');
-          } catch (err) {
-            setDefectError(err.message || String(err));
-          }
+        if (target.id === 'defectSharedTextInput') {
+          appendDefectClipboardImages(event, 'supplement', setDefectError).catch(() => {});
         }
       });
     }

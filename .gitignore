@@ -1,6 +1,8 @@
 .output/
 .test/
 .tmp/
+__pycache__/
+*.py[cod]
 .running/prod/
 .running/*/.workflow-local-deployment.json
 .running/control/runtime/prod/

@@ -10,7 +10,8 @@
   function defectStatusTone(value) {
     const key = safe(value).trim().toLowerCase();
     if (key === 'resolved' || key === 'closed') return 'ok';
-    if (key === 'dispute') return 'warn';
+    if (key === 'dispute') return 'dispute';
+    if (key === 'not_formal') return 'returned';
     if (key === 'unresolved') return 'active';
     return 'muted';
   }
@@ -115,7 +116,7 @@
     if (!node) return;
     const rows = Array.isArray(items) ? items : [];
     if (!rows.length) {
-      node.innerHTML = "<div class='hint'>暂未添加图片证据</div>";
+      node.innerHTML = "<div class='hint'>暂未添加图片证据，可在说明框中直接粘贴截图</div>";
       return;
     }
     node.innerHTML = rows.map((item) => defectImageThumbHtml(item, removeAction, '移除')).join('');

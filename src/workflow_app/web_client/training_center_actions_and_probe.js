@@ -434,6 +434,26 @@
     }).length;
     output.rc_profile_card_count = document.querySelectorAll('#rcDetailPaneProfile .rc-profile-card').length;
     output.rc_profile_visible = !!($('rcDetailPaneProfile') && $('rcDetailPaneProfile').classList.contains('active'));
+    output.rc_profile_section_titles = Array.from(document.querySelectorAll('#rcDetailPaneProfile [data-rc-profile-title]'))
+      .map((node) => safe(node.getAttribute('data-rc-profile-title')).trim())
+      .filter(Boolean);
+    output.rc_profile_summary_exists = !!document.querySelector("#rcDetailPaneProfile [data-rc-profile-kind='summary']");
+    output.rc_profile_single_column =
+      document.querySelectorAll('#rcDetailPaneProfile .rc-profile-card').length <= 1 ||
+      Array.from(document.querySelectorAll('#rcDetailPaneProfile .rc-profile-card'))
+        .every((node) => Math.round(node.getBoundingClientRect().left) === Math.round(document.querySelector('#rcDetailPaneProfile .rc-profile-card').getBoundingClientRect().left));
+    output.rc_profile_runtime_meta_visible = !!document.querySelector(
+      "#rcDetailPaneProfile [data-rc-profile-title='对话分析师'], " +
+      "#rcDetailPaneProfile [data-rc-profile-title='对话工作区'], " +
+      "#rcDetailPaneProfile [data-rc-profile-title='对话 Provider'], " +
+      "#rcDetailPaneProfile [data-rc-profile-title='工作区路径'], " +
+      "#rcDetailPaneProfile [data-rc-profile-title='运行态'], " +
+      "#rcDetailPaneProfile [data-rc-profile-title='适用场景'], " +
+      "#rcDetailPaneProfile [data-rc-profile-title='示例资产'], " +
+      "#rcDetailPaneProfile [data-rc-profile-title='缺失信息'], " +
+      "#rcDetailPaneProfile [data-rc-profile-title='角色名称'], " +
+      "#rcDetailPaneProfile [data-rc-profile-title='能力边界']"
+    );
     output.rc_message_image_count = document.querySelectorAll('#rcMessages .rc-message-asset img').length;
     output.rc_task_card_count = taskCards.length;
     output.rc_task_card_ids = taskCards.map((node) => safe(node.getAttribute('data-node-id')).trim()).filter(Boolean);
@@ -506,6 +526,20 @@
       role_profile_source_release_id: '',
       role_profile_first_person_summary: '',
       active_role_profile_ref: '',
+      portrait_section_keys: [],
+      portrait_section_labels: [],
+      portrait_item_count: 0,
+      portrait_has_source_section: false,
+      portrait_is_single_column: false,
+      portrait_layout_display: '',
+      portrait_layout_direction: '',
+      portrait_meta_contains_source: false,
+      portrait_release_history_title_visible: false,
+      avatar_preview_count: 0,
+      avatar_image_count: 0,
+      avatar_fallback_svg_count: 0,
+      avatar_trigger_count: 0,
+      avatar_file_input_count: 0,
       rc_module: '',
       rc_detail_tab: '',
       rc_selected_session_id: '',
@@ -605,6 +639,11 @@
 
       if (probeCase.startsWith('rc_')) {
         await prepareRoleCreationProbe(probeCase, output);
+      } else if (probeCase.startsWith('ac_rp_')) {
+        setTrainingCenterModule('agents');
+        if (selectedId) {
+          await refreshTrainingCenterSelectedAgentContext(selectedId);
+        }
       } else if (probeCase === 'ac_uo_01') {
         setTrainingCenterModule('agents');
       } else if (probeCase === 'ac_uo_02' || probeCase === 'ac_uo_03' || probeCase === 'ac_uo_04') {
@@ -943,6 +982,31 @@
       output.role_profile_source_release_id = safe(roleProfile.source_release_id).trim();
       output.role_profile_first_person_summary = safe(roleProfile.first_person_summary).trim();
       output.active_role_profile_ref = safe(selectedDetail.active_role_profile_ref || '').trim();
+      const portraitFieldsNode = $('tcPortraitFields');
+      const portraitItems = Array.from(document.querySelectorAll('#tcPortraitFields .tc-portrait-item'));
+      const portraitLabels = portraitItems
+        .map((node) => safe(node && node.querySelector ? node.querySelector('.tc-portrait-k') && node.querySelector('.tc-portrait-k').textContent : '').trim())
+        .filter((text) => !!text);
+      const portraitKeys = portraitItems
+        .map((node) => safe(node && node.getAttribute ? node.getAttribute('data-portrait-key') : '').trim())
+        .filter((text) => !!text);
+      const portraitStyle = portraitFieldsNode ? window.getComputedStyle(portraitFieldsNode) : null;
+      output.portrait_section_labels = portraitLabels;
+      output.portrait_section_keys = portraitKeys;
+      output.portrait_item_count = portraitItems.length;
+      output.portrait_has_source_section = portraitLabels.includes('角色详情来源');
+      output.portrait_layout_display = safe(portraitStyle && portraitStyle.display).trim().toLowerCase();
+      output.portrait_layout_direction = safe(portraitStyle && portraitStyle.flexDirection).trim().toLowerCase();
+      output.portrait_is_single_column =
+        output.portrait_layout_display === 'flex' && output.portrait_layout_direction === 'column';
+      output.portrait_meta_contains_source = safe($('tcAgentDetailMeta') ? $('tcAgentDetailMeta').textContent : '').includes('角色详情来源=');
+      output.portrait_release_history_title_visible = Array.from(document.querySelectorAll('#tcAgentDetailBody .card-title'))
+        .some((node) => safe(node && node.textContent).trim() === '发布历史与操作');
+      output.avatar_preview_count = document.querySelectorAll('#tcPortraitCard #tcAvatarPreview').length;
+      output.avatar_image_count = document.querySelectorAll('#tcPortraitCard #tcAvatarPreview img').length;
+      output.avatar_fallback_svg_count = document.querySelectorAll('#tcPortraitCard #tcAvatarPreview svg').length;
+      output.avatar_trigger_count = document.querySelectorAll('#tcPortraitCard .tc-avatar-trigger').length;
+      output.avatar_file_input_count = document.querySelectorAll('#tcPortraitCard .tc-avatar-file-input').length;
       collectRoleCreationProbeState(output);
       if ((probeCase === 'ac_ar_rr_12' || probeCase === 'ac_ar_rr_19') && output.release_report_button_count >= 1) {
         const requestedReleaseVersion = safe(queryParam('tc_probe_release_version')).trim();
@@ -1000,7 +1064,19 @@
                             ? output.rc_module === 'create-role' &&
                               output.rc_detail_tab === 'profile' &&
                               output.rc_profile_visible &&
-                              output.rc_profile_card_count >= 4 &&
+                              output.rc_profile_card_count >= 7 &&
+                              output.rc_profile_summary_exists &&
+                              output.rc_profile_single_column &&
+                              !output.rc_profile_runtime_meta_visible &&
+                              JSON.stringify(output.rc_profile_section_titles) === JSON.stringify([
+                                'summary',
+                                '角色名',
+                                '角色目标',
+                                '核心能力',
+                                '边界',
+                                '协作方式',
+                                '附件与引用',
+                              ]) &&
                               !!output.rc_role_name
                             : probeCase === 'rc_task_hover'
                               ? output.rc_module === 'create-role' &&

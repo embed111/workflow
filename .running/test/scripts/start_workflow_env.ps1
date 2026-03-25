@@ -129,10 +129,18 @@ function Ensure-EnvironmentDeployment {
         return
     }
     Write-Host "[workflow-start] deploy $Environment because running copy is missing or untrusted ($($deploymentState.reason)) ..."
-    & (Join-Path $SourceRoot 'scripts\deploy_workflow_env.ps1') `
-        -Environment $Environment `
-        -BindHost $BindHost `
-        -Port $Port
+    $deployArgs = @(
+        '-Environment',
+        $Environment,
+        '-BindHost',
+        $BindHost,
+        '-Port',
+        $Port
+    )
+    if ($Environment -eq 'prod') {
+        $deployArgs += '-AllowDirectProdDeploy'
+    }
+    & (Join-Path $SourceRoot 'scripts\deploy_workflow_env.ps1') @deployArgs
     if ($LASTEXITCODE -ne 0) {
         throw "deploy $Environment failed with exit code $LASTEXITCODE"
     }
@@ -425,7 +433,7 @@ function Prepare-ProdUpgrade {
 
     $sourceRoot = [string]$Descriptor.source_root
     $request = Read-WorkflowJson -Path (Get-WorkflowProdUpgradeRequestPath -SourceRoot $sourceRoot) -Default @{}
-    $candidate = Read-WorkflowJson -Path (Get-WorkflowProdCandidatePath -SourceRoot $sourceRoot) -Default @{}
+    $candidate = Sync-WorkflowProdCandidateFromTest -SourceRoot $sourceRoot
     if ([string]::IsNullOrWhiteSpace([string]$request['candidate_version'])) {
         throw 'prod upgrade request missing candidate_version'
     }

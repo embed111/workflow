@@ -1,0 +1,341 @@
+.requirement-bug-wrap {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+}
+
+.rb-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rb-module-tabs {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.rb-module-tabs button {
+  background: #fff;
+  color: #1f2329;
+  border: 1px solid var(--line);
+}
+
+.rb-module-tabs button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.rb-module {
+  display: none;
+  min-height: 0;
+  height: 100%;
+}
+
+.rb-module.active {
+  display: block;
+}
+
+.defect-shell {
+  display: grid;
+  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+  height: 100%;
+}
+
+.defect-side,
+.defect-detail {
+  min-height: 0;
+}
+
+.defect-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.defect-card,
+.defect-detail-scroll,
+.defect-empty-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.defect-card {
+  padding: 12px;
+}
+
+.defect-detail-scroll {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.defect-list-wrap {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 10px;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.defect-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.defect-list-item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid #e5e6eb;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: var(--text);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.defect-list-item:hover {
+  transform: none;
+  border-color: #cfd7e6;
+  background: #fbfcfe;
+}
+
+.defect-list-item.active {
+  border-color: #b7cdfc;
+  background: #edf3ff;
+}
+
+.defect-list-item-head,
+.defect-detail-head,
+.defect-history-head,
+.defect-task-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.defect-list-item-title,
+.defect-detail-title,
+.defect-task-card-title,
+.defect-empty-title,
+.defect-decision-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.defect-list-item-sub,
+.defect-list-item-meta,
+.defect-detail-sub,
+.defect-task-card-sub,
+.defect-history-sub,
+.defect-history-time {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.defect-status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: #f2f3f5;
+  color: #44576b;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.defect-status-chip.active {
+  background: #edf3ff;
+  border-color: #c8d9ff;
+  color: #245bdb;
+}
+
+.defect-status-chip.ok {
+  background: #edfdf6;
+  border-color: #b7ebd3;
+  color: #06794f;
+}
+
+.defect-status-chip.warn {
+  background: #fff7eb;
+  border-color: #ffd8a8;
+  color: #ad6800;
+}
+
+.defect-status-chip.muted {
+  background: #f2f3f5;
+  border-color: #e5e6eb;
+  color: #646a73;
+}
+
+.defect-meta-grid,
+.defect-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.defect-meta-item,
+.defect-field {
+  min-width: 0;
+}
+
+.defect-paste-tip {
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+.defect-meta-key {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.defect-meta-value {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #2d3a4a;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.defect-span-2 {
+  grid-column: 1 / -1;
+}
+
+.defect-report-text {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #33465a;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.defect-image-list,
+.defect-task-list,
+.defect-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.defect-image-chip,
+.defect-task-card,
+.defect-history-item {
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: #fafbfc;
+  padding: 10px;
+}
+
+.defect-image-chip {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.defect-image-chip-thumb,
+.defect-history-thumb {
+  width: 100%;
+  height: 68px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line-soft);
+  background: #fff;
+}
+
+.defect-image-chip-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.defect-image-chip-name {
+  font-size: 12px;
+  color: #33465a;
+  word-break: break-word;
+}
+
+.defect-image-chip-remove {
+  align-self: flex-start;
+}
+
+.defect-task-card-actions,
+.defect-detail-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.defect-history-images {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 8px;
+}
+
+.defect-history-text {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #33465a;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.defect-history-pre {
+  margin-top: 8px;
+}
+
+.defect-empty-card {
+  padding: 20px;
+}
+
+@media (max-width: 1180px) {
+  .defect-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .defect-detail-scroll {
+    max-height: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .defect-meta-grid,
+  .defect-action-grid {
+    grid-template-columns: 1fr;
+  }
+}

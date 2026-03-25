@@ -714,26 +714,22 @@
           ? '当前版本仅同步到技能标签，未单独补充技能说明。'
           : ''
       );
-    const sourceText = trainingCenterRoleProfileSourceText(roleProfile.profile_source);
-    const sourceDetail = sourceText +
-      (roleProfile.source_release_version ? ' · 来源版本=' + roleProfile.source_release_version : '') +
-      (roleProfile.fallback_reason ? ' · 原因=' + trainingCenterRoleProfileFallbackReasonText(roleProfile.fallback_reason) : '');
     const portraitSections = [];
-    const addTextSection = (label, value) => {
+    const addTextSection = (key, label, value) => {
       const text = safe(value).trim();
       if (!text) return;
       portraitSections.push(
-        "<section class='tc-portrait-item'>" +
+        "<section class='tc-portrait-item' data-portrait-key='" + safe(key) + "' data-portrait-label='" + safe(label) + "'>" +
           "<div class='tc-portrait-k'>" + safe(label) + '</div>' +
           "<div class='tc-portrait-v'>" + safe(text) + '</div>' +
         '</section>'
       );
     };
-    const addListSection = (label, rows, extraTip) => {
+    const addListSection = (key, label, rows, extraTip) => {
       const list = Array.isArray(rows) ? rows.map((row) => safe(row).trim()).filter((row) => !!row) : [];
       if (!list.length) return;
       portraitSections.push(
-        "<section class='tc-portrait-item'>" +
+        "<section class='tc-portrait-item' data-portrait-key='" + safe(key) + "' data-portrait-label='" + safe(label) + "'>" +
           "<div class='tc-portrait-k'>" + safe(label) + '</div>' +
           "<ul class='tc-portrait-v tc-portrait-list'>" +
             list.map((row) => '<li>' + safe(row) + '</li>').join('') +
@@ -742,19 +738,18 @@
         '</section>'
       );
     };
-    addTextSection('角色详情来源', sourceDetail);
-    addTextSection('我是', introText);
-    addListSection('我当前能做什么', whatICanDo);
-    addListSection('全量能力清单', fullCapabilityInventory);
-    addTextSection('角色知识范围', knowledgeScope);
-    addListSection('适用场景', scenarioItems);
-    addListSection('Agent Skills', skillItems, skillHint);
-    addTextSection('版本备注', versionNotes);
+    addTextSection('intro', '我是', introText);
+    addListSection('what_i_can_do', '我当前能做什么', whatICanDo);
+    addListSection('full_capability_inventory', '全量能力清单', fullCapabilityInventory);
+    addTextSection('knowledge_scope', '角色知识范围', knowledgeScope);
+    addListSection('agent_skills', 'Agent Skills', skillItems, skillHint);
+    addListSection('applicable_scenarios', '适用场景', scenarioItems);
+    addTextSection('version_notes', '版本说明', versionNotes);
     portraitNode.style.display = '';
     portraitNode.innerHTML = portraitSections.length
       ? portraitSections.join('')
       : (
-        "<section class='tc-portrait-item'>" +
+        "<section class='tc-portrait-item' data-portrait-key='release_status' data-portrait-label='发布状态'>" +
           "<div class='tc-portrait-k'>发布状态</div>" +
           "<div class='tc-portrait-v'>" + safe(publishedRelease ? '当前版本尚未补充角色简介详情。' : '当前还没有可用的发布简介。') + '</div>' +
         '</section>'

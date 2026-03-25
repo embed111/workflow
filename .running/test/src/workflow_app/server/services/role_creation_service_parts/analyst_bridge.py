@@ -45,6 +45,14 @@ def _role_creation_dialogue_trace_dir(root: Path, session_id: str) -> Path:
     return root / "logs" / "runs" / f"role-creation-analyst-{session_token}-{stamp}"
 
 
+def _resolve_role_creation_codex_bin() -> str:
+    override = str(__import__("os").getenv("WORKFLOW_ROLE_CREATION_CODEX_BIN") or "").strip()
+    if override:
+        override_path = Path(override).expanduser()
+        return override_path.as_posix() if override_path.exists() else override
+    return str(shutil.which("codex.cmd") or shutil.which("codex") or "").strip()
+
+
 def _resolve_role_creation_dialogue_agent(cfg: Any) -> dict[str, str]:
     search_root = getattr(cfg, "agent_search_root", None)
     if isinstance(search_root, Path):
@@ -380,7 +388,7 @@ def run_role_creation_analyst_dialogue(
         }
         _role_creation_write_json(result_path, result)
         return result
-    codex_bin = shutil.which("codex.cmd") or shutil.which("codex")
+    codex_bin = _resolve_role_creation_codex_bin()
     if not codex_bin:
         result = {
             "ok": False,

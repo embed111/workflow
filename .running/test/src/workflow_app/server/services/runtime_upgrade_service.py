@@ -133,15 +133,29 @@ def current_runtime_control_root() -> Path | None:
     return None
 
 
+def environment_manifest_path(environment: str) -> Path | None:
+    control_root = current_runtime_control_root()
+    normalized = str(environment or "").strip().lower()
+    if not isinstance(control_root, Path) or not normalized:
+        return None
+    return (control_root / "envs" / f"{normalized}.json").resolve(strict=False)
+
+
 def current_runtime_manifest_path() -> Path | None:
     env_path = _env_path(RUNTIME_MANIFEST_PATH_VAR)
     if isinstance(env_path, Path):
         return env_path
-    control_root = current_runtime_control_root()
     environment = current_runtime_environment()
-    if isinstance(control_root, Path) and environment:
-        return (control_root / "envs" / f"{environment}.json").resolve(strict=False)
-    return None
+    return environment_manifest_path(environment)
+
+
+def read_environment_manifest(environment: str) -> dict[str, Any]:
+    path = environment_manifest_path(environment)
+    if not isinstance(path, Path):
+        return {}
+    payload = _read_json(path)
+    payload.setdefault("manifest_path", path.as_posix())
+    return payload
 
 
 def current_runtime_manifest() -> dict[str, Any]:
@@ -174,13 +188,84 @@ def prod_upgrade_request_path() -> Path | None:
     return (control_root / "prod-upgrade-request.json").resolve(strict=False)
 
 
+def _candidate_store_payload(candidate: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(candidate or {})
+    payload.pop("candidate_record_path", None)
+    return payload
+
+
+def _candidate_sort_key(candidate: dict[str, Any]) -> tuple[int, str, str]:
+    payload = dict(candidate or {})
+    return (
+        1 if candidate_is_complete(payload) else 0,
+        _version_rank(payload),
+        str(payload.get("passed_at") or "").strip(),
+    )
+
+
+def _candidate_from_test_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(manifest or {})
+    test_gate_status = str(payload.get("latest_test_gate_status") or "").strip().lower()
+    if test_gate_status and test_gate_status != "passed":
+        return {}
+    version = str(payload.get("latest_candidate_version") or "").strip()
+    candidate_app_root = str(payload.get("latest_candidate_path") or "").strip()
+    evidence_path = str(payload.get("latest_test_gate_evidence") or "").strip()
+    if not version or not candidate_app_root or not evidence_path:
+        return {}
+    control_root_text = str(payload.get("control_root") or "").strip()
+    candidate_meta_path = ""
+    if control_root_text:
+        candidate_meta_path = (
+            Path(control_root_text).resolve(strict=False) / "candidates" / version / "candidate.json"
+        ).as_posix()
+    result = {
+        "version": version,
+        "version_rank": str(payload.get("latest_candidate_version") or version).strip(),
+        "source_environment": "test",
+        "test_batch_id": f"test-gate-{version}",
+        "passed_at": str(payload.get("latest_candidate_created_at") or payload.get("updated_at") or "").strip(),
+        "evidence_path": evidence_path,
+        "candidate_app_root": candidate_app_root,
+        "source_root": str(payload.get("source_root") or "").strip(),
+        "source_control_root": control_root_text,
+        "source_manifest_path": str(payload.get("manifest_path") or "").strip(),
+    }
+    if candidate_meta_path:
+        result["candidate_meta_path"] = candidate_meta_path
+    return result
+
+
+def _sync_prod_candidate_from_test_manifest(
+    path: Path | None,
+    local_candidate: dict[str, Any],
+) -> dict[str, Any]:
+    current = dict(local_candidate or {})
+    test_candidate = _candidate_from_test_manifest(read_environment_manifest("test"))
+    preferred = current
+    if _candidate_sort_key(test_candidate) > _candidate_sort_key(current):
+        preferred = test_candidate
+    if not preferred:
+        return {}
+    if not isinstance(path, Path):
+        return preferred
+    preferred.setdefault("candidate_record_path", path.as_posix())
+    if _candidate_store_payload(preferred) != _candidate_store_payload(current):
+        stored = _candidate_store_payload(preferred)
+        _write_json(path, stored)
+        stored["candidate_record_path"] = path.as_posix()
+        return stored
+    current.setdefault("candidate_record_path", path.as_posix())
+    return current
+
+
 def read_prod_candidate() -> dict[str, Any]:
     path = prod_candidate_path()
     if not isinstance(path, Path):
         return {}
     payload = _read_json(path)
     payload.setdefault("candidate_record_path", path.as_posix())
-    return payload
+    return _sync_prod_candidate_from_test_manifest(path, payload)
 
 
 def read_prod_last_action() -> dict[str, Any]:
