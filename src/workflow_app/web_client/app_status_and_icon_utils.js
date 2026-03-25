@@ -147,6 +147,8 @@
     defectDetailLoading: false,
     defectError: '',
     defectSubmitError: '',
+    defectQueueSummary: null,
+    defectQueueSaving: false,
     defectStatusFilter: 'all',
     defectKeyword: '',
     defectComposerCollapsed: false,
@@ -866,4 +868,3 @@
     setIconOnlyButton('clearAllPolicyCacheBtn', 'clear_all');
     setIconOnlyButton('regeneratePolicyCacheBtn', 'cache');
   }
-

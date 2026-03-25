@@ -22,6 +22,8 @@ from .defect_service import (
     _load_report_row,
     _next_dts_identity,
     _normalize_image_evidence,
+    _normalize_reported_at,
+    _normalize_task_priority,
     _normalize_text,
     _now_text,
     _report_row_to_payload,
@@ -29,6 +31,7 @@ from .defect_service import (
     _runtime_version_label,
     _status_text,
     _write_report_update,
+    _infer_task_priority,
     connect_db,
     get_defect_detail,
 )
@@ -51,6 +54,13 @@ def create_defect_report(cfg: Any, body: dict[str, Any]) -> dict[str, Any]:
     decision = _fallback_prejudge(report_text, images)
     status = DEFECT_STATUS_UNRESOLVED if decision["decision"] == "defect" else DEFECT_STATUS_NOT_FORMAL
     is_formal = decision["decision"] == "defect"
+    task_priority = _normalize_task_priority(
+        body.get("task_priority")
+        or body.get("taskPriority")
+        or _infer_task_priority(report_text, decision=decision, status=status),
+        default="P1",
+    )
+    reported_at = _normalize_reported_at(body.get("reported_at") or body.get("reportedAt"), fallback=now_text)
     dts_id = ""
     dts_sequence = 0
     discovered_iteration = ""
@@ -68,10 +78,10 @@ def create_defect_report(cfg: Any, body: dict[str, Any]) -> dict[str, Any]:
             """
             INSERT INTO defect_reports(
                 report_id,dts_id,dts_sequence,defect_summary,report_text,evidence_images_json,
-                is_formal,status,discovered_iteration,resolved_version,current_decision_json,
+                task_priority,reported_at,is_formal,status,discovered_iteration,resolved_version,current_decision_json,
                 report_source,automation_context_json,is_test_data,created_at,updated_at
             )
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 report_id,
@@ -80,6 +90,8 @@ def create_defect_report(cfg: Any, body: dict[str, Any]) -> dict[str, Any]:
                 summary,
                 report_text,
                 _json_dumps(images, "[]"),
+                task_priority,
+                reported_at,
                 1 if is_formal else 0,
                 status,
                 discovered_iteration,
@@ -100,6 +112,8 @@ def create_defect_report(cfg: Any, body: dict[str, Any]) -> dict[str, Any]:
             title="用户提交缺陷记录",
             detail={
                 "defect_summary": summary,
+                "task_priority": task_priority,
+                "reported_at": reported_at,
                 "report_source": report_source,
                 "image_count": len(images),
                 "automation_context": automation_context,
@@ -203,6 +217,7 @@ def mark_defect_dispute(
         conn.execute("BEGIN")
         row = _load_report_row(conn, report_key, include_test_data=include_test_data)
         dts_sequence, dts_id = _next_dts_identity(conn) if not str(row["dts_id"] or "").strip() else (int(row["dts_sequence"] or 0), str(row["dts_id"] or "").strip())
+        discovered_iteration = str(row["discovered_iteration"] or "").strip() or _runtime_version_label()
         if not str(row["dts_id"] or "").strip():
             conn.execute("UPDATE defect_reports SET dts_sequence=?, dts_id=? WHERE report_id=?", (dts_sequence, dts_id, report_key))
         current_decision = _report_row_to_payload(row)["current_decision"]
@@ -219,6 +234,7 @@ def mark_defect_dispute(
             conn,
             report_key,
             status=DEFECT_STATUS_DISPUTE,
+            discovered_iteration=discovered_iteration,
             current_decision=current_decision,
             updated_at=now_text,
         )
@@ -228,7 +244,14 @@ def mark_defect_dispute(
             entry_type="status",
             actor=operator,
             title="当前记录转为有分歧",
-            detail={"status": DEFECT_STATUS_DISPUTE, "status_text": _status_text(DEFECT_STATUS_DISPUTE), "reason": reason, "dts_id": dts_id, "dts_sequence": dts_sequence},
+            detail={
+                "status": DEFECT_STATUS_DISPUTE,
+                "status_text": _status_text(DEFECT_STATUS_DISPUTE),
+                "reason": reason,
+                "dts_id": dts_id,
+                "dts_sequence": dts_sequence,
+                "discovered_iteration": discovered_iteration,
+            },
             created_at=now_text,
         )
         conn.commit()

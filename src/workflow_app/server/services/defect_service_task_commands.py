@@ -10,6 +10,7 @@ from .defect_service import (
     DEFECT_STATUS_DISPUTE,
     DefectCenterError,
     _append_history,
+    _defect_manual_task_gate,
     _default_assignee,
     _ensure_defect_tables,
     _json_loads_object,
@@ -18,6 +19,7 @@ from .defect_service import (
     _now_text,
     _report_row_to_payload,
     _require_report_id,
+    _runtime_version_label,
     _status_text,
     _write_report_update,
     assignment_service,
@@ -111,18 +113,30 @@ def create_defect_process_task(
     _ensure_defect_tables(root)
     report_key = _require_report_id(report_id)
     operator = _normalize_text(body.get("operator") or "web-user", field="operator", required=False, max_len=120) or "web-user"
+    auto_queue = str(body.get("auto_queue") or "").strip().lower() in {"1", "true", "yes", "on"}
     assignee = _normalize_text(body.get("assigned_agent_id") or body.get("assignedAgentId") or _default_assignee(cfg), field="assigned_agent_id", required=True, max_len=120)
     now_text = _now_text()
     external_request_id = f"defect:process:{report_key}"
     analyze_node_id = f"{report_key}-analyze"
     fix_node_id = f"{report_key}-fix"
     release_node_id = f"{report_key}-release"
+    if not auto_queue:
+        gate = _defect_manual_task_gate(root, report_key, include_test_data=include_test_data)
+        if not bool(gate.get("allowed")):
+            raise DefectCenterError(
+                409,
+                "defect queue gate blocked manual task creation",
+                "defect_queue_gate_blocked",
+                gate,
+            )
     conn = connect_db(root)
     try:
         conn.execute("BEGIN")
         row = _load_report_row(conn, report_key, include_test_data=include_test_data)
         if not bool(row["is_formal"]):
             raise DefectCenterError(409, "not a formal defect yet", "defect_process_requires_formal")
+        report = _report_row_to_payload(row)
+        priority_label = str(report.get("task_priority") or "P1").strip() or "P1"
         graph_result = assignment_service.create_assignment_graph(
             cfg,
             {
@@ -139,7 +153,7 @@ def create_defect_process_task(
                         "assigned_agent_id": assignee,
                         "node_goal": "分析当前缺陷成因、复现条件和修复范围。",
                         "expected_artifact": "分析缺陷报告.html",
-                        "priority": "P1",
+                        "priority": priority_label,
                         "delivery_mode": "specified",
                         "delivery_receiver_agent_id": assignee,
                     },
@@ -149,7 +163,7 @@ def create_defect_process_task(
                         "assigned_agent_id": assignee,
                         "node_goal": "完成缺陷修复并输出修复说明。",
                         "expected_artifact": "缺陷修复说明.html",
-                        "priority": "P1",
+                        "priority": priority_label,
                         "upstream_node_ids": [analyze_node_id],
                         "delivery_mode": "specified",
                         "delivery_receiver_agent_id": assignee,
@@ -160,7 +174,7 @@ def create_defect_process_task(
                         "assigned_agent_id": assignee,
                         "node_goal": "确认修复进入目标版本并产出发布记录。",
                         "expected_artifact": "目标版本发布记录.html",
-                        "priority": "P1",
+                        "priority": priority_label,
                         "upstream_node_ids": [fix_node_id],
                         "delivery_mode": "specified",
                         "delivery_receiver_agent_id": assignee,
@@ -192,7 +206,13 @@ def create_defect_process_task(
             entry_type="task",
             actor=operator,
             title="已在任务中心创建处理任务",
-            detail={"ticket_id": ticket_id, "external_request_id": external_request_id, "assigned_agent_id": assignee},
+            detail={
+                "ticket_id": ticket_id,
+                "external_request_id": external_request_id,
+                "assigned_agent_id": assignee,
+                "task_priority": priority_label,
+                "auto_queue": auto_queue,
+            },
             created_at=now_text,
         )
         conn.execute("UPDATE defect_reports SET updated_at=? WHERE report_id=?", (now_text, report_key))
@@ -216,16 +236,27 @@ def create_defect_review_task(
     _ensure_defect_tables(root)
     report_key = _require_report_id(report_id)
     operator = _normalize_text(body.get("operator") or "web-user", field="operator", required=False, max_len=120) or "web-user"
+    auto_queue = str(body.get("auto_queue") or "").strip().lower() in {"1", "true", "yes", "on"}
     assignee = _normalize_text(body.get("assigned_agent_id") or body.get("assignedAgentId") or _default_assignee(cfg), field="assigned_agent_id", required=True, max_len=120)
     now_text = _now_text()
     external_request_id = f"defect:review:{report_key}"
     review_node_id = f"{report_key}-review"
+    if not auto_queue:
+        gate = _defect_manual_task_gate(root, report_key, include_test_data=include_test_data)
+        if not bool(gate.get("allowed")):
+            raise DefectCenterError(
+                409,
+                "defect queue gate blocked manual review creation",
+                "defect_queue_gate_blocked",
+                gate,
+            )
     conn = connect_db(root)
     try:
         conn.execute("BEGIN")
         row = _load_report_row(conn, report_key, include_test_data=include_test_data)
         payload = _report_row_to_payload(row)
         dts_id = str(payload.get("dts_id") or report_key).strip()
+        priority_label = str(payload.get("task_priority") or "P1").strip() or "P1"
         if str(row["status"] or "").strip().lower() != DEFECT_STATUS_DISPUTE:
             current_decision = _json_loads_object(row["current_decision_json"])
             current_decision.update(
@@ -236,13 +267,17 @@ def create_defect_review_task(
                     "summary": "已进入复核链路。",
                 }
             )
+            discovered_iteration = str(row["discovered_iteration"] or "").strip() or _runtime_version_label()
             _write_report_update(
                 conn,
                 report_key,
                 status=DEFECT_STATUS_DISPUTE,
+                discovered_iteration=discovered_iteration,
                 current_decision=current_decision,
                 updated_at=now_text,
             )
+            if not dts_id:
+                dts_id = str(row["report_id"] or report_key).strip()
         graph_result = assignment_service.create_assignment_graph(
             cfg,
             {
@@ -259,7 +294,7 @@ def create_defect_review_task(
                         "assigned_agent_id": assignee,
                         "node_goal": "结合补充证据和当前结论完成复核。",
                         "expected_artifact": "复核争议结论.html",
-                        "priority": "P1",
+                        "priority": priority_label,
                         "delivery_mode": "specified",
                         "delivery_receiver_agent_id": assignee,
                     }
@@ -285,7 +320,14 @@ def create_defect_review_task(
             entry_type="task",
             actor=operator,
             title="已在任务中心创建复核任务",
-            detail={"ticket_id": ticket_id, "external_request_id": external_request_id, "assigned_agent_id": assignee, "status_text": _status_text(DEFECT_STATUS_DISPUTE)},
+            detail={
+                "ticket_id": ticket_id,
+                "external_request_id": external_request_id,
+                "assigned_agent_id": assignee,
+                "status_text": _status_text(DEFECT_STATUS_DISPUTE),
+                "task_priority": priority_label,
+                "auto_queue": auto_queue,
+            },
             created_at=now_text,
         )
         conn.execute("UPDATE defect_reports SET updated_at=? WHERE report_id=?", (now_text, report_key))

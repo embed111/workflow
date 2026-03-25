@@ -31,6 +31,32 @@
     return safe(state.defectSelectedReportId).trim();
   }
 
+  function defectQueueSummary() {
+    return state.defectQueueSummary && typeof state.defectQueueSummary === 'object'
+      ? state.defectQueueSummary
+      : {};
+  }
+
+  function normalizeDefectQueueSummary(payload) {
+    const row = payload && typeof payload === 'object' ? payload : {};
+    return {
+      enabled: !!row.enabled,
+      updated_at: safe(row.updated_at),
+      candidate_total: Number(row.candidate_total || 0),
+      active_slot_busy: !!row.active_slot_busy,
+      head_report_id: safe(row.head_report_id).trim(),
+      active_report_id: safe(row.active_report_id).trim(),
+      active_display_id: safe(row.active_display_id).trim(),
+      active_summary: safe(row.active_summary),
+      active_task_priority: safe(row.active_task_priority).trim(),
+      next_report_id: safe(row.next_report_id).trim(),
+      next_display_id: safe(row.next_display_id).trim(),
+      next_summary: safe(row.next_summary),
+      next_task_priority: safe(row.next_task_priority).trim(),
+      next_reported_at: safe(row.next_reported_at),
+    };
+  }
+
   function normalizeDefectListItem(item) {
     const row = item && typeof item === 'object' ? item : {};
     return {
@@ -45,6 +71,13 @@
       decision_title: safe(row.decision_title),
       decision_summary: safe(row.decision_summary),
       decision_source: safe(row.decision_source),
+      task_priority: safe(row.task_priority).trim() || 'P1',
+      reported_at: safe(row.reported_at),
+      task_ref_total: Number(row.task_ref_total || 0),
+      queue_eligible: !!row.queue_eligible,
+      has_task_chain: !!row.has_task_chain,
+      queue_mode: safe(row.queue_mode).trim() || 'out_of_queue',
+      queue_mode_text: safe(row.queue_mode_text).trim(),
       created_at: safe(row.created_at),
       updated_at: safe(row.updated_at),
       is_formal: !!row.is_formal,

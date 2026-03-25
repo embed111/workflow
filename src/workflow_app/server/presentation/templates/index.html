@@ -868,6 +868,23 @@
           </div>
         </div>
         <div id='rbModuleDefect' class='rb-module active'>
+          <div class='defect-queue-strip'>
+            <div class='defect-queue-copy'>
+              <div class='card-title'>按顺序创建任务</div>
+              <div class='hint'>默认排序：任务优先级高到低；同优先级按上报时间早到晚。</div>
+            </div>
+            <div class='defect-queue-stats'>
+              <div class='defect-queue-stat'>
+                <div class='defect-queue-stat-label'>当前主动处理缺陷</div>
+                <div id='defectQueueActiveValue' class='defect-queue-stat-value'>-</div>
+              </div>
+              <div class='defect-queue-stat'>
+                <div class='defect-queue-stat-label'>下一条待建单缺陷</div>
+                <div id='defectQueueNextValue' class='defect-queue-stat-value'>-</div>
+              </div>
+            </div>
+            <button id='defectQueueToggleBtn' class='defect-queue-toggle off' type='button'>按顺序创建任务：关闭</button>
+          </div>
           <div class='defect-shell'>
             <aside class='defect-side'>
               <div id='defectComposerCard' class='defect-card defect-composer-card'>

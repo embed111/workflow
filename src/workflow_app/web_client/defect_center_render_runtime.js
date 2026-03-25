@@ -22,15 +22,69 @@
     return report && report.is_formal ? '待发布' : '-';
   }
 
+  function defectPriorityTone(value) {
+    const key = safe(value).trim().toUpperCase();
+    if (key === 'P0') return 'p0';
+    if (key === 'P1') return 'p1';
+    if (key === 'P2') return 'p2';
+    return 'p3';
+  }
+
+  function defectPriorityChipHtml(value) {
+    const text = safe(value).trim().toUpperCase() || 'P1';
+    return "<span class='defect-priority-chip " + escapeHtml(defectPriorityTone(text)) + "'>" + escapeHtml(text) + '</span>';
+  }
+
+  function defectQueueModeBadgeHtml(report) {
+    const label = safe(report && report.queue_mode_text).trim();
+    if (!label || safe(report && report.queue_mode).trim() === 'out_of_queue') return '';
+    return "<span class='defect-queue-flag'>" + escapeHtml(label) + '</span>';
+  }
+
+  function defectQueueRefText(displayId, priority, summary) {
+    const parts = [];
+    if (safe(displayId).trim()) parts.push(safe(displayId).trim());
+    if (safe(priority).trim()) parts.push(safe(priority).trim());
+    if (safe(summary).trim()) parts.push(safe(summary).trim());
+    return parts.length ? parts.join(' · ') : '-';
+  }
+
   function defectCurrentActionText(report, detail, taskRefs) {
     const status = safe(report && report.status).trim().toLowerCase();
     const refs = Array.isArray(taskRefs) ? taskRefs : [];
     if (status === 'resolved') return detail && detail.can_close ? '等待用户关闭' : '已写回解决版本';
     if (status === 'closed') return '无需操作';
-    if (status === 'dispute') return refs.length ? '补充证据后等待复核' : '等待补充证据';
+    if (status === 'dispute') {
+      if (refs.length) return '补充证据后等待复核';
+      return safe(report && report.queue_mode).trim() === 'manual' ? '手动复核建单' : '等待顺序建单';
+    }
     if (status === 'not_formal') return '未进入正式流程';
-    if (status === 'unresolved') return refs.length ? '处理中' : '待进入处理链';
+    if (status === 'unresolved') {
+      if (refs.length) return '处理中';
+      return safe(report && report.queue_mode).trim() === 'manual' ? '手动处理建单' : '等待顺序建单';
+    }
     return '-';
+  }
+
+  function renderDefectQueueStrip() {
+    const queue = defectQueueSummary();
+    const toggleBtn = $('defectQueueToggleBtn');
+    const activeNode = $('defectQueueActiveValue');
+    const nextNode = $('defectQueueNextValue');
+    if (activeNode) {
+      activeNode.textContent = defectQueueRefText(queue.active_display_id, queue.active_task_priority, queue.active_summary);
+    }
+    if (nextNode) {
+      nextNode.textContent = defectQueueRefText(queue.next_display_id, queue.next_task_priority, queue.next_summary);
+    }
+    if (!toggleBtn) return;
+    const enabled = !!queue.enabled;
+    toggleBtn.classList.toggle('on', enabled);
+    toggleBtn.classList.toggle('off', !enabled);
+    toggleBtn.disabled = !!state.defectQueueSaving;
+    toggleBtn.textContent = state.defectQueueSaving
+      ? '切换中...'
+      : ('按顺序创建任务：' + (enabled ? '开启' : '关闭'));
   }
 
   function defectEvidenceShotsHtml(images) {
@@ -206,6 +260,11 @@
             "<span class='defect-status-chip " + escapeHtml(defectStatusTone(item.status)) + "'>" + escapeHtml(item.status_text) + '</span>' +
           '</div>' +
           "<div class='defect-list-item-sub'>" + escapeHtml(item.display_id || '-') + '</div>' +
+          "<div class='defect-list-item-tags'>" +
+            defectPriorityChipHtml(item.task_priority) +
+            defectQueueModeBadgeHtml(item) +
+          '</div>' +
+          "<div class='defect-list-item-meta'>" + escapeHtml(item.reported_at ? defectFormatTime(item.reported_at) : '-') + '</div>' +
           "<div class='defect-list-item-meta'>" + escapeHtml(item.decision_title || item.decision_summary || '等待判定') + '</div>' +
         '</button>'
       );
@@ -229,6 +288,7 @@
     const taskRefs = Array.isArray(detail.task_refs) ? detail.task_refs : [];
     const decision = report.current_decision && typeof report.current_decision === 'object' ? report.current_decision : {};
     const statusKey = safe(report.status).trim().toLowerCase();
+    const queueModeText = safe(report.queue_mode_text).trim() || '手动建单模式';
     const reviewButtonText = report.status === 'resolved'
       ? '提交复评'
       : (report.status === 'dispute' ? '继续补充并提交复核' : '标记有分歧并提交复核');
@@ -245,9 +305,16 @@
             "<div class='defect-detail-sub'>" + escapeHtml(report.display_id || report.report_id) + '</div>' +
             "<div class='defect-issue-title'>" + escapeHtml(report.defect_summary || report.display_id) + '</div>' +
           '</div>' +
-          "<span class='defect-status-chip " + escapeHtml(defectStatusTone(report.status)) + "'>" + escapeHtml(report.status_text || defectStatusText(report.status)) + '</span>' +
+          "<div class='defect-detail-badges'>" +
+            defectPriorityChipHtml(report.task_priority) +
+            defectQueueModeBadgeHtml(report) +
+            "<span class='defect-status-chip " + escapeHtml(defectStatusTone(report.status)) + "'>" + escapeHtml(report.status_text || defectStatusText(report.status)) + '</span>' +
+          '</div>' +
         '</div>' +
         "<div class='defect-facts-grid'>" +
+          defectFormatMetaLine('任务优先级', report.task_priority) +
+          defectFormatMetaLine('上报时间', defectFormatTime(report.reported_at)) +
+          defectFormatMetaLine('建单模式', queueModeText) +
           defectFormatMetaLine('发现迭代', report.discovered_iteration) +
           defectFormatMetaLine('解决版本', defectResolvedVersionDisplay(report)) +
           defectFormatMetaLine('当前动作', defectCurrentActionText(report, detail, taskRefs)) +
@@ -282,7 +349,7 @@
                 '</label>' +
                 "<div class='hint defect-paste-tip'>在说明框中直接 Ctrl+V 粘贴图片，系统会自动收进左侧图片证据。</div>" +
                 "<div class='defect-detail-actions'>" +
-                  "<button id='defectSubmitReviewBtn' type='button'>" + escapeHtml(reviewButtonText) + '</button>' +
+                  "<button id='defectSubmitReviewBtn' type='button'" + (detail.can_review ? '' : ' disabled') + ">" + escapeHtml(reviewButtonText) + '</button>' +
                 '</div>' +
               '</div>' +
             '</div>' +
@@ -336,6 +403,7 @@
     if (composerToggleBtn) {
       composerToggleBtn.textContent = state.defectComposerCollapsed ? '展开提缺陷' : '收起';
     }
+    renderDefectQueueStrip();
     renderDefectList();
     renderDefectDetail();
     setDefectError(state.defectError);
@@ -373,6 +441,7 @@
       const data = await getJSON(defectApiUrl('/api/defects/' + encodeURIComponent(key)));
       state.defectSelectedReportId = key;
       state.defectDetail = data;
+      state.defectQueueSummary = normalizeDefectQueueSummary(data.queue);
       setDefectError('');
       if (!opts.skipRender) {
         renderDefectCenter();
@@ -398,6 +467,7 @@
       }));
       const nextRows = Array.isArray(data.items) ? data.items.map(normalizeDefectListItem) : [];
       state.defectList = append ? mergeDefectListItems(state.defectList, nextRows) : nextRows;
+      state.defectQueueSummary = normalizeDefectQueueSummary(data.queue);
       state.defectListTotal = Math.max(defectLoadedCount(), Number(data.total || 0));
       state.defectListLimit = Math.max(20, Number(data.limit || requestLimit));
       state.defectListNextOffset = Math.max(defectLoadedCount(), Number(data.next_offset || (requestOffset + nextRows.length)));
@@ -453,6 +523,24 @@
     await refreshDefectList({ preferredReportId: safe(payload && payload.report && payload.report.report_id).trim() });
     setStatus('缺陷记录已提交');
     return payload;
+  }
+
+  async function toggleDefectQueueModeAction() {
+    const current = defectQueueSummary();
+    state.defectQueueSaving = true;
+    renderDefectCenter();
+    try {
+      const result = await postJSON('/api/defects/queue-mode', {
+        enabled: !current.enabled,
+      });
+      state.defectQueueSummary = normalizeDefectQueueSummary(result.queue);
+      await refreshDefectList({ preferredReportId: defectSelectedReportId() });
+      setStatus('顺序建单已' + (state.defectQueueSummary.enabled ? '开启' : '关闭'));
+      return result;
+    } finally {
+      state.defectQueueSaving = false;
+      renderDefectCenter();
+    }
   }
 
   async function submitDefectReviewFlow() {

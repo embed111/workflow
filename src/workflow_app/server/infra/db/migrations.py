@@ -206,6 +206,8 @@ def ensure_tables(
                 defect_summary TEXT NOT NULL DEFAULT '',
                 report_text TEXT NOT NULL DEFAULT '',
                 evidence_images_json TEXT NOT NULL DEFAULT '[]',
+                task_priority TEXT NOT NULL DEFAULT 'P1',
+                reported_at TEXT NOT NULL DEFAULT '',
                 is_formal INTEGER NOT NULL DEFAULT 0,
                 status TEXT NOT NULL DEFAULT 'not_formal',
                 discovered_iteration TEXT NOT NULL DEFAULT '',
@@ -224,6 +226,9 @@ def ensure_tables(
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_defect_reports_status ON defect_reports(is_formal,status,updated_at DESC)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_defect_reports_queue_sort ON defect_reports(status,task_priority,reported_at,dts_sequence,report_id)"
         )
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_defect_reports_dts_id ON defect_reports(dts_id) WHERE dts_id<>''"
@@ -267,6 +272,15 @@ def ensure_tables(
         )
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_defect_task_refs_unique ON defect_task_refs(report_id,ticket_id,focus_node_id,external_request_id)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS defect_queue_settings (
+                settings_id TEXT PRIMARY KEY,
+                sequential_task_creation_enabled INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL DEFAULT ''
+            )
+            """
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_ar_registry_name ON agent_registry(agent_name)"
@@ -421,6 +435,8 @@ def ensure_tables(
         ensure_column(conn, "training_plan", "is_test_data", "is_test_data INTEGER NOT NULL DEFAULT 0")
         ensure_column(conn, "training_plan", "loop_id", "loop_id TEXT NOT NULL DEFAULT ''")
         ensure_column(conn, "training_queue", "is_test_data", "is_test_data INTEGER NOT NULL DEFAULT 0")
+        ensure_column(conn, "defect_reports", "task_priority", "task_priority TEXT NOT NULL DEFAULT 'P1'")
+        ensure_column(conn, "defect_reports", "reported_at", "reported_at TEXT NOT NULL DEFAULT ''")
         ensure_column(
             conn,
             "training_queue",
