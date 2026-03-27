@@ -23,23 +23,24 @@
       --purple: #7257cb;
       --purple-soft: #f4f1ff;
       --gray-soft: #f3f4f6;
-      --rail: 232px;
-      --side: 320px;
-      --radius: 12px;
+      --rail: 224px;
+      --side: 296px;
+      --radius: 10px;
     }
 
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
     html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font: 13px/1.5 "PingFang SC", "Microsoft YaHei", sans-serif; }
     button, textarea { font: inherit; }
-    button { border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--text); padding: 7px 12px; cursor: pointer; }
+    button { border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--text); padding: 6px 10px; cursor: pointer; }
     button.primary { border-color: transparent; background: var(--accent); color: #fff; }
+    button[disabled] { cursor: not-allowed; opacity: 0.55; }
 
-    .app { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); gap: 10px; height: 100vh; padding: 10px; }
+    .app { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); gap: 8px; height: 100vh; padding: 8px; }
     .rail, .window, .panel { min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); overflow: hidden; }
-    .rail { display: grid; grid-template-rows: auto auto 1fr; gap: 10px; padding: 12px; }
+    .rail { display: grid; grid-template-rows: auto auto 1fr; gap: 8px; padding: 10px; }
     .brand, .tab, .card, .record, .fact, .task, .empty { border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
-    .brand { padding: 10px 12px; }
+    .brand { padding: 9px 10px; }
     .brand-title, .panel-title, .section-title, .record-title, .issue-title { font-weight: 700; }
     .brand-meta, .muted, .hint, .meta-k, .task-meta, .timeline-time { color: var(--muted); font-size: 12px; line-height: 1.45; }
     .tabs { display: flex; flex-direction: column; gap: 8px; }
@@ -47,22 +48,22 @@
     .tab.active { border-color: #cfe0ff; background: var(--accent-soft); color: var(--accent); font-weight: 700; }
 
     .window { display: flex; flex-direction: column; }
-    .window-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
-    .window-title { font-size: 22px; line-height: 1.1; font-weight: 700; }
+    .window-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+    .window-title { font-size: 20px; line-height: 1.1; font-weight: 700; }
     .window-note { margin-top: 4px; color: var(--muted); font-size: 12px; }
     .actions, .facts, .between, .issue-head, .task-head, .record-top, .toolbar, .view-tabs { display: flex; gap: 8px; }
     .actions, .facts, .toolbar { flex-wrap: wrap; }
     .view-tabbar {
       display: flex;
       gap: 4px;
-      padding: 0 16px;
+      padding: 0 14px;
       border-bottom: 1px solid var(--line);
       background: var(--panel);
     }
     .module-btn {
       margin-bottom: -1px;
-      padding: 10px 12px 9px;
-      border-radius: 10px 10px 0 0;
+      padding: 8px 10px 7px;
+      border-radius: 9px 9px 0 0;
       border-bottom-color: transparent;
       color: var(--muted);
       background: transparent;
@@ -80,7 +81,98 @@
     .empty { height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; }
     .empty-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
 
-    .bug-shell { display: grid; grid-template-columns: var(--side) minmax(0, 1fr); gap: 10px; height: 100%; padding: 10px; }
+    .queue-toggle-panel,
+    .queue-panel {
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .queue-toggle-panel {
+      gap: 6px;
+    }
+    .queue-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .queue-toggle-main {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+      flex: 1 1 220px;
+    }
+    .queue-panel-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .queue-panel-main {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+      flex: 1 1 260px;
+    }
+    .queue-headline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .queue-title { font-size: 13px; font-weight: 700; }
+    .queue-summary {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: normal;
+    }
+    .queue-stats {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-start;
+      flex: 0 1 auto;
+    }
+    .queue-stat {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 9px;
+      border: 1px solid #d7dbe2;
+      border-radius: 999px;
+      background: #eef1f4;
+      white-space: nowrap;
+      font-size: 11px;
+    }
+    .queue-stat-label { color: var(--muted); }
+    .queue-stat-value { font-weight: 700; color: var(--text); }
+    .queue-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 5px 9px;
+      background: #eaedf1;
+      min-width: 0;
+      justify-content: center;
+      font-size: 11px;
+    }
+    .queue-toggle.on { border-color: #bfd2f8; background: #e7eefb; color: #355f9b; }
+    .queue-toggle.off { border-color: #d7dbe2; background: #eaedf1; color: #6b7280; }
+    .queue-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: currentColor;
+    }
+
+    .bug-shell { display: grid; grid-template-columns: var(--side) minmax(0, 1fr); gap: 8px; height: 100%; padding: 8px; }
     .scroll { min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: #c8cdd6 #f5f6f8; }
     .dts-scroll { overflow-y: scroll; scrollbar-gutter: stable; }
     .scroll::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -88,49 +180,78 @@
     .scroll::-webkit-scrollbar-thumb { background: #c8cdd6; border-radius: 999px; border: 2px solid #f5f6f8; }
     .panel { display: flex; flex-direction: column; }
     .panel > .scroll { flex: 1 1 auto; }
-    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
-    .panel-body { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
-    .card, .task, .empty-note, .section { padding: 12px; }
-    .composer { display: flex; flex-direction: column; gap: 10px; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+    .panel-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .panel-body { padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+    .card, .task, .empty-note, .section { padding: 10px; }
+    .composer { display: flex; flex-direction: column; gap: 8px; }
     .toolbar { align-items: center; }
     .field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 0; min-width: 0; }
     .field-label { font-size: 11px; color: var(--muted); }
-    .thumbs { display: flex; gap: 8px; }
+    .thumbs { display: flex; gap: 6px; }
     .thumb, .shot { border: 1px solid var(--line); border-radius: 8px; background: #fff; color: #5b6473; font-size: 11px; line-height: 1.35; text-align: center; display: flex; align-items: center; justify-content: center; padding: 8px; }
-    .thumb { width: 82px; height: 62px; }
-    .shot { height: 84px; }
-    textarea, select, input[type="search"] { width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 10px 12px; outline: none; }
-    textarea { min-height: 92px; resize: none; }
-    select, input[type="search"] { height: 40px; }
+    .thumb { width: 76px; height: 56px; }
+    .shot { height: 76px; }
+    textarea, select, input[type="search"] { width: 100%; border: 1px solid var(--line); border-radius: 9px; background: #fff; padding: 9px 10px; outline: none; }
+    textarea { min-height: 84px; resize: none; }
+    select, input[type="search"] { height: 36px; }
 
-    .record-list, .task-list, .timeline, .evidence-stack { display: flex; flex-direction: column; gap: 8px; }
-    .record { padding: 10px; cursor: pointer; background: #fff; }
+    .record-list, .task-list, .timeline, .evidence-stack { display: flex; flex-direction: column; gap: 6px; }
+    .record { padding: 9px; cursor: pointer; background: #fff; }
     .record.active { border-color: #cfe0ff; background: #f8fbff; }
     .record-top, .issue-head, .between, .task-head { align-items: flex-start; justify-content: space-between; }
-    .issue-head { align-items: center; margin-bottom: 10px; }
-    .issue-title { font-size: 18px; line-height: 1.3; }
-    .facts { margin-bottom: 12px; }
-    .fact { min-width: 128px; padding: 8px 10px; }
+    .record-meta-row, .record-flags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .issue-head { align-items: center; margin-bottom: 8px; }
+    .issue-title { font-size: 17px; line-height: 1.25; }
+    .facts { margin-bottom: 10px; gap: 6px; }
+    .fact { min-width: 112px; padding: 7px 8px; }
     .section { border: 1px solid var(--line); border-radius: 10px; background: #fff; }
-    .section-title { margin-bottom: 8px; font-size: 14px; }
-    .evidence { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 10px; align-items: start; }
-    .text-block, .decision, .empty-note { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
-    .supplement-box { display: flex; flex-direction: column; gap: 10px; }
+    .section-title { margin-bottom: 6px; font-size: 13px; }
+    .evidence { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px; align-items: start; }
+    .text-block, .decision, .empty-note { padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--soft); }
+    .supplement-box { display: flex; flex-direction: column; gap: 8px; }
     .timeline { position: relative; padding-left: 14px; }
     .timeline::before { content: ""; position: absolute; left: 4px; top: 4px; bottom: 4px; width: 2px; background: #d9dfeb; }
     .timeline-item { position: relative; padding-left: 14px; }
     .timeline-item::before { content: ""; position: absolute; left: -1px; top: 6px; width: 8px; height: 8px; border-radius: 999px; background: var(--accent); box-shadow: 0 0 0 3px #edf3ff; }
 
-    .status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); background: #fff; white-space: nowrap; }
+    .status { display: inline-flex; align-items: center; gap: 6px; padding: 3px 7px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); background: #fff; white-space: nowrap; }
     .status::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
     .status.unresolved { color: var(--danger); background: var(--danger-soft); border-color: #f3d1d1; }
     .status.resolved { color: var(--success); background: var(--success-soft); border-color: #d5eadc; }
     .status.dispute { color: var(--purple); background: var(--purple-soft); border-color: #ddd6ff; }
     .status.closed { color: #6b7280; background: var(--gray-soft); border-color: #e4e6ea; }
     .status.returned { color: var(--warn); background: var(--warn-soft); border-color: #f0e0bb; }
+    .priority {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      font-size: 11px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: #2b3a55;
+      white-space: nowrap;
+    }
+    .priority.p0 { border-color: #f3c4c4; background: #fff1f1; color: #9f2f2f; }
+    .priority.p1 { border-color: #f0dfbb; background: #fff7ea; color: #8a5c07; }
+    .priority.p2 { border-color: #d5eadc; background: #eef8f1; color: #246e4b; }
+    .priority.p3 { border-color: #dbe1ea; background: #f4f6f9; color: #55606f; }
+    .queue-flag {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #eff4ff;
+      color: var(--accent);
+      font-size: 10px;
+      border: 1px solid #d8e5ff;
+    }
 
     @media (max-width: 1240px) {
       .bug-shell { grid-template-columns: 300px minmax(0, 1fr); }
+      .queue-panel-top { align-items: flex-start; }
     }
   </style>
 </head>
@@ -180,6 +301,12 @@
           <aside class="panel">
             <div class="panel-head">
               <div class="panel-title">缺陷记录</div>
+              <div class="panel-head-actions">
+                <button class="queue-toggle on" id="queueToggle" type="button">
+                  <span class="queue-dot"></span>
+                  <span id="queueToggleLabel">总开关 已开启</span>
+                </button>
+              </div>
             </div>
             <div class="scroll">
               <div class="panel-body">
@@ -237,15 +364,20 @@
   <script>
     (function () {
       var defaultViewMode = "bugs";
-      var defaultScenario = "resolved";
+      var defaultScenario = "unresolved";
+      var defaultQueueEnabled = true;
+      var currentViewMode = defaultViewMode;
       var viewBlocks = Array.prototype.slice.call(document.querySelectorAll("[data-view-mode]"));
       var viewButtons = Array.prototype.slice.call(document.querySelectorAll("[data-view-mode-btn]"));
+      var queueToggle = document.getElementById("queueToggle");
+      var queueToggleLabel = document.getElementById("queueToggleLabel");
       var recordList = document.getElementById("recordList");
       var detailView = document.getElementById("detailView");
       var statusFilter = document.getElementById("statusFilter");
       var recordSearch = document.getElementById("recordSearch");
       var detailScrollContainer = document.querySelector(".dts-scroll");
       var currentScenario = defaultScenario;
+      var queueEnabled = defaultQueueEnabled;
 
       var issues = {
         unresolved: {
@@ -270,7 +402,14 @@
             { title: "问题确认并创建 DTS", time: "2026-03-21 17:12" },
             { title: "处理链已创建", time: "2026-03-21 17:15" },
             { title: "等待修复完成", time: "解决版本尚未生成" }
-          ]
+          ],
+          priorityLabel: "P0",
+          priorityRank: 0,
+          reportedAt: "2026-03-21 17:12",
+          reportedAtValue: 202603211712,
+          statusFilterKey: "unresolved",
+          queueEligible: true,
+          autoSlotState: "active"
         },
         resolved: {
           id: "DTS-214",
@@ -301,7 +440,14 @@
             { title: "发现并确认", time: "2026-03-18 10:20" },
             { title: "处理链完成", time: "2026-03-19 18:05" },
             { title: "解决版本写回", time: "2026-03-19 18:16 · v1.3.2" }
-          ]
+          ],
+          priorityLabel: "P1",
+          priorityRank: 1,
+          reportedAt: "2026-03-18 10:20",
+          reportedAtValue: 202603181020,
+          statusFilterKey: "resolved",
+          queueEligible: false,
+          autoSlotState: ""
         },
         dispute: {
           id: "DTS-203",
@@ -323,15 +469,47 @@
             text: "补充说明：在 375px 宽度下，底部发送按钮会被输入区和安全区同时挤压，点击命中区域明显不足。"
           },
           tasks: [
-            { code: "TC-287 · 首轮分析当前上报", statusClass: "resolved", statusLabel: "已完成", meta: "首轮结论：暂不构成缺陷" },
-            { code: "TC-301 · 二次复核当前上报", statusClass: "dispute", statusLabel: "处理中", meta: "依据补充证据重新判断是否进入正式缺陷处理链" }
+            { code: "TC-287 · 首轮分析当前上报", statusClass: "resolved", statusLabel: "已完成", meta: "首轮结论：暂不构成缺陷" }
           ],
           timeline: [
             { title: "用户首次上报", time: "2026-03-18 09:04" },
             { title: "首轮分析判定不成立", time: "2026-03-18 09:36" },
             { title: "用户补充证据与描述", time: "2026-03-18 10:12" },
             { title: "状态转为有分歧", time: "2026-03-18 10:15" }
-          ]
+          ],
+          priorityLabel: "P1",
+          priorityRank: 1,
+          reportedAt: "2026-03-18 10:12",
+          reportedAtValue: 202603181012,
+          statusFilterKey: "dispute",
+          queueEligible: true,
+          autoSlotState: "queued"
+        },
+        queued: {
+          id: "DTS-245",
+          title: "切换记录后焦点没有落回当前详情",
+          recordTitle: "切换记录后焦点没有落回当前详情",
+          statusClass: "unresolved",
+          statusLabel: "未解决",
+          discovered: "2026-03 第 6 迭代",
+          version: "待发布",
+          action: "等待顺序建单",
+          reportText: "在缺陷列表里切换不同记录后，右侧详情会更新，但页面焦点仍停留在上一条记录的输入区，键盘操作很容易误打到旧位置。",
+          evidence: ["截图证据<br>焦点停留旧输入区"],
+          decisionTitle: "判定",
+          decisionText: "真实 workflow 缺陷。问题已立项，但当前仍按缺陷队列等待前序高优先级缺陷出队后再自动建单。",
+          tasks: [],
+          timeline: [
+            { title: "问题确认并创建 DTS", time: "2026-03-22 09:18" },
+            { title: "等待顺序建单", time: "当前前序缺陷仍在处理中" }
+          ],
+          priorityLabel: "P1",
+          priorityRank: 1,
+          reportedAt: "2026-03-22 09:18",
+          reportedAtValue: 202603220918,
+          statusFilterKey: "unresolved",
+          queueEligible: true,
+          autoSlotState: "queued"
         },
         closed: {
           id: "DTS-198",
@@ -354,7 +532,14 @@
           timeline: [
             { title: "修复发布", time: "2026-03-16 19:05 · v1.3.0" },
             { title: "用户确认关闭", time: "2026-03-16 21:18" }
-          ]
+          ],
+          priorityLabel: "P2",
+          priorityRank: 2,
+          reportedAt: "2026-03-15 16:42",
+          reportedAtValue: 202603151642,
+          statusFilterKey: "closed",
+          queueEligible: false,
+          autoSlotState: ""
         },
         "not-bug": {
           id: "未立项",
@@ -371,7 +556,14 @@
           decisionText: "当前系统没有承诺“自动带出上次标签”的能力。这更接近需求补充，而不是现有功能异常。若用户不同意该结论，可补充证据后转入 `有分歧`。",
           actions: ["标记有分歧"],
           tasks: [],
-          timeline: []
+          timeline: [],
+          priorityLabel: "-",
+          priorityRank: 99,
+          reportedAt: "2026-03-22 14:03",
+          reportedAtValue: 202603221403,
+          statusFilterKey: "not-bug",
+          queueEligible: false,
+          autoSlotState: ""
         }
       };
 
@@ -384,16 +576,142 @@
           .replace(/'/g, "&#39;");
       }
 
+      function getPriorityClass(label) {
+        return label && /^P[0-3]$/.test(label) ? label.toLowerCase() : "";
+      }
+
+      function sortIssueKeys(keys) {
+        return keys.slice().sort(function (a, b) {
+          var left = issues[a];
+          var right = issues[b];
+          if (left.priorityRank !== right.priorityRank) {
+            return left.priorityRank - right.priorityRank;
+          }
+          if (left.reportedAtValue !== right.reportedAtValue) {
+            return left.reportedAtValue - right.reportedAtValue;
+          }
+          return left.id.localeCompare(right.id);
+        });
+      }
+
       function getFilteredKeys() {
         var filterValue = statusFilter.value;
         var query = recordSearch.value.trim().toLowerCase();
-        return Object.keys(issues).filter(function (key) {
+        return sortIssueKeys(Object.keys(issues).filter(function (key) {
           var item = issues[key];
-          var matchStatus = filterValue === "all" || key === filterValue;
+          var matchStatus = filterValue === "all" || item.statusFilterKey === filterValue;
           var haystack = [item.id, item.recordTitle, item.title, item.reportText].join(" ").toLowerCase();
           var matchQuery = !query || haystack.indexOf(query) >= 0;
           return matchStatus && matchQuery;
+        }));
+      }
+
+      function getQueueCandidates() {
+        return sortIssueKeys(Object.keys(issues).filter(function (key) {
+          return issues[key].queueEligible;
+        }));
+      }
+
+      function getQueueState() {
+        var candidates = getQueueCandidates();
+        if (!queueEnabled) {
+          return {
+            candidates: candidates,
+            active: null,
+            next: candidates.length ? candidates[0] : null
+          };
+        }
+        var active = null;
+        candidates.some(function (key) {
+          if (issues[key].autoSlotState === "active") {
+            active = key;
+            return true;
+          }
+          return false;
         });
+        var next = null;
+        if (active) {
+          var activeIndex = candidates.indexOf(active);
+          next = candidates.slice(activeIndex + 1)[0] || null;
+        } else {
+          next = candidates[0] || null;
+        }
+        return {
+          candidates: candidates,
+          active: active,
+          next: next
+        };
+      }
+
+      function writeUrl() {
+        var url = new URL(window.location.href);
+        url.searchParams.set("view", currentViewMode);
+        url.searchParams.set("scenario", currentScenario);
+        url.searchParams.set("status", statusFilter.value);
+        url.searchParams.set("q", recordSearch.value);
+        url.searchParams.set("queue", queueEnabled ? "on" : "off");
+        window.history.replaceState({}, "", url.toString());
+      }
+
+      function renderQueueToggle() {
+        queueToggle.classList.toggle("on", queueEnabled);
+        queueToggle.classList.toggle("off", !queueEnabled);
+        queueToggleLabel.textContent = queueEnabled ? "总开关 已开启" : "总开关 已关闭";
+      }
+
+      function renderActionButtons(item, queueState) {
+        var buttons = [];
+        if (item.statusFilterKey === "not-bug") {
+          buttons.push({ label: "标记有分歧", primary: false, disabled: false });
+        } else if (item.statusFilterKey === "resolved") {
+          buttons.push({ label: "确认关闭", primary: true, disabled: false });
+        } else if (item.statusFilterKey === "closed") {
+          buttons = [];
+        } else if (!queueEnabled) {
+          buttons.push({
+            label: item.statusFilterKey === "dispute" ? "提交复核" : "处理缺陷",
+            primary: true,
+            disabled: false
+          });
+        } else if (item.autoSlotState === "active") {
+          buttons.push({ label: "查看任务中心", primary: true, disabled: false });
+        } else if (item.queueEligible) {
+          buttons.push({ label: "等待前序缺陷", primary: false, disabled: true });
+        }
+        return buttons.length ? '<div class="actions">' + buttons.map(function (button) {
+          return '<button' + (button.primary ? ' class="primary"' : '') + (button.disabled ? ' disabled' : '') + ' type="button">' + escapeHtml(button.label) + '</button>';
+        }).join("") + '</div>' : '';
+      }
+
+      function renderQueueSection(item, queueState, scenario) {
+        var index = queueState.candidates.indexOf(scenario);
+        var queueSummary = "";
+        var queueRule = "按优先级串行建单，同优先级按上报时间早到晚。";
+        var activeText = queueState.active ? (issues[queueState.active].id + " · " + issues[queueState.active].priorityLabel) : "空闲";
+        var nextText = queueState.next ? (issues[queueState.next].id + " · " + issues[queueState.next].priorityLabel) : "无待建单";
+        if (!queueEnabled) {
+          queueSummary = "当前为手动建单模式。列表仍按优先级和上报时间排序，但系统不会自动为缺陷创建任务。";
+        } else if (!item.queueEligible) {
+          queueSummary = item.statusFilterKey === "not-bug"
+            ? "当前记录尚未进入正式缺陷队列，因此不会参与顺序建单。"
+            : "当前记录已退出主动处理队列，不再占用顺序建单的主动处理位。";
+        } else if (item.autoSlotState === "active") {
+          queueSummary = "当前缺陷已占用主动处理位，系统已为它在任务中心建立处理链，不会再自动为后续缺陷抢先建单。";
+        } else {
+          queueSummary = "当前排队位次 #" + (index + 1) + "。系统会在 " +
+            (queueState.active ? issues[queueState.active].id + " 进入已解决/已关闭后" : "主动处理位空闲时") +
+            "，按当前排序规则自动为它创建下一步任务。";
+        }
+        return [
+          '<div class="section queue-panel">',
+          '<div class="section-title">顺序建单摘要</div>',
+          '<div class="queue-summary">', escapeHtml(queueRule), '</div>',
+          '<div class="queue-stats">',
+          '<div class="queue-stat"><span class="queue-stat-label">当前</span><span class="queue-stat-value">', escapeHtml(activeText), '</span></div>',
+          '<div class="queue-stat"><span class="queue-stat-label">下一条</span><span class="queue-stat-value">', escapeHtml(nextText), '</span></div>',
+          '</div>',
+          '<div class="text-block">', escapeHtml(queueSummary), '</div></div>'
+        ].join("");
       }
 
       function renderRecords(activeScenario) {
@@ -406,11 +724,16 @@
 
         recordList.innerHTML = filteredKeys.map(function (key) {
           var item = issues[key];
+          var queueFlag = "";
+          if (queueEnabled && item.autoSlotState === "active") {
+            queueFlag = '<span class="queue-flag">当前处理中</span>';
+          }
           return [
             '<div class="record', key === activeScenario ? ' active' : '', '" data-record-scenario="', key, '">',
             '<div class="record-top"><div><div class="muted">', escapeHtml(item.id), '</div><div class="record-title">', escapeHtml(item.recordTitle), '</div></div>',
             '<span class="status ', item.statusClass, '">', escapeHtml(item.statusLabel), '</span></div>',
-            '<div class="hint">', escapeHtml(item.discovered), item.version !== "-" ? ' · ' + escapeHtml(item.version) : '', '</div>',
+            '<div class="record-meta-row"><span class="priority ', getPriorityClass(item.priorityLabel), '">', escapeHtml(item.priorityLabel), '</span>', queueFlag, '</div>',
+            '<div class="hint">', escapeHtml(item.reportedAt), ' · ', escapeHtml(item.discovered), item.version !== "-" ? ' · ' + escapeHtml(item.version) : '', '</div>',
             '</div>'
           ].join("");
         }).join("");
@@ -418,34 +741,42 @@
 
       function renderDetail(scenario) {
         var item = issues[scenario];
+        var queueState = getQueueState();
         var actions = item.actions ? '<div class="actions">' + item.actions.map(function (label, index) {
           return '<button' + (index === 0 ? ' class="primary"' : '') + ' type="button">' + escapeHtml(label) + '</button>';
-        }).join("") + '</div>' : '';
+        }).join("") + '</div>' : renderActionButtons(item, queueState);
 
         var tasks = item.tasks.length ? '<div class="section"><div class="section-title">任务引用</div><div class="task-list">' +
           item.tasks.map(function (task) {
             return '<div class="task"><div class="task-head"><div class="record-title">' + escapeHtml(task.code) + '</div><span class="status ' + task.statusClass + '">' + escapeHtml(task.statusLabel) + '</span></div>' +
               (task.meta ? '<div class="task-meta">' + escapeHtml(task.meta) + '</div>' : '') + '</div>';
-          }).join("") + '</div></div>' : '';
+          }).join("") + '</div></div>' : (item.queueEligible ? '<div class="section"><div class="section-title">任务引用</div><div class="empty-note">' +
+            (queueEnabled ? '当前缺陷尚未进入任务中心，需等待前序缺陷出队后自动建单。' : '当前可通过手动动作创建处理任务，建单后会在这里展示任务引用。') +
+            '</div></div>' : '');
 
         var timeline = item.timeline.length ? '<div class="section"><div class="section-title">状态变更历史</div><div class="timeline">' +
           item.timeline.map(function (node) {
             return '<div class="timeline-item"><div>' + escapeHtml(node.title) + '</div><div class="timeline-time">' + escapeHtml(node.time) + '</div></div>';
           }).join("") + '</div></div>' : '';
 
+        var followUpDisabled = !!(item.followUp && queueEnabled && item.queueEligible && item.autoSlotState !== "active");
+        var followUpLabel = followUpDisabled ? "等待前序缺陷" : (item.followUp ? item.followUp.buttonLabel : "");
         var followUp = item.followUp ? [
           '<div class="section"><div class="section-title">', escapeHtml(item.followUp.title), '</div><div class="supplement-box"><div class="evidence"><div class="evidence-stack">',
           item.followUp.evidence.map(function (shot) { return '<div class="shot">' + shot + '</div>'; }).join(""),
           '</div><div class="text-block">', escapeHtml(item.followUp.text), '</div></div>',
-          '<div class="actions"><button class="primary" type="button">', escapeHtml(item.followUp.buttonLabel), '</button></div></div></div>'
+          '<div class="actions"><button class="primary" type="button"', followUpDisabled ? ' disabled' : '', '>', escapeHtml(followUpLabel), '</button></div></div></div>'
         ].join("") : '';
 
         var emptyNote = scenario === "not-bug" ? '<div class="empty-note">当前上报没有进入正式缺陷流程，因此没有 DTS，也没有任务中心处理链。</div>' : '';
 
         detailView.innerHTML = [
           '<div class="issue-head"><div><div class="muted">', escapeHtml(item.id), '</div><div class="issue-title">', escapeHtml(item.title), '</div></div>',
-          '<span class="status ', item.statusClass, '">', escapeHtml(item.statusLabel), '</span></div>',
+          '<div class="record-flags"><span class="priority ', getPriorityClass(item.priorityLabel), '">', escapeHtml(item.priorityLabel), '</span><span class="status ', item.statusClass, '">', escapeHtml(item.statusLabel), '</span></div></div>',
+          renderQueueSection(item, queueState, scenario),
           '<div class="facts">',
+          '<div class="fact"><div class="meta-k">任务优先级</div><div>', escapeHtml(item.priorityLabel), '</div></div>',
+          '<div class="fact"><div class="meta-k">上报时间</div><div>', escapeHtml(item.reportedAt), '</div></div>',
           '<div class="fact"><div class="meta-k">发现迭代</div><div>', escapeHtml(item.discovered), '</div></div>',
           '<div class="fact"><div class="meta-k">解决版本</div><div>', escapeHtml(item.version), '</div></div>',
           '<div class="fact"><div class="meta-k">当前动作</div><div>', escapeHtml(item.action), '</div></div>',
@@ -478,6 +809,7 @@
 
       function setViewMode(nextMode, syncUrl) {
         var viewMode = normalizeViewMode(nextMode);
+        currentViewMode = viewMode;
         viewBlocks.forEach(function (block) {
           block.hidden = block.getAttribute("data-view-mode") !== viewMode;
         });
@@ -485,9 +817,7 @@
           button.classList.toggle("active", button.getAttribute("data-view-mode-btn") === viewMode);
         });
         if (syncUrl) {
-          var url = new URL(window.location.href);
-          url.searchParams.set("view", viewMode);
-          window.history.replaceState({}, "", url.toString());
+          writeUrl();
         }
       }
 
@@ -507,16 +837,13 @@
         var preferredScenario = normalizeScenario(nextScenario);
         var scenario = syncScenarioWithFilters(preferredScenario);
         currentScenario = scenario || preferredScenario;
+        renderQueueToggle();
         renderRecords(currentScenario);
         if (scenario) {
           renderDetail(currentScenario);
         }
         if (syncUrl) {
-          var url = new URL(window.location.href);
-          url.searchParams.set("scenario", currentScenario);
-          url.searchParams.set("status", statusFilter.value);
-          url.searchParams.set("q", recordSearch.value);
-          window.history.replaceState({}, "", url.toString());
+          writeUrl();
         }
       }
 
@@ -534,7 +861,13 @@
         setScenario(currentScenario, true);
       });
 
+      queueToggle.addEventListener("click", function () {
+        queueEnabled = !queueEnabled;
+        setScenario(currentScenario, true);
+      });
+
       var params = new URLSearchParams(window.location.search);
+      queueEnabled = (params.get("queue") || "on") !== "off";
       setViewMode(params.get("view") || defaultViewMode, false);
       statusFilter.value = params.get("status") || "all";
       recordSearch.value = params.get("q") || "";

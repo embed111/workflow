@@ -1,0 +1,25 @@
+Traceback (most recent call last):
+  File "C:\work\J-Agents\workflow\.running\test\scripts\bin\workflow_entry_cli.py", line 17, in <module>
+    main()
+    ~~~~^^
+  File "C:\work\J-Agents\workflow\.running\test\src\workflow_app\entry\workflow_entry_cli.py", line 561, in main
+    init_db(root)
+    ~~~~~~~^^^^^^
+  File "C:\work\J-Agents\workflow\.running\test\src\workflow_app\entry\workflow_entry_cli.py", line 83, in init_db
+    ensure_runtime_tables(root)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\work\J-Agents\workflow\.running\test\src\workflow_app\server\infra\db\migrations.py", line 230, in ensure_tables
+    conn.execute(
+    ~~~~~~~~~~~~^
+        "CREATE INDEX IF NOT EXISTS idx_defect_reports_queue_sort ON defect_reports(status,task_priority,reported_at,dts_sequence,report_id)"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+sqlite3.OperationalError: no such column: task_priority
+status failed with exit code 1
+At C:\work\J-Agents\workflow\.running\test\scripts\dev\launch_workflow.ps1:70 char:5
++     throw "status failed with exit code $LASTEXITCODE"
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (status failed with exit code 1:String) [], RuntimeException
+    + FullyQualifiedErrorId : status failed with exit code 1
+ 

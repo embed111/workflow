@@ -154,7 +154,7 @@
     defectComposerCollapsed: false,
     defectComposerTouched: false,
     defectListTotal: 0,
-    defectListLimit: 100,
+    defectListLimit: 20,
     defectListNextOffset: 0,
     defectListHasMore: false,
     defectDraftImages: [],

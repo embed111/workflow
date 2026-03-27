@@ -1,0 +1,45 @@
+{
+  "base_url": "http://127.0.0.1:8090",
+  "runtime_root": "C:/work/J-Agents/workflow/.running/control/runtime/prod",
+  "operator": "codex-cleanup-delete-verify",
+  "role_name": "cleanup_delete_probe_20260327-173910",
+  "evidence_root": "C:/work/J-Agents/workflow/logs/runs/evidence/role-creation-creating-cleanup-delete-20260327-173910",
+  "workspace_path_before_delete": "C:/work/J-Agents/cleanup_delete_probe_20260327-173910",
+  "workspace_exists_before_delete": true,
+  "running_node_count_after_start": 0,
+  "delete_available_after_start": true,
+  "blocked_checked": false,
+  "task_ids": [
+    "rc-c032da-collect",
+    "rc-c032da-profile",
+    "rc-c032da-capability",
+    "rc-c032da-review"
+  ],
+  "task_count": 4,
+  "delete_available_before_delete": true,
+  "running_node_count_before_delete": 0,
+  "delete_label_before_delete": "清理删除",
+  "cleanup_result": {
+    "mode": "creating_cleanup",
+    "assignment_ticket_id": "asg-20260327-174020-909c7a",
+    "created_agent_id": "cleanup_delete_probe_20260327-173910",
+    "created_agent_workspace_path": "C:/work/J-Agents/cleanup_delete_probe_20260327-173910",
+    "assignment_cleanup": {
+      "ticket_id": "asg-20260327-174020-909c7a",
+      "ticket_workspace_path": "C:/work/J-Agents/.output/tasks/asg-20260327-174020-909c7a",
+      "removed": true
+    },
+    "workspace_cleanup": {
+      "workspace_path": "C:/work/J-Agents/cleanup_delete_probe_20260327-173910",
+      "removed": true
+    },
+    "agent_registry_cleanup": {
+      "agent_id": "cleanup_delete_probe_20260327-173910",
+      "agent_registry_removed": 1,
+      "agent_release_review_removed": 0,
+      "agent_release_history_removed": 0
+    }
+  },
+  "workspace_exists_after_delete": false,
+  "ok": true
+}

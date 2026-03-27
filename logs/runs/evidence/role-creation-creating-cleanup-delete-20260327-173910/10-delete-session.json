@@ -1,0 +1,76 @@
+{
+  "method": "DELETE",
+  "route": "/api/training/role-creation/sessions/rcs-20260327-173910-902126",
+  "payload": {
+    "operator": "codex-cleanup-delete-verify"
+  },
+  "status": 200,
+  "body": {
+    "ok": true,
+    "deleted_session": {
+      "session_id": "rcs-20260327-173910-902126",
+      "session_title": "cleanup_delete_probe_20260327-173910",
+      "status": "creating",
+      "current_stage_key": "persona_collection",
+      "current_stage_index": 2,
+      "last_message_preview": "创建流程已启动。我会继续在当前会话里收口画像，并把后台任务推进情况同步回你。",
+      "last_message_at": "2026-03-27T17:40:20+08:00",
+      "assignment_ticket_id": "asg-20260327-174020-909c7a",
+      "created_agent_id": "cleanup_delete_probe_20260327-173910",
+      "created_agent_name": "cleanup_delete_probe_20260327-173910",
+      "created_agent_workspace_path": "C:/work/J-Agents/cleanup_delete_probe_20260327-173910",
+      "workspace_init_status": "completed",
+      "workspace_init_ref": "logs/runs/role-creation-workspace-init-20260327-173956-224d8b.md",
+      "dialogue_agent_name": "Analyst",
+      "dialogue_agent_workspace_path": "C:/work/J-Agents/Analyst",
+      "dialogue_provider": "codex",
+      "last_dialogue_trace_ref": "logs/runs/role-creation-analyst-rcs-20260327-173910-902126-20260327-173911-57e9c0",
+      "message_processing_status": "idle",
+      "message_processing_status_text": "空闲",
+      "message_processing_error": "",
+      "message_processing_started_at": "",
+      "message_processing_updated_at": "2026-03-27T17:39:56+08:00",
+      "message_processing_batch_id": "",
+      "user_message_count": 1,
+      "unhandled_user_message_count": 0,
+      "started_at": "2026-03-27T17:40:20+08:00",
+      "completed_at": "",
+      "created_at": "2026-03-27T17:39:10+08:00",
+      "updated_at": "2026-03-27T17:40:20+08:00",
+      "role_name": "cleanup_delete_probe_20260327-173910",
+      "missing_fields": [],
+      "delete_available": true,
+      "delete_mode": "cleanup",
+      "delete_label": "清理删除",
+      "delete_block_reason": "",
+      "delete_block_reason_text": "",
+      "assignment_running_node_count": 0,
+      "assignment_scheduler_state": "running",
+      "assignment_scheduler_state_text": "运行中",
+      "current_stage_title": "角色画像收集"
+    },
+    "deleted_message_count": 6,
+    "deleted_task_ref_count": 4,
+    "cleanup_result": {
+      "mode": "creating_cleanup",
+      "assignment_ticket_id": "asg-20260327-174020-909c7a",
+      "created_agent_id": "cleanup_delete_probe_20260327-173910",
+      "created_agent_workspace_path": "C:/work/J-Agents/cleanup_delete_probe_20260327-173910",
+      "assignment_cleanup": {
+        "ticket_id": "asg-20260327-174020-909c7a",
+        "ticket_workspace_path": "C:/work/J-Agents/.output/tasks/asg-20260327-174020-909c7a",
+        "removed": true
+      },
+      "workspace_cleanup": {
+        "workspace_path": "C:/work/J-Agents/cleanup_delete_probe_20260327-173910",
+        "removed": true
+      },
+      "agent_registry_cleanup": {
+        "agent_id": "cleanup_delete_probe_20260327-173910",
+        "agent_registry_removed": 1,
+        "agent_release_review_removed": 0,
+        "agent_release_history_removed": 0
+      }
+    }
+  }
+}

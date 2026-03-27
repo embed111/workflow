@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 
 _AGENT_CACHE_MTIME_TOLERANCE_S = 0.001
 
@@ -31,6 +33,22 @@ def bind_runtime_symbols(symbols: dict[str, object]) -> None:
             continue
         target[key] = value
 
+
+def _iter_agent_manifest_paths(agents_root: Path) -> list[Path]:
+    root_path = agents_root.resolve(strict=False)
+    found: list[Path] = []
+    for current_root, dir_names, file_names in os.walk(root_path, topdown=True):
+        dir_names[:] = sorted(
+            dir_name
+            for dir_name in dir_names
+            if not str(dir_name or "").startswith(".")
+        )
+        if "AGENTS.md" not in file_names:
+            continue
+        found.append(Path(current_root) / "AGENTS.md")
+    found.sort(key=lambda path: str(path).lower())
+    return found
+
 def discover_agents(
     agents_root: Path,
     *,
@@ -56,7 +74,7 @@ def discover_agents(
             cache_conn = connect_db(cache_root)
         except Exception:
             cache_conn = None
-    for agents_file in sorted(agents_root.rglob("AGENTS.md"), key=lambda p: str(p).lower()):
+    for agents_file in _iter_agent_manifest_paths(agents_root):
         if not agents_file.is_file():
             continue
         try:

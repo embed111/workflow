@@ -1,0 +1,5 @@
+[workflow] workspace: C:\work\J-Agents\workflow\.running\test
+[workflow] runtime root: C:\work\J-Agents\workflow\.running\control\runtime\test
+[workflow] python: C:\Users\think\AppData\Local\Programs\Python\Python314\python.exe
+[workflow] skip backfill.
+[workflow] refresh status ...

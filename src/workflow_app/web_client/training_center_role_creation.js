@@ -441,17 +441,21 @@
     const session = rows.find((item) => safe(item && item.session_id).trim() === key) || {};
     const status = safe(session && session.status).trim().toLowerCase();
     const processing = roleCreationSessionProcessingInfo(session);
-    if (status === 'creating') {
-      throw new Error('创建中的角色不能直接删除，请先完成当前创建流程');
-    }
     if (processing.active) {
       throw new Error('当前对话仍在分析中，请等待处理完成后再删除');
+    }
+    const deleteAvailable = !!(session && session.delete_available);
+    const deleteBlockReasonText = safe(session && session.delete_block_reason_text).trim();
+    if ((status === 'creating' || status === 'draft' || status === 'completed') && !deleteAvailable) {
+      throw new Error(deleteBlockReasonText || '当前状态暂不支持删除');
     }
     const title = safe(session && session.session_title).trim() || '未命名角色草稿';
     const confirmed = window.confirm(
       status === 'completed'
         ? ('确认从创建角色列表中删除“' + title + '”吗？已创建的角色工作区和任务图不会被删除。')
-        : ('确认删除草稿“' + title + '”吗？当前对话记录会一并删除。')
+        : status === 'creating'
+          ? ('确认清理并删除“' + title + '”吗？当前会话、已创建工作区和关联任务图会一并清理。仅在任务中心没有运行中的任务时才能执行。')
+          : ('确认删除草稿“' + title + '”吗？当前对话记录会一并删除。')
     );
     if (!confirmed) return null;
     const data = await deleteJSON(
@@ -462,6 +466,7 @@
     clearRoleCreationTaskPreview();
     setRoleCreationError('');
     await refreshRoleCreationSessions();
+    refreshTrainingCenterAgents().catch(() => {});
     return data;
   }
 
@@ -749,7 +754,9 @@
       const missing = Array.isArray(session && session.missing_fields) ? session.missing_fields.length : 0;
       const status = safe(session && session.status).trim().toLowerCase();
       const processing = roleCreationSessionProcessingInfo(session);
-      const canDelete = (status === 'draft' || status === 'completed') && !processing.active;
+      const canDelete = !!(session && session.delete_available) && !processing.active;
+      const deleteLabel = safe(session && session.delete_label).trim()
+        || (status === 'completed' ? '删除记录' : status === 'creating' ? '清理删除' : '删除草稿');
       return (
         "<div class='rc-session-card" + (current ? ' active' : '') + "'>" +
           "<button class='rc-session-card-main' type='button' data-session-id='" + roleCreationEscapeHtml(sessionId) + "'>" +
@@ -776,7 +783,7 @@
           '</button>' +
           (
             canDelete
-              ? "<div class='rc-session-card-actions'><button class='bad rc-session-card-delete' type='button' data-rc-delete-session='" + roleCreationEscapeHtml(sessionId) + "'>" + roleCreationEscapeHtml(status === 'completed' ? '删除记录' : '删除草稿') + '</button></div>'
+              ? "<div class='rc-session-card-actions'><button class='bad rc-session-card-delete' type='button' data-rc-delete-session='" + roleCreationEscapeHtml(sessionId) + "'>" + roleCreationEscapeHtml(deleteLabel) + '</button></div>'
               : ''
           ) +
         '</div>'

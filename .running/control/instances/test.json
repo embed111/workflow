@@ -1,12 +1,13 @@
 {
   "environment": "test",
-  "version": "20260325-164619",
+  "version": "20260327-115245",
   "control_root": "C:\\work\\J-Agents\\workflow\\.running\\control",
   "manifest_path": "C:\\work\\J-Agents\\workflow\\.running\\control\\envs\\test.json",
   "deploy_root": "C:\\work\\J-Agents\\workflow\\.running\\test",
-  "pid": 14540,
+  "pid": 25064,
   "host": "127.0.0.1",
   "port": 8092,
-  "started_at": "2026-03-25T08:46:40Z",
-  "status": "running"
+  "started_at": "2026-03-27T03:52:51Z",
+  "status": "stopped",
+  "stopped_at": "2026-03-27T09:06:38Z"
 }

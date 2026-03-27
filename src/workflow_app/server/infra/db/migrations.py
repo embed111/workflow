@@ -221,6 +221,10 @@ def ensure_tables(
             )
             """
         )
+        ensure_column(conn, "defect_reports", "dts_id", "dts_id TEXT NOT NULL DEFAULT ''")
+        ensure_column(conn, "defect_reports", "dts_sequence", "dts_sequence INTEGER NOT NULL DEFAULT 0")
+        ensure_column(conn, "defect_reports", "task_priority", "task_priority TEXT NOT NULL DEFAULT 'P1'")
+        ensure_column(conn, "defect_reports", "reported_at", "reported_at TEXT NOT NULL DEFAULT ''")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_defect_reports_updated ON defect_reports(updated_at DESC)"
         )
@@ -435,8 +439,6 @@ def ensure_tables(
         ensure_column(conn, "training_plan", "is_test_data", "is_test_data INTEGER NOT NULL DEFAULT 0")
         ensure_column(conn, "training_plan", "loop_id", "loop_id TEXT NOT NULL DEFAULT ''")
         ensure_column(conn, "training_queue", "is_test_data", "is_test_data INTEGER NOT NULL DEFAULT 0")
-        ensure_column(conn, "defect_reports", "task_priority", "task_priority TEXT NOT NULL DEFAULT 'P1'")
-        ensure_column(conn, "defect_reports", "reported_at", "reported_at TEXT NOT NULL DEFAULT ''")
         ensure_column(
             conn,
             "training_queue",

@@ -22,6 +22,7 @@ IMAGE_DATA_URL = (
     "data:image/png;base64,"
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+cC8QAAAAASUVORK5CYII="
 )
+DEFECT_ASSIGNMENT_GLOBAL_GRAPH_NAME = "任务中心全局主图"
 
 
 def parse_args() -> argparse.Namespace:
@@ -138,7 +139,7 @@ def prepare_isolated_runtime_root(workspace_root: Path, runtime_root: Path) -> t
     configured_agent_root = str(source_cfg.get("agent_search_root") or "").strip()
     fallback_agent_root = infer_agent_search_root(workspace_root)
     agent_search_root = configured_agent_root if looks_like_workspace_root(configured_agent_root) else fallback_agent_root
-    artifact_root = str(source_cfg.get("artifact_root") or source_cfg.get("task_artifact_root") or "").strip()
+    artifact_root = (runtime_root / "artifacts").as_posix()
     if agent_search_root:
         bootstrap_cfg["agent_search_root"] = agent_search_root
     if artifact_root:
@@ -413,9 +414,51 @@ def assert_list_order(items: list[dict[str, Any]], expected_report_ids: list[str
     assert_true(actual == expected_report_ids, f"{message}: expected={expected_report_ids} actual={actual}")
 
 
-def assert_assignment_priority(overview: dict[str, Any], expected_priority: str, message: str) -> None:
+def assert_queue_state(
+    payload: dict[str, Any],
+    *,
+    expected_active_id: str,
+    expected_next_id: str,
+    expected_candidate_total: int | None,
+    message: str,
+) -> None:
+    queue = dict(payload.get("queue") or {})
+    active_report_id = str(queue.get("active_report_id") or "").strip()
+    next_report_id = str(queue.get("next_report_id") or "").strip()
+    assert_true(active_report_id == expected_active_id, f"{message}: active_report_id={active_report_id}")
+    assert_true(next_report_id == expected_next_id, f"{message}: next_report_id={next_report_id}")
+    if expected_candidate_total is not None:
+        assert_true(
+            int(queue.get("candidate_total") or 0) == int(expected_candidate_total),
+            f"{message}: candidate_total={queue.get('candidate_total')}",
+        )
+    items = list(payload.get("items") or [])
+    active_ids = [
+        str((item or {}).get("report_id") or "").strip()
+        for item in items
+        if str((item or {}).get("queue_mode") or "").strip() == "active"
+    ]
+    expected_active_ids = [expected_active_id] if expected_active_id else []
+    assert_true(active_ids == expected_active_ids, f"{message}: active_ids={active_ids}")
+
+
+def assert_assignment_priority(
+    overview: dict[str, Any],
+    expected_priority: str,
+    message: str,
+    *,
+    node_ids: list[str] | None = None,
+) -> None:
     nodes = list(overview.get("nodes") or overview.get("node_catalog") or [])
     assert_true(bool(nodes), f"{message}: nodes missing")
+    if node_ids:
+        wanted = {str(item or "").strip() for item in node_ids if str(item or "").strip()}
+        nodes = [
+            node
+            for node in nodes
+            if str((node or {}).get("node_id") or "").strip() in wanted
+        ]
+        assert_true(bool(nodes), f"{message}: focus nodes missing for {sorted(wanted)}")
     labels = [
         str((node or {}).get("priority_label") or "").strip()
         or str((node or {}).get("priority") or "").strip()
@@ -553,6 +596,9 @@ def seed_defect_queue_flow(base_url: str, evidence_root: Path, edge_path: Path) 
         {"defect_probe_report": head_id},
     )
     assert_true(bool(probe.get("pass")), "probe failed: queue_off")
+    assert_true(bool(probe.get("queue_toggle_in_title")), "queue off: toggle should be in title bar")
+    assert_true(bool(probe.get("queue_summary_visible")), "queue off: summary card missing")
+    assert_true(not bool(probe.get("legacy_queue_strip_present")), "queue off: legacy queue strip should be removed")
     screenshots["queue-off"] = {
         "case": "queue_off",
         "screenshot": shot_path,
@@ -567,10 +613,20 @@ def seed_defect_queue_flow(base_url: str, evidence_root: Path, edge_path: Path) 
         "POST",
         "/api/defects/queue-mode",
         {"enabled": True},
+        timeout_s=120,
     )
     queue_on = assert_response_ok(status, queue_on, "queue mode on failed")
     queue_summary = dict(queue_on.get("queue") or {})
     assert_true(bool(queue_summary.get("enabled")), "queue mode should be on")
+    status, list_queue_on = call_json_api(base_url, api_root, "list-queue-on", "GET", "/api/defects?status=all")
+    list_queue_on = assert_response_ok(status, list_queue_on, "list queue on failed")
+    assert_queue_state(
+        list_queue_on,
+        expected_active_id=head_id,
+        expected_next_id=second_id,
+        expected_candidate_total=4,
+        message="queue on should immediately promote head",
+    )
 
     status, head_detail = call_json_api(base_url, api_root, "head-detail-active", "GET", f"/api/defects/{head_id}")
     head_detail = assert_response_ok(status, head_detail, "head detail failed")
@@ -581,12 +637,22 @@ def seed_defect_queue_flow(base_url: str, evidence_root: Path, edge_path: Path) 
     head_task_ref = dict((head_detail.get("task_refs") or [])[0] or {})
     head_ticket_id = str(head_task_ref.get("ticket_id") or "").strip()
     assert_true(head_ticket_id != "", "head ticket id missing")
+    assert_true(str(head_task_ref.get("graph_name") or "").strip() == DEFECT_ASSIGNMENT_GLOBAL_GRAPH_NAME, "head graph name mismatch")
     head_task_history = find_history_detail(head_history, "已在任务中心创建处理任务")
     assert_true(bool(head_task_history.get("auto_queue")), "head auto_queue history missing")
 
     status, head_assignment = call_json_api(base_url, api_root, "head-assignment-graph", "GET", f"/api/assignments/{head_ticket_id}/graph")
     head_assignment = assert_response_ok(status, head_assignment, "head assignment overview failed")
-    assert_assignment_priority(head_assignment, "P0", "head assignment priority mismatch")
+    assert_true(
+        str(((head_assignment.get("graph") or {}).get("graph_name") or "")).strip() == DEFECT_ASSIGNMENT_GLOBAL_GRAPH_NAME,
+        "head assignment graph name mismatch",
+    )
+    assert_assignment_priority(
+        head_assignment,
+        "P0",
+        "head assignment priority mismatch",
+        node_ids=[f"{head_id}-analyze", f"{head_id}-fix", f"{head_id}-release"],
+    )
 
     status, second_detail_before = call_json_api(base_url, api_root, "second-detail-before-advance", "GET", f"/api/defects/{second_id}")
     second_detail_before = assert_response_ok(status, second_detail_before, "second detail before advance failed")
@@ -607,6 +673,8 @@ def seed_defect_queue_flow(base_url: str, evidence_root: Path, edge_path: Path) 
             {"defect_probe_report": report_id},
         )
         assert_true(bool(probe.get("pass")), f"probe failed: {case_id}")
+        assert_true(bool(probe.get("queue_toggle_in_title")), f"{case_id}: toggle should remain in title bar")
+        assert_true(bool(probe.get("queue_summary_visible")), f"{case_id}: summary card missing")
         screenshots[name] = {
             "case": case_id,
             "screenshot": shot_path,
@@ -634,9 +702,19 @@ def seed_defect_queue_flow(base_url: str, evidence_root: Path, edge_path: Path) 
         "POST",
         f"/api/defects/{head_id}/status",
         {"status": "resolved", "resolved_version": "20260325-ac-head", "operator": "acceptance"},
+        timeout_s=120,
     )
     resolve_head = assert_response_ok(status, resolve_head, "resolve head failed")
     assert_true(str(((resolve_head.get("report") or {}).get("status") or "")).strip() == "resolved", "head not resolved")
+    status, list_after_head = call_json_api(base_url, api_root, "list-after-head-resolved", "GET", "/api/defects?status=all")
+    list_after_head = assert_response_ok(status, list_after_head, "list after head resolved failed")
+    assert_queue_state(
+        list_after_head,
+        expected_active_id=second_id,
+        expected_next_id=third_id,
+        expected_candidate_total=3,
+        message="head resolved should auto promote second",
+    )
 
     status, second_detail_active = call_json_api(base_url, api_root, "second-detail-active", "GET", f"/api/defects/{second_id}")
     second_detail_active = assert_response_ok(status, second_detail_active, "second detail after advance failed")
@@ -647,12 +725,23 @@ def seed_defect_queue_flow(base_url: str, evidence_root: Path, edge_path: Path) 
     second_task_ref = dict((second_detail_active.get("task_refs") or [])[0] or {})
     second_ticket_id = str(second_task_ref.get("ticket_id") or "").strip()
     assert_true(second_ticket_id != "", "second ticket id missing")
+    assert_true(second_ticket_id == head_ticket_id, "process tasks should share one global graph")
+    assert_true(str(second_task_ref.get("graph_name") or "").strip() == DEFECT_ASSIGNMENT_GLOBAL_GRAPH_NAME, "second graph name mismatch")
     second_task_history = find_history_detail(second_history, "已在任务中心创建处理任务")
     assert_true(bool(second_task_history.get("auto_queue")), "second auto_queue history missing")
 
     status, second_assignment = call_json_api(base_url, api_root, "second-assignment-graph", "GET", f"/api/assignments/{second_ticket_id}/graph")
     second_assignment = assert_response_ok(status, second_assignment, "second assignment overview failed")
-    assert_assignment_priority(second_assignment, "P0", "second assignment priority mismatch")
+    assert_true(
+        str(((second_assignment.get("graph") or {}).get("graph_name") or "")).strip() == DEFECT_ASSIGNMENT_GLOBAL_GRAPH_NAME,
+        "second assignment graph name mismatch",
+    )
+    assert_assignment_priority(
+        second_assignment,
+        "P0",
+        "second assignment priority mismatch",
+        node_ids=[f"{second_id}-analyze", f"{second_id}-fix", f"{second_id}-release"],
+    )
 
     shot_path, probe_path, probe = capture_probe_with_retry(
         edge_path,
@@ -677,9 +766,19 @@ def seed_defect_queue_flow(base_url: str, evidence_root: Path, edge_path: Path) 
         "POST",
         f"/api/defects/{second_id}/status",
         {"status": "resolved", "resolved_version": "20260325-ac-second", "operator": "acceptance"},
+        timeout_s=120,
     )
     resolve_second = assert_response_ok(status, resolve_second, "resolve second failed")
     assert_true(str(((resolve_second.get("report") or {}).get("status") or "")).strip() == "resolved", "second not resolved")
+    status, list_after_second = call_json_api(base_url, api_root, "list-after-second-resolved", "GET", "/api/defects?status=all")
+    list_after_second = assert_response_ok(status, list_after_second, "list after second resolved failed")
+    assert_queue_state(
+        list_after_second,
+        expected_active_id=third_id,
+        expected_next_id=dispute_id,
+        expected_candidate_total=2,
+        message="second resolved should auto promote third",
+    )
 
     status, third_detail_active = call_json_api(base_url, api_root, "third-detail-active", "GET", f"/api/defects/{third_id}")
     third_detail_active = assert_response_ok(status, third_detail_active, "third detail active failed")
@@ -693,9 +792,19 @@ def seed_defect_queue_flow(base_url: str, evidence_root: Path, edge_path: Path) 
         "POST",
         f"/api/defects/{third_id}/status",
         {"status": "resolved", "resolved_version": "20260325-ac-third", "operator": "acceptance"},
+        timeout_s=120,
     )
     resolve_third = assert_response_ok(status, resolve_third, "resolve third failed")
     assert_true(str(((resolve_third.get("report") or {}).get("status") or "")).strip() == "resolved", "third not resolved")
+    status, list_after_third = call_json_api(base_url, api_root, "list-after-third-resolved", "GET", "/api/defects?status=all")
+    list_after_third = assert_response_ok(status, list_after_third, "list after third resolved failed")
+    assert_queue_state(
+        list_after_third,
+        expected_active_id=dispute_id,
+        expected_next_id="",
+        expected_candidate_total=1,
+        message="third resolved should auto promote dispute review",
+    )
 
     status, dispute_detail_active = call_json_api(base_url, api_root, "dispute-detail-active", "GET", f"/api/defects/{dispute_id}")
     dispute_detail_active = assert_response_ok(status, dispute_detail_active, "dispute detail active failed")
@@ -706,24 +815,67 @@ def seed_defect_queue_flow(base_url: str, evidence_root: Path, edge_path: Path) 
     dispute_task_ref = dict((dispute_detail_active.get("task_refs") or [])[0] or {})
     dispute_ticket_id = str(dispute_task_ref.get("ticket_id") or "").strip()
     assert_true(dispute_ticket_id != "", "dispute ticket id missing")
+    assert_true(dispute_ticket_id == head_ticket_id, "review task should share the global graph")
     assert_true(str(dispute_task_ref.get("action_kind") or "").strip() == "review", "dispute should create review task")
+    assert_true(str(dispute_task_ref.get("graph_name") or "").strip() == DEFECT_ASSIGNMENT_GLOBAL_GRAPH_NAME, "dispute graph name mismatch")
     dispute_task_history = find_history_detail(dispute_history, "已在任务中心创建复核任务")
     assert_true(bool(dispute_task_history.get("auto_queue")), "dispute auto_queue history missing")
 
     status, dispute_assignment = call_json_api(base_url, api_root, "dispute-assignment-graph", "GET", f"/api/assignments/{dispute_ticket_id}/graph")
     dispute_assignment = assert_response_ok(status, dispute_assignment, "dispute assignment overview failed")
-    assert_assignment_priority(dispute_assignment, "P2", "dispute assignment priority mismatch")
+    assert_assignment_priority(
+        dispute_assignment,
+        "P2",
+        "dispute assignment priority mismatch",
+        node_ids=[f"{dispute_id}-review"],
+    )
     assert_true(
-        "争议复核" in str(((dispute_assignment.get("graph") or {}).get("graph_name") or "")).strip(),
+        str(((dispute_assignment.get("graph") or {}).get("graph_name") or "")).strip() == DEFECT_ASSIGNMENT_GLOBAL_GRAPH_NAME,
         "dispute assignment graph name mismatch",
     )
+
+    status, close_dispute = call_json_api(
+        base_url,
+        api_root,
+        "close-dispute",
+        "POST",
+        f"/api/defects/{dispute_id}/status",
+        {"status": "closed", "operator": "acceptance"},
+        timeout_s=120,
+    )
+    close_dispute = assert_response_ok(status, close_dispute, "close dispute failed")
+    assert_true(str(((close_dispute.get("report") or {}).get("status") or "")).strip() == "closed", "dispute not closed")
 
     status, final_list = call_json_api(base_url, api_root, "list-final-all", "GET", "/api/defects?status=all")
     final_list = assert_response_ok(status, final_list, "final list failed")
     assert_list_order(list(final_list.get("items") or []), expected_order, "final list order mismatch")
+    assert_queue_state(
+        final_list,
+        expected_active_id="",
+        expected_next_id="",
+        expected_candidate_total=0,
+        message="queue should drain after final defect exits active slot",
+    )
+
+    shot_path, probe_path, probe = capture_probe_with_retry(
+        edge_path,
+        base_url,
+        evidence_root,
+        "queue-drained",
+        "queue_drained",
+        {"defect_probe_report": dispute_id},
+    )
+    assert_true(bool(probe.get("pass")), "probe failed: queue_drained")
+    screenshots["queue-drained"] = {
+        "case": "queue_drained",
+        "screenshot": shot_path,
+        "probe": probe_path,
+        "probe_payload": probe,
+    }
 
     return {
         "expected_order": expected_order,
+        "global_ticket_id": head_ticket_id,
         "head": {
             "report_id": head_id,
             "display_id": str(head_report.get("display_id") or "").strip(),

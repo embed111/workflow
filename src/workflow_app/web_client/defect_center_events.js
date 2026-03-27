@@ -112,6 +112,7 @@
     const detailScroll = $('defectDetailScroll');
     const reviewBtn = $('defectSubmitReviewBtn');
     const queueToggle = $('defectQueueToggleBtn');
+    const queueSummaryCard = $('defectQueueSummaryCard');
     return {
       ts: new Date().toISOString(),
       case: defectProbeCase(),
@@ -135,6 +136,12 @@
       queue_active_display_id: safe(queue.active_display_id).trim(),
       queue_next_display_id: safe(queue.next_display_id).trim(),
       queue_toggle_text: safe(queueToggle ? queueToggle.textContent : '').trim(),
+      queue_toggle_in_title: !!(queueToggle && queueToggle.closest('.defect-list-head-actions')),
+      legacy_queue_strip_present: !!document.querySelector('.defect-queue-strip'),
+      queue_summary_visible: !!queueSummaryCard,
+      queue_summary_active_text: safe($('defectQueueSummaryActiveValue') ? $('defectQueueSummaryActiveValue').textContent : '').trim(),
+      queue_summary_next_text: safe($('defectQueueSummaryNextValue') ? $('defectQueueSummaryNextValue').textContent : '').trim(),
+      queue_summary_rule_text: safe($('defectQueueSummaryRule') ? $('defectQueueSummaryRule').textContent : '').trim(),
       filter_value: safe(state.defectStatusFilter).trim(),
       keyword_value: safe(state.defectKeyword).trim(),
       process_btn_visible: !!$('defectCreateProcessTaskBtn'),
@@ -179,13 +186,50 @@
       if (probeCase === 'requirement_empty') {
         result.pass = !!result.requirement_empty_visible;
       } else if (probeCase === 'queue_off') {
-        result.pass = !result.queue_enabled && !!result.selected_task_priority && !!result.selected_reported_at;
+        result.pass = (
+          !result.queue_enabled &&
+          !!result.selected_task_priority &&
+          !!result.selected_reported_at &&
+          result.queue_toggle_in_title &&
+          result.queue_summary_visible &&
+          !result.legacy_queue_strip_present &&
+          !!result.queue_summary_rule_text
+        );
       } else if (probeCase === 'queue_on') {
-        result.pass = result.queue_enabled && !!result.queue_active_display_id && !!result.queue_next_display_id;
+        result.pass = (
+          result.queue_enabled &&
+          !!result.queue_active_display_id &&
+          !!result.queue_next_display_id &&
+          result.queue_toggle_in_title &&
+          result.queue_summary_visible &&
+          !result.legacy_queue_strip_present &&
+          !!result.queue_summary_rule_text
+        );
       } else if (probeCase === 'queue_active') {
-        result.pass = result.queue_enabled && result.selected_queue_mode === 'active' && result.task_ref_total >= 1;
+        result.pass = (
+          result.queue_enabled &&
+          result.selected_queue_mode === 'active' &&
+          result.task_ref_total >= 1 &&
+          result.queue_summary_visible &&
+          !!result.queue_summary_active_text
+        );
       } else if (probeCase === 'queue_advanced') {
-        result.pass = result.queue_enabled && result.selected_queue_mode === 'active' && result.task_ref_total >= 1;
+        result.pass = (
+          result.queue_enabled &&
+          result.selected_queue_mode === 'active' &&
+          result.task_ref_total >= 1 &&
+          result.queue_summary_visible &&
+          !!result.queue_summary_next_text
+        );
+      } else if (probeCase === 'queue_drained') {
+        result.pass = (
+          result.queue_enabled &&
+          !result.queue_active_display_id &&
+          !result.queue_next_display_id &&
+          result.queue_toggle_in_title &&
+          result.queue_summary_visible &&
+          !result.legacy_queue_strip_present
+        );
       } else if (probeCase === 'filter_search') {
         result.pass = result.list_total >= 0 && result.list_item_count >= 0;
       } else {

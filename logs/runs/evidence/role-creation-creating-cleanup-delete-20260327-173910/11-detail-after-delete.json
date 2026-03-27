@@ -1,0 +1,11 @@
+{
+  "method": "GET",
+  "route": "/api/training/role-creation/sessions/rcs-20260327-173910-902126",
+  "payload": null,
+  "status": 404,
+  "body": {
+    "ok": false,
+    "error": "role creation session not found",
+    "code": "role_creation_session_not_found"
+  }
+}

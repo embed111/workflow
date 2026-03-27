@@ -1,6 +1,6 @@
 def _workspace_dir_name(role_name: str) -> str:
     raw = _normalize_text(role_name, max_len=60) or "new-agent"
-    safe_name = re.sub(r'[<>:"/\\\\|?*\\x00-\\x1f]+', "-", raw).strip().strip(".")
+    safe_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "-", raw).strip().strip(".")
     return safe_name or f"new-agent-{uuid.uuid4().hex[:6]}"
 
 

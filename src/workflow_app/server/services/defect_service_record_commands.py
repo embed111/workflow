@@ -24,6 +24,7 @@ from .defect_service import (
     _normalize_image_evidence,
     _normalize_reported_at,
     _normalize_task_priority,
+    _resolve_task_priority_truth,
     _normalize_text,
     _now_text,
     _report_row_to_payload,
@@ -31,7 +32,6 @@ from .defect_service import (
     _runtime_version_label,
     _status_text,
     _write_report_update,
-    _infer_task_priority,
     connect_db,
     get_defect_detail,
 )
@@ -54,11 +54,13 @@ def create_defect_report(cfg: Any, body: dict[str, Any]) -> dict[str, Any]:
     decision = _fallback_prejudge(report_text, images)
     status = DEFECT_STATUS_UNRESOLVED if decision["decision"] == "defect" else DEFECT_STATUS_NOT_FORMAL
     is_formal = decision["decision"] == "defect"
-    task_priority = _normalize_task_priority(
-        body.get("task_priority")
-        or body.get("taskPriority")
-        or _infer_task_priority(report_text, decision=decision, status=status),
-        default="P1",
+    task_priority, task_priority_source = _resolve_task_priority_truth(
+        explicit_value=body.get("task_priority") or body.get("taskPriority"),
+        defect_summary=summary,
+        report_text=report_text,
+        decision=decision,
+        status=status,
+        strict=True,
     )
     reported_at = _normalize_reported_at(body.get("reported_at") or body.get("reportedAt"), fallback=now_text)
     dts_id = ""
@@ -113,6 +115,7 @@ def create_defect_report(cfg: Any, body: dict[str, Any]) -> dict[str, Any]:
             detail={
                 "defect_summary": summary,
                 "task_priority": task_priority,
+                "task_priority_source": task_priority_source,
                 "reported_at": reported_at,
                 "report_source": report_source,
                 "image_count": len(images),

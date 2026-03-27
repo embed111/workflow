@@ -147,12 +147,14 @@
     defectDetailLoading: false,
     defectError: '',
     defectSubmitError: '',
+    defectQueueSummary: null,
+    defectQueueSaving: false,
     defectStatusFilter: 'all',
     defectKeyword: '',
     defectComposerCollapsed: false,
     defectComposerTouched: false,
     defectListTotal: 0,
-    defectListLimit: 100,
+    defectListLimit: 20,
     defectListNextOffset: 0,
     defectListHasMore: false,
     defectDraftImages: [],
@@ -866,4 +868,3 @@
     setIconOnlyButton('clearAllPolicyCacheBtn', 'clear_all');
     setIconOnlyButton('regeneratePolicyCacheBtn', 'cache');
   }
-

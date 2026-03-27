@@ -868,23 +868,6 @@
           </div>
         </div>
         <div id='rbModuleDefect' class='rb-module active'>
-          <div class='defect-queue-strip'>
-            <div class='defect-queue-copy'>
-              <div class='card-title'>按顺序创建任务</div>
-              <div class='hint'>默认排序：任务优先级高到低；同优先级按上报时间早到晚。</div>
-            </div>
-            <div class='defect-queue-stats'>
-              <div class='defect-queue-stat'>
-                <div class='defect-queue-stat-label'>当前主动处理缺陷</div>
-                <div id='defectQueueActiveValue' class='defect-queue-stat-value'>-</div>
-              </div>
-              <div class='defect-queue-stat'>
-                <div class='defect-queue-stat-label'>下一条待建单缺陷</div>
-                <div id='defectQueueNextValue' class='defect-queue-stat-value'>-</div>
-              </div>
-            </div>
-            <button id='defectQueueToggleBtn' class='defect-queue-toggle off' type='button'>按顺序创建任务：关闭</button>
-          </div>
           <div class='defect-shell'>
             <aside class='defect-side'>
               <div id='defectComposerCard' class='defect-card defect-composer-card'>
@@ -915,11 +898,19 @@
               </div>
               <div class='defect-card defect-list-wrap'>
                 <div>
-                  <div class='row between'>
+                  <div class='row between defect-list-head'>
                     <div class='card-title'>缺陷记录</div>
-                    <button id='defectRefreshBtn' class='alt' type='button'>刷新</button>
+                    <div class='defect-list-head-actions'>
+                      <button
+                        id='defectQueueToggleBtn'
+                        class='alt defect-queue-toggle off'
+                        type='button'
+                        title='全局总开关；开启后会按优先级与上报时间连续串行建单'
+                      >按顺序创建任务：关闭</button>
+                      <button id='defectRefreshBtn' class='alt' type='button'>刷新</button>
+                    </div>
                   </div>
-                  <div class='row'>
+                  <div class='row defect-list-toolbar'>
                     <select id='defectStatusFilterSelect'>
                       <option value='all'>全部状态</option>
                       <option value='not_formal'>当前不构成缺陷</option>

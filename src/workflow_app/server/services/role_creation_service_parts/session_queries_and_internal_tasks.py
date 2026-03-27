@@ -7,7 +7,11 @@ def list_role_creation_sessions(root: Path) -> dict[str, Any]:
         ).fetchall()
     finally:
         conn.close()
-    items = [_session_row_to_summary(row) for row in rows]
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        summary = _session_row_to_summary(row)
+        summary.update(_role_creation_delete_state(root, summary))
+        items.append(summary)
     return {"items": items, "total": len(items)}
 
 
@@ -39,6 +43,7 @@ def get_role_creation_session_detail(root: Path, session_id: str) -> dict[str, A
     session_summary["unhandled_user_message_count"] = int(message_counts["unhandled"] or 0)
     session_summary["message_processing_status"] = queue_status
     session_summary["message_processing_status_text"] = _role_creation_queue_state_text(queue_status)
+    session_summary.update(_role_creation_delete_state(root, session_summary))
     role_spec, missing_fields = _build_role_spec(messages)
     assignment_graph = {}
     if session_summary.get("assignment_ticket_id"):
@@ -108,6 +113,81 @@ def get_role_creation_session_detail(root: Path, session_id: str) -> dict[str, A
         "created_agent": created_agent,
         "dialogue_agent": dialogue_agent,
     }
+
+
+def _role_creation_delete_state(root: Path, session_summary: dict[str, Any]) -> dict[str, Any]:
+    status = _normalize_session_status((session_summary or {}).get("status"))
+    out = {
+        "delete_available": False,
+        "delete_mode": "",
+        "delete_label": "",
+        "delete_block_reason": "",
+        "delete_block_reason_text": "",
+        "assignment_running_node_count": 0,
+        "assignment_scheduler_state": "",
+        "assignment_scheduler_state_text": "",
+    }
+    if _role_creation_session_processing_active(session_summary):
+        out.update(
+            {
+                "delete_mode": "blocked",
+                "delete_block_reason": "message_processing_active",
+                "delete_block_reason_text": "当前对话仍在分析中，暂不支持删除",
+            }
+        )
+        return out
+    if status == "draft":
+        out.update({"delete_available": True, "delete_mode": "draft", "delete_label": "删除草稿"})
+        return out
+    if status == "completed":
+        out.update({"delete_available": True, "delete_mode": "record", "delete_label": "删除记录"})
+        return out
+    if status != "creating":
+        out.update(
+            {
+                "delete_mode": "blocked",
+                "delete_block_reason": "session_status_invalid",
+                "delete_block_reason_text": "当前状态不支持删除",
+            }
+        )
+        return out
+    out.update({"delete_mode": "cleanup", "delete_label": "清理删除"})
+    ticket_id = str((session_summary or {}).get("assignment_ticket_id") or "").strip()
+    if not ticket_id:
+        out["delete_available"] = True
+        return out
+    try:
+        scheduler = assignment_service.get_assignment_scheduler_state(
+            root,
+            ticket_id_text=ticket_id,
+            include_test_data=True,
+        )
+    except Exception as exc:
+        code = str(getattr(exc, "code", "") or "").strip()
+        if code == "assignment_graph_not_found":
+            out["delete_available"] = True
+            return out
+        out.update(
+            {
+                "delete_block_reason": "assignment_state_unavailable",
+                "delete_block_reason_text": "关联任务图状态读取失败，暂不支持清理删除",
+            }
+        )
+        return out
+    running_node_count = int(scheduler.get("graph_running_node_count") or 0)
+    out["assignment_running_node_count"] = running_node_count
+    out["assignment_scheduler_state"] = str(scheduler.get("state") or "").strip().lower()
+    out["assignment_scheduler_state_text"] = str(scheduler.get("state_text") or "").strip()
+    if running_node_count > 0:
+        out.update(
+            {
+                "delete_block_reason": "assignment_running_nodes",
+                "delete_block_reason_text": f"任务中心仍有 {running_node_count} 个运行中的任务，暂不支持清理删除",
+            }
+        )
+        return out
+    out["delete_available"] = True
+    return out
 
 
 def _raise_role_creation_assignment_error(exc: BaseException, default_code: str) -> None:

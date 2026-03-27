@@ -1096,26 +1096,51 @@ def delete_role_creation_session(cfg: Any, session_id: str, body: dict[str, Any]
     detail = get_role_creation_session_detail(cfg.root, session_key)
     session_summary = dict(detail.get("session") or {})
     session_status = _normalize_session_status(session_summary.get("status"))
+    delete_state = _role_creation_delete_state(cfg.root, session_summary)
+    if not bool(delete_state.get("delete_available")):
+        delete_block_reason = str(delete_state.get("delete_block_reason") or "").strip()
+        if delete_block_reason == "message_processing_active":
+            raise TrainingCenterError(
+                409,
+                "当前对话仍在分析中，暂不支持删除，请等待处理完成后再删除",
+                "role_creation_delete_processing_blocked",
+                {
+                    "message_processing_status": str(session_summary.get("message_processing_status") or "").strip(),
+                    "unhandled_user_message_count": int(session_summary.get("unhandled_user_message_count") or 0),
+                },
+            )
+        if session_status == "creating" and delete_block_reason == "assignment_running_nodes":
+            raise TrainingCenterError(
+                409,
+                str(delete_state.get("delete_block_reason_text") or "当前任务中心仍有运行中的任务，暂不支持清理删除"),
+                "role_creation_delete_running_tasks_blocked",
+                {
+                    "assignment_ticket_id": str(session_summary.get("assignment_ticket_id") or "").strip(),
+                    "created_agent_name": str(session_summary.get("created_agent_name") or "").strip(),
+                    "assignment_running_node_count": int(delete_state.get("assignment_running_node_count") or 0),
+                    "assignment_scheduler_state": str(delete_state.get("assignment_scheduler_state") or "").strip(),
+                    "assignment_scheduler_state_text": str(delete_state.get("assignment_scheduler_state_text") or "").strip(),
+                },
+            )
+        if session_status == "creating":
+            raise TrainingCenterError(
+                409,
+                str(delete_state.get("delete_block_reason_text") or "当前角色正在创建中，暂不支持删除"),
+                "role_creation_delete_creating_blocked",
+                {
+                    "assignment_ticket_id": str(session_summary.get("assignment_ticket_id") or "").strip(),
+                    "created_agent_name": str(session_summary.get("created_agent_name") or "").strip(),
+                },
+            )
+        raise TrainingCenterError(
+            409,
+            str(delete_state.get("delete_block_reason_text") or "当前状态不支持删除"),
+            "role_creation_delete_blocked",
+            {"status": session_status},
+        )
+    cleanup_result: dict[str, Any] = {}
     if session_status == "creating":
-        raise TrainingCenterError(
-            409,
-            "当前角色正在创建中，暂不支持删除，请先完成当前创建流程",
-            "role_creation_delete_creating_blocked",
-            {
-                "assignment_ticket_id": str(session_summary.get("assignment_ticket_id") or "").strip(),
-                "created_agent_name": str(session_summary.get("created_agent_name") or "").strip(),
-            },
-        )
-    if _role_creation_session_processing_active(session_summary):
-        raise TrainingCenterError(
-            409,
-            "当前对话仍在分析中，暂不支持删除，请等待处理完成后再删除",
-            "role_creation_delete_processing_blocked",
-            {
-                "message_processing_status": str(session_summary.get("message_processing_status") or "").strip(),
-                "unhandled_user_message_count": int(session_summary.get("unhandled_user_message_count") or 0),
-            },
-        )
+        cleanup_result = _cleanup_role_creation_session_assets(cfg, session_summary=session_summary)
     deleted_payload = dict(session_summary)
     deleted_message_count = len(list(detail.get("messages") or []))
     deleted_task_ref_count = len(list(detail.get("task_refs") or []))
@@ -1141,13 +1166,110 @@ def delete_role_creation_session(cfg: Any, session_id: str, body: dict[str, Any]
             "created_agent_id": str(session_summary.get("created_agent_id") or "").strip(),
             "deleted_message_count": deleted_message_count,
             "deleted_task_ref_count": deleted_task_ref_count,
+            "cleanup_result": cleanup_result,
         },
     )
     return {
         "deleted_session": deleted_payload,
         "deleted_message_count": deleted_message_count,
         "deleted_task_ref_count": deleted_task_ref_count,
+        "cleanup_result": cleanup_result,
     }
+
+
+def _cleanup_role_creation_session_assets(
+    cfg: Any,
+    *,
+    session_summary: dict[str, Any],
+) -> dict[str, Any]:
+    cleanup_result: dict[str, Any] = {
+        "mode": "creating_cleanup",
+        "assignment_ticket_id": str(session_summary.get("assignment_ticket_id") or "").strip(),
+        "created_agent_id": str(session_summary.get("created_agent_id") or "").strip(),
+        "created_agent_workspace_path": str(session_summary.get("created_agent_workspace_path") or "").strip(),
+    }
+    ticket_id = str(session_summary.get("assignment_ticket_id") or "").strip()
+    if ticket_id:
+        ticket_dir = assignment_service._assignment_ticket_workspace_dir(cfg.root, ticket_id)
+        tasks_root = ticket_dir.parent.resolve(strict=False)
+        if ticket_dir.exists():
+            if not path_in_scope(ticket_dir, tasks_root):
+                raise TrainingCenterError(
+                    409,
+                    "关联任务图目录超出允许清理范围",
+                    "role_creation_cleanup_assignment_out_of_scope",
+                    {"ticket_id": ticket_id, "ticket_workspace_path": ticket_dir.as_posix()},
+                )
+            try:
+                shutil.rmtree(ticket_dir)
+            except Exception as exc:
+                raise TrainingCenterError(
+                    500,
+                    f"清理关联任务图目录失败: {exc}",
+                    "role_creation_cleanup_assignment_remove_failed",
+                    {"ticket_id": ticket_id, "ticket_workspace_path": ticket_dir.as_posix()},
+                ) from exc
+        try:
+            assignment_service.sync_assignment_task_bundle_index(cfg.root, ticket_id)
+        except Exception:
+            pass
+        cleanup_result["assignment_cleanup"] = {
+            "ticket_id": ticket_id,
+            "ticket_workspace_path": ticket_dir.as_posix(),
+            "removed": not ticket_dir.exists(),
+        }
+    workspace_path_text = str(session_summary.get("created_agent_workspace_path") or "").strip()
+    if workspace_path_text:
+        workspace_path = Path(workspace_path_text).resolve(strict=False)
+        search_root_text = str(getattr(cfg, "agent_search_root", "") or "").strip()
+        if search_root_text:
+            search_root = Path(search_root_text).resolve(strict=False)
+            if not path_in_scope(workspace_path, search_root):
+                raise TrainingCenterError(
+                    409,
+                    "角色工作区超出允许清理范围",
+                    "role_creation_cleanup_workspace_out_of_scope",
+                    {"workspace_path": workspace_path.as_posix()},
+                )
+        if workspace_path.exists():
+            if not workspace_path.is_dir():
+                raise TrainingCenterError(
+                    409,
+                    "角色工作区路径不是目录，不能执行清理",
+                    "role_creation_cleanup_workspace_invalid",
+                    {"workspace_path": workspace_path.as_posix()},
+                )
+            try:
+                shutil.rmtree(workspace_path)
+            except Exception as exc:
+                raise TrainingCenterError(
+                    500,
+                    f"清理角色工作区失败: {exc}",
+                    "role_creation_cleanup_workspace_remove_failed",
+                    {"workspace_path": workspace_path.as_posix()},
+                ) from exc
+        cleanup_result["workspace_cleanup"] = {
+            "workspace_path": workspace_path.as_posix(),
+            "removed": not workspace_path.exists(),
+        }
+    agent_id = str(session_summary.get("created_agent_id") or "").strip()
+    if agent_id:
+        conn = connect_db(cfg.root)
+        try:
+            conn.execute("BEGIN")
+            registry_removed = int(conn.execute("DELETE FROM agent_registry WHERE agent_id=?", (agent_id,)).rowcount or 0)
+            review_removed = int(conn.execute("DELETE FROM agent_release_review WHERE agent_id=?", (agent_id,)).rowcount or 0)
+            history_removed = int(conn.execute("DELETE FROM agent_release_history WHERE agent_id=?", (agent_id,)).rowcount or 0)
+            conn.commit()
+        finally:
+            conn.close()
+        cleanup_result["agent_registry_cleanup"] = {
+            "agent_id": agent_id,
+            "agent_registry_removed": registry_removed,
+            "agent_release_review_removed": review_removed,
+            "agent_release_history_removed": history_removed,
+        }
+    return cleanup_result
 
 
 def complete_role_creation_session(cfg: Any, session_id: str, body: dict[str, Any]) -> dict[str, Any]:

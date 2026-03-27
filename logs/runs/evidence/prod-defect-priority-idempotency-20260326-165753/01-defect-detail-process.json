@@ -1,0 +1,653 @@
+{
+  "route": "/api/defects/dr-20260325-ca49dd19d9",
+  "status": 200,
+  "response_headers": {
+    "Server": "BaseHTTP/0.6 Python/3.14.2",
+    "Date": "Thu, 26 Mar 2026 08:58:04 GMT",
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": "18777"
+  },
+  "response": {
+    "ok": true,
+    "include_test_data": false,
+    "environment": "prod",
+    "show_test_data": false,
+    "show_test_data_source": "environment_policy",
+    "report": {
+      "report_id": "dr-20260325-ca49dd19d9",
+      "dts_id": "DTS-00004",
+      "dts_sequence": 4,
+      "display_id": "DTS-00004",
+      "defect_summary": "[任务中心][P0] 缺陷复核已创建任务但任务中心列表不显示",
+      "report_text": "模块：需求与缺陷 -> 任务中心\n建议优先级：P0\n\n现象：\n- 2026-03-25 13:19:37，缺陷复核流程为 DTS-00003 自动创建了任务 asg-20260325-132002-d119da\n- 缺陷详情中已有任务引用，且磁盘中存在 C:/work/J-Agents/.output/tasks/asg-20260325-132002-d119da/task.json\n- task.json 显示 record_state=active、scheduler_state=idle，节点状态为待开始\n- 但 2026-03-25 13:20 之后进入任务中心并点击刷新，任务图仍显示“总任务 2”，列表只显示 2026-03-20 的旧任务，看不到这条新任务\n\n复现步骤：\n1. 在缺陷列表中将 dr-20260325-33d0f8fd52 标记为有分歧并提交复核\n2. 看到缺陷详情出现“已在任务中心创建复核任务”\n3. 进入任务中心点击刷新\n4. 观察任务图与任务列表\n\n期望结果：\n- 自动创建的任务应立即出现在任务中心列表/主图中\n- 至少应能通过任务 ID 或最新记录看到 asg-20260325-132002-d119da\n\n实际结果：\n- 文件已创建，但任务中心 UI 不显示该任务\n\n影响：\n- 用户无法确认 bug 是否已成功转任务\n- 会直接阻断“bug 列表 -> 任务中心 -> 修复”的可见闭环",
+      "evidence_images": [],
+      "task_priority": "P0",
+      "reported_at": "2026-03-25T13:28:42+08:00",
+      "is_formal": true,
+      "status": "unresolved",
+      "status_text": "未解决",
+      "discovered_iteration": "20260325-111152",
+      "resolved_version": "",
+      "current_decision": {
+        "decision_source": "fallback_rule",
+        "decision": "defect",
+        "title": "构成 workflow 缺陷",
+        "summary": "命中异常/失败类线索，已按真实缺陷进入闭环。",
+        "matched_rules": [
+          "bug",
+          "无法",
+          "显示",
+          "刷新",
+          "需求",
+          "建议"
+        ],
+        "confidence": "medium",
+        "scored_images": 0,
+        "decided_at": "2026-03-25T13:28:42+08:00"
+      },
+      "report_source": "workflow-ui",
+      "automation_context": {},
+      "is_test_data": false,
+      "created_at": "2026-03-25T13:28:42+08:00",
+      "updated_at": "2026-03-25T15:52:41+08:00",
+      "decision_title": "构成 workflow 缺陷",
+      "decision_summary": "命中异常/失败类线索，已按真实缺陷进入闭环。",
+      "decision_source": "fallback_rule",
+      "task_ref_total": 3,
+      "queue_eligible": true,
+      "has_task_chain": true,
+      "queue_mode": "manual",
+      "queue_mode_text": "手动建单模式"
+    },
+    "history": [
+      {
+        "history_id": "dh-20260325-96efd25719",
+        "report_id": "dr-20260325-ca49dd19d9",
+        "entry_type": "submitted",
+        "actor": "web-user",
+        "title": "用户提交缺陷记录",
+        "detail": {
+          "defect_summary": "[任务中心][P0] 缺陷复核已创建任务但任务中心列表不显示",
+          "report_source": "workflow-ui",
+          "image_count": 0,
+          "automation_context": {}
+        },
+        "created_at": "2026-03-25T13:28:42+08:00"
+      },
+      {
+        "history_id": "dh-20260325-97f0ef8609",
+        "report_id": "dr-20260325-ca49dd19d9",
+        "entry_type": "decision",
+        "actor": "workflow agent",
+        "title": "构成 workflow 缺陷",
+        "detail": {
+          "decision_source": "fallback_rule",
+          "decision": "defect",
+          "title": "构成 workflow 缺陷",
+          "summary": "命中异常/失败类线索，已按真实缺陷进入闭环。",
+          "matched_rules": [
+            "bug",
+            "无法",
+            "显示",
+            "刷新",
+            "需求",
+            "建议"
+          ],
+          "confidence": "medium",
+          "scored_images": 0
+        },
+        "created_at": "2026-03-25T13:28:42+08:00"
+      },
+      {
+        "history_id": "dh-20260325-c9e3553b8d",
+        "report_id": "dr-20260325-ca49dd19d9",
+        "entry_type": "task",
+        "actor": "web-user",
+        "title": "已在任务中心创建处理任务",
+        "detail": {
+          "ticket_id": "asg-20260325-155330-bc6838",
+          "external_request_id": "defect:process:dr-20260325-ca49dd19d9",
+          "assigned_agent_id": "workflow"
+        },
+        "created_at": "2026-03-25T15:52:41+08:00"
+      },
+      {
+        "history_id": "dh-20260326-50023265c5",
+        "report_id": "dr-20260325-ca49dd19d9",
+        "entry_type": "repair",
+        "actor": "defect-system",
+        "title": "已收口历史任务图到任务中心总图",
+        "detail": {
+          "action_kind": "process",
+          "ticket_id": "asg-20260326-122459-a50c6f",
+          "external_request_id": "defect:process:dr-20260325-ca49dd19d9",
+          "task_priority": "P0",
+          "created_node_count": 3,
+          "updated_node_count": 0,
+          "revived_node_count": 0,
+          "added_edge_count": 2,
+          "deleted_legacy_ticket_ids": [],
+          "skipped_running_ticket_ids": []
+        },
+        "created_at": "2026-03-26T15:01:22+08:00"
+      },
+      {
+        "history_id": "dh-20260326-3eb7ed99d7",
+        "report_id": "dr-20260325-ca49dd19d9",
+        "entry_type": "repair",
+        "actor": "defect-system",
+        "title": "已收口历史任务图到任务中心总图",
+        "detail": {
+          "action_kind": "process",
+          "ticket_id": "asg-20260326-122459-a50c6f",
+          "external_request_id": "defect:process:dr-20260325-ca49dd19d9",
+          "task_priority": "P0",
+          "created_node_count": 0,
+          "updated_node_count": 0,
+          "revived_node_count": 0,
+          "added_edge_count": 0,
+          "deleted_legacy_ticket_ids": [
+            "asg-20260325-155336-3cac33",
+            "asg-20260325-155333-d270ba",
+            "asg-20260325-155330-bc6838"
+          ],
+          "skipped_running_ticket_ids": []
+        },
+        "created_at": "2026-03-26T16:51:11+08:00"
+      }
+    ],
+    "task_refs": [
+      {
+        "ref_id": "dtr-cfd5b44f74179c78",
+        "report_id": "dr-20260325-ca49dd19d9",
+        "ticket_id": "asg-20260326-122459-a50c6f",
+        "focus_node_id": "dr-20260325-ca49dd19d9-analyze",
+        "action_kind": "process",
+        "title": "分析缺陷",
+        "external_request_id": "defect:process:dr-20260325-ca49dd19d9",
+        "created_at": "2026-03-25T15:52:41+08:00",
+        "updated_at": "2026-03-26T16:51:11+08:00",
+        "graph_name": "任务中心全局主图",
+        "scheduler_state": "idle",
+        "scheduler_state_text": "未启动",
+        "node_name": "分析缺陷",
+        "node_status": "ready",
+        "node_status_text": "待开始",
+        "selected_node": {
+          "node_id": "dr-20260325-ca49dd19d9-analyze",
+          "ticket_id": "asg-20260326-122459-a50c6f",
+          "node_name": "分析缺陷",
+          "source_schedule_id": "",
+          "planned_trigger_at": "",
+          "trigger_instance_id": "",
+          "trigger_rule_summary": "",
+          "assigned_agent_id": "workflow",
+          "assigned_agent_name": "workflow",
+          "node_goal": "分析当前缺陷成因、复现条件和修复范围。",
+          "expected_artifact": "分析缺陷报告.html",
+          "delivery_mode": "specified",
+          "delivery_mode_text": "指定交付对象",
+          "delivery_receiver_agent_id": "workflow",
+          "delivery_receiver_agent_name": "workflow",
+          "delivery_target_agent_id": "workflow",
+          "delivery_target_agent_name": "workflow",
+          "delivery_inbox_relative_path": "delivery/workflow/分析缺陷",
+          "delivery_info_relative_path": "delivery/workflow/分析缺陷/DELIVERY_INFO.json",
+          "delivery_inbox_relative_paths": [],
+          "artifact_delivery_status": "pending",
+          "artifact_delivery_status_text": "待交付",
+          "artifact_delivered_at": "",
+          "artifact_paths": [],
+          "status": "ready",
+          "status_text": "待开始",
+          "priority": 0,
+          "priority_label": "P0",
+          "completed_at": "",
+          "success_reason": "",
+          "result_ref": "",
+          "failure_reason": "",
+          "created_at": "2026-03-26T15:01:22+08:00",
+          "updated_at": "2026-03-26T15:01:48+08:00",
+          "upstream_node_ids": [],
+          "downstream_node_ids": [
+            "dr-20260325-ca49dd19d9-fix"
+          ],
+          "upstream_nodes": [],
+          "downstream_nodes": [
+            {
+              "node_id": "dr-20260325-ca49dd19d9-fix",
+              "node_name": "修复缺陷",
+              "status": "pending"
+            }
+          ],
+          "blocking_reasons": [],
+          "last_receipt": {
+            "completed_at": "",
+            "success_reason": "",
+            "result_ref": "",
+            "failure_reason": ""
+          },
+          "management_actions": [
+            "override-status",
+            "delete",
+            "deliver-artifact"
+          ]
+        },
+        "available_actions": [
+          "override-status",
+          "delete",
+          "deliver-artifact"
+        ],
+        "audit_refs": [
+          {
+            "audit_id": "aaud-20260326-150148-092ffc",
+            "action": "repair_defect_chain",
+            "operator": "defect-system",
+            "reason": "repair defect process chain into global graph",
+            "target_status": "idle",
+            "ref": "C:/work/J-Agents/.output/tasks/asg-20260326-122459-a50c6f/audit/audit.jsonl#aaud-20260326-150148-092ffc",
+            "created_at": "2026-03-26T15:01:22+08:00",
+            "detail": {
+              "created_node_count": 3,
+              "updated_node_count": 0,
+              "revived_node_count": 0,
+              "added_edge_count": 2,
+              "node_ids": [
+                "dr-20260325-ca49dd19d9-analyze",
+                "dr-20260325-ca49dd19d9-fix",
+                "dr-20260325-ca49dd19d9-release"
+              ]
+            }
+          },
+          {
+            "audit_id": "aaud-20260326-150121-b71326",
+            "action": "repair_defect_chain",
+            "operator": "defect-system",
+            "reason": "repair defect review chain into global graph",
+            "target_status": "idle",
+            "ref": "C:/work/J-Agents/.output/tasks/asg-20260326-122459-a50c6f/audit/audit.jsonl#aaud-20260326-150121-b71326",
+            "created_at": "2026-03-26T15:00:51+08:00",
+            "detail": {
+              "created_node_count": 1,
+              "updated_node_count": 0,
+              "revived_node_count": 0,
+              "added_edge_count": 0,
+              "node_ids": [
+                "dr-20260325-33d0f8fd52-review"
+              ]
+            }
+          },
+          {
+            "audit_id": "aaud-20260326-122459-dd64a4",
+            "action": "create_graph",
+            "operator": "defect-center",
+            "reason": "create assignment graph",
+            "target_status": "idle",
+            "ref": "C:/work/J-Agents/.output/tasks/asg-20260326-122459-a50c6f/audit/audit.jsonl#aaud-20260326-122459-dd64a4",
+            "created_at": "2026-03-26T12:24:41+08:00",
+            "detail": {
+              "graph_name": "任务中心全局主图",
+              "source_workflow": "workflow-ui",
+              "node_count": 0,
+              "edge_count": 0,
+              "review_mode": "none",
+              "global_concurrency_limit": 5,
+              "is_test_data": false,
+              "external_request_id": "workflow-ui-global-graph-v1",
+              "tasks_root": "C:/work/J-Agents/.output/tasks"
+            }
+          }
+        ],
+        "blocking_reasons": []
+      },
+      {
+        "ref_id": "dtr-9295c50e6a4a57b4",
+        "report_id": "dr-20260325-ca49dd19d9",
+        "ticket_id": "asg-20260326-122459-a50c6f",
+        "focus_node_id": "dr-20260325-ca49dd19d9-fix",
+        "action_kind": "process",
+        "title": "修复缺陷",
+        "external_request_id": "defect:process:dr-20260325-ca49dd19d9",
+        "created_at": "2026-03-25T15:52:41+08:00",
+        "updated_at": "2026-03-26T16:51:11+08:00",
+        "graph_name": "任务中心全局主图",
+        "scheduler_state": "idle",
+        "scheduler_state_text": "未启动",
+        "node_name": "修复缺陷",
+        "node_status": "pending",
+        "node_status_text": "待开始",
+        "selected_node": {
+          "node_id": "dr-20260325-ca49dd19d9-fix",
+          "ticket_id": "asg-20260326-122459-a50c6f",
+          "node_name": "修复缺陷",
+          "source_schedule_id": "",
+          "planned_trigger_at": "",
+          "trigger_instance_id": "",
+          "trigger_rule_summary": "",
+          "assigned_agent_id": "workflow",
+          "assigned_agent_name": "workflow",
+          "node_goal": "完成缺陷修复并输出修复说明。",
+          "expected_artifact": "缺陷修复说明.html",
+          "delivery_mode": "specified",
+          "delivery_mode_text": "指定交付对象",
+          "delivery_receiver_agent_id": "workflow",
+          "delivery_receiver_agent_name": "workflow",
+          "delivery_target_agent_id": "workflow",
+          "delivery_target_agent_name": "workflow",
+          "delivery_inbox_relative_path": "delivery/workflow/修复缺陷",
+          "delivery_info_relative_path": "delivery/workflow/修复缺陷/DELIVERY_INFO.json",
+          "delivery_inbox_relative_paths": [],
+          "artifact_delivery_status": "pending",
+          "artifact_delivery_status_text": "待交付",
+          "artifact_delivered_at": "",
+          "artifact_paths": [],
+          "status": "pending",
+          "status_text": "待开始",
+          "priority": 0,
+          "priority_label": "P0",
+          "completed_at": "",
+          "success_reason": "",
+          "result_ref": "",
+          "failure_reason": "",
+          "created_at": "2026-03-26T15:01:22+08:00",
+          "updated_at": "2026-03-26T15:01:22+08:00",
+          "upstream_node_ids": [
+            "dr-20260325-ca49dd19d9-analyze"
+          ],
+          "downstream_node_ids": [
+            "dr-20260325-ca49dd19d9-release"
+          ],
+          "upstream_nodes": [
+            {
+              "node_id": "dr-20260325-ca49dd19d9-analyze",
+              "node_name": "分析缺陷",
+              "status": "ready"
+            }
+          ],
+          "downstream_nodes": [
+            {
+              "node_id": "dr-20260325-ca49dd19d9-release",
+              "node_name": "推送到目标版本",
+              "status": "pending"
+            }
+          ],
+          "blocking_reasons": [
+            {
+              "code": "upstream_incomplete",
+              "node_id": "dr-20260325-ca49dd19d9-analyze",
+              "node_name": "分析缺陷",
+              "status": "ready",
+              "status_text": "待开始"
+            }
+          ],
+          "last_receipt": {
+            "completed_at": "",
+            "success_reason": "",
+            "result_ref": "",
+            "failure_reason": ""
+          },
+          "management_actions": [
+            "override-status",
+            "delete",
+            "deliver-artifact"
+          ]
+        },
+        "available_actions": [
+          "override-status",
+          "delete",
+          "deliver-artifact"
+        ],
+        "audit_refs": [
+          {
+            "audit_id": "aaud-20260326-150148-092ffc",
+            "action": "repair_defect_chain",
+            "operator": "defect-system",
+            "reason": "repair defect process chain into global graph",
+            "target_status": "idle",
+            "ref": "C:/work/J-Agents/.output/tasks/asg-20260326-122459-a50c6f/audit/audit.jsonl#aaud-20260326-150148-092ffc",
+            "created_at": "2026-03-26T15:01:22+08:00",
+            "detail": {
+              "created_node_count": 3,
+              "updated_node_count": 0,
+              "revived_node_count": 0,
+              "added_edge_count": 2,
+              "node_ids": [
+                "dr-20260325-ca49dd19d9-analyze",
+                "dr-20260325-ca49dd19d9-fix",
+                "dr-20260325-ca49dd19d9-release"
+              ]
+            }
+          },
+          {
+            "audit_id": "aaud-20260326-150121-b71326",
+            "action": "repair_defect_chain",
+            "operator": "defect-system",
+            "reason": "repair defect review chain into global graph",
+            "target_status": "idle",
+            "ref": "C:/work/J-Agents/.output/tasks/asg-20260326-122459-a50c6f/audit/audit.jsonl#aaud-20260326-150121-b71326",
+            "created_at": "2026-03-26T15:00:51+08:00",
+            "detail": {
+              "created_node_count": 1,
+              "updated_node_count": 0,
+              "revived_node_count": 0,
+              "added_edge_count": 0,
+              "node_ids": [
+                "dr-20260325-33d0f8fd52-review"
+              ]
+            }
+          },
+          {
+            "audit_id": "aaud-20260326-122459-dd64a4",
+            "action": "create_graph",
+            "operator": "defect-center",
+            "reason": "create assignment graph",
+            "target_status": "idle",
+            "ref": "C:/work/J-Agents/.output/tasks/asg-20260326-122459-a50c6f/audit/audit.jsonl#aaud-20260326-122459-dd64a4",
+            "created_at": "2026-03-26T12:24:41+08:00",
+            "detail": {
+              "graph_name": "任务中心全局主图",
+              "source_workflow": "workflow-ui",
+              "node_count": 0,
+              "edge_count": 0,
+              "review_mode": "none",
+              "global_concurrency_limit": 5,
+              "is_test_data": false,
+              "external_request_id": "workflow-ui-global-graph-v1",
+              "tasks_root": "C:/work/J-Agents/.output/tasks"
+            }
+          }
+        ],
+        "blocking_reasons": [
+          {
+            "code": "upstream_incomplete",
+            "node_id": "dr-20260325-ca49dd19d9-analyze",
+            "node_name": "分析缺陷",
+            "status": "ready",
+            "status_text": "待开始"
+          }
+        ]
+      },
+      {
+        "ref_id": "dtr-1c1f226835e62449",
+        "report_id": "dr-20260325-ca49dd19d9",
+        "ticket_id": "asg-20260326-122459-a50c6f",
+        "focus_node_id": "dr-20260325-ca49dd19d9-release",
+        "action_kind": "process",
+        "title": "推送到目标版本",
+        "external_request_id": "defect:process:dr-20260325-ca49dd19d9",
+        "created_at": "2026-03-25T15:52:41+08:00",
+        "updated_at": "2026-03-26T16:51:11+08:00",
+        "graph_name": "任务中心全局主图",
+        "scheduler_state": "idle",
+        "scheduler_state_text": "未启动",
+        "node_name": "推送到目标版本",
+        "node_status": "pending",
+        "node_status_text": "待开始",
+        "selected_node": {
+          "node_id": "dr-20260325-ca49dd19d9-release",
+          "ticket_id": "asg-20260326-122459-a50c6f",
+          "node_name": "推送到目标版本",
+          "source_schedule_id": "",
+          "planned_trigger_at": "",
+          "trigger_instance_id": "",
+          "trigger_rule_summary": "",
+          "assigned_agent_id": "workflow",
+          "assigned_agent_name": "workflow",
+          "node_goal": "确认修复进入目标版本并产出发布记录。",
+          "expected_artifact": "目标版本发布记录.html",
+          "delivery_mode": "specified",
+          "delivery_mode_text": "指定交付对象",
+          "delivery_receiver_agent_id": "workflow",
+          "delivery_receiver_agent_name": "workflow",
+          "delivery_target_agent_id": "workflow",
+          "delivery_target_agent_name": "workflow",
+          "delivery_inbox_relative_path": "delivery/workflow/推送到目标版本",
+          "delivery_info_relative_path": "delivery/workflow/推送到目标版本/DELIVERY_INFO.json",
+          "delivery_inbox_relative_paths": [],
+          "artifact_delivery_status": "pending",
+          "artifact_delivery_status_text": "待交付",
+          "artifact_delivered_at": "",
+          "artifact_paths": [],
+          "status": "pending",
+          "status_text": "待开始",
+          "priority": 0,
+          "priority_label": "P0",
+          "completed_at": "",
+          "success_reason": "",
+          "result_ref": "",
+          "failure_reason": "",
+          "created_at": "2026-03-26T15:01:22+08:00",
+          "updated_at": "2026-03-26T15:01:22+08:00",
+          "upstream_node_ids": [
+            "dr-20260325-ca49dd19d9-fix"
+          ],
+          "downstream_node_ids": [],
+          "upstream_nodes": [
+            {
+              "node_id": "dr-20260325-ca49dd19d9-fix",
+              "node_name": "修复缺陷",
+              "status": "pending"
+            }
+          ],
+          "downstream_nodes": [],
+          "blocking_reasons": [
+            {
+              "code": "upstream_incomplete",
+              "node_id": "dr-20260325-ca49dd19d9-fix",
+              "node_name": "修复缺陷",
+              "status": "pending",
+              "status_text": "待开始"
+            }
+          ],
+          "last_receipt": {
+            "completed_at": "",
+            "success_reason": "",
+            "result_ref": "",
+            "failure_reason": ""
+          },
+          "management_actions": [
+            "override-status",
+            "delete",
+            "deliver-artifact"
+          ]
+        },
+        "available_actions": [
+          "override-status",
+          "delete",
+          "deliver-artifact"
+        ],
+        "audit_refs": [
+          {
+            "audit_id": "aaud-20260326-150148-092ffc",
+            "action": "repair_defect_chain",
+            "operator": "defect-system",
+            "reason": "repair defect process chain into global graph",
+            "target_status": "idle",
+            "ref": "C:/work/J-Agents/.output/tasks/asg-20260326-122459-a50c6f/audit/audit.jsonl#aaud-20260326-150148-092ffc",
+            "created_at": "2026-03-26T15:01:22+08:00",
+            "detail": {
+              "created_node_count": 3,
+              "updated_node_count": 0,
+              "revived_node_count": 0,
+              "added_edge_count": 2,
+              "node_ids": [
+                "dr-20260325-ca49dd19d9-analyze",
+                "dr-20260325-ca49dd19d9-fix",
+                "dr-20260325-ca49dd19d9-release"
+              ]
+            }
+          },
+          {
+            "audit_id": "aaud-20260326-150121-b71326",
+            "action": "repair_defect_chain",
+            "operator": "defect-system",
+            "reason": "repair defect review chain into global graph",
+            "target_status": "idle",
+            "ref": "C:/work/J-Agents/.output/tasks/asg-20260326-122459-a50c6f/audit/audit.jsonl#aaud-20260326-150121-b71326",
+            "created_at": "2026-03-26T15:00:51+08:00",
+            "detail": {
+              "created_node_count": 1,
+              "updated_node_count": 0,
+              "revived_node_count": 0,
+              "added_edge_count": 0,
+              "node_ids": [
+                "dr-20260325-33d0f8fd52-review"
+              ]
+            }
+          },
+          {
+            "audit_id": "aaud-20260326-122459-dd64a4",
+            "action": "create_graph",
+            "operator": "defect-center",
+            "reason": "create assignment graph",
+            "target_status": "idle",
+            "ref": "C:/work/J-Agents/.output/tasks/asg-20260326-122459-a50c6f/audit/audit.jsonl#aaud-20260326-122459-dd64a4",
+            "created_at": "2026-03-26T12:24:41+08:00",
+            "detail": {
+              "graph_name": "任务中心全局主图",
+              "source_workflow": "workflow-ui",
+              "node_count": 0,
+              "edge_count": 0,
+              "review_mode": "none",
+              "global_concurrency_limit": 5,
+              "is_test_data": false,
+              "external_request_id": "workflow-ui-global-graph-v1",
+              "tasks_root": "C:/work/J-Agents/.output/tasks"
+            }
+          }
+        ],
+        "blocking_reasons": [
+          {
+            "code": "upstream_incomplete",
+            "node_id": "dr-20260325-ca49dd19d9-fix",
+            "node_name": "修复缺陷",
+            "status": "pending",
+            "status_text": "待开始"
+          }
+        ]
+      }
+    ],
+    "history_total": 5,
+    "task_ref_total": 3,
+    "queue": {
+      "enabled": false,
+      "updated_at": "2026-03-26T11:43:11+08:00",
+      "candidate_total": 4,
+      "active_slot_busy": true,
+      "head_report_id": "dr-20260325-8e8f1de370",
+      "active_report_id": "dr-20260325-33d0f8fd52",
+      "active_display_id": "DTS-00003",
+      "active_summary": "[创建角色][P0] 错误数据写入：能力边界被写入用户追问句",
+      "active_task_priority": "P0",
+      "next_report_id": "dr-20260325-8e8f1de370",
+      "next_display_id": "DTS-00001",
+      "next_summary": "[创建角色][P0] 超时或脏草稿仍显示可直接开始创建",
+      "next_task_priority": "P0",
+      "next_reported_at": "2026-03-25T13:14:02+08:00"
+    },
+    "show_re_review_input": false,
+    "can_process": true,
+    "can_review": false,
+    "can_close": false
+  }
+}

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 
 def _assignment_task_visible(task_record: dict[str, Any], *, include_test_data: bool) -> bool:
+    if str(task_record.get("record_state") or "active").strip().lower() == "deleted":
+        return False
     if include_test_data:
         return True
     return not bool(task_record.get("is_test_data"))

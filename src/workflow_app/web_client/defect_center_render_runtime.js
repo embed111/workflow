@@ -66,25 +66,59 @@
     return '-';
   }
 
-  function renderDefectQueueStrip() {
+  function defectQueueRuleText(queue) {
+    const row = queue && typeof queue === 'object' ? queue : {};
+    if (row.enabled) {
+      if (Number(row.candidate_total || 0) <= 0) {
+        return '总开关已开启：当前队列为空；后续若出现新的未解决或有分歧缺陷，系统会继续按优先级和上报时间自动串行建单。';
+      }
+      return '总开关已开启：当前缺陷进入已解决或已关闭后，系统会立即继续推进下一条；全过程始终只允许 1 条缺陷占用主动处理位，并统一挂到任务中心全局主图。';
+    }
+    return '总开关已关闭：系统不会自动创建新的处理或复核任务；仍允许手动点击处理缺陷或提交复核。';
+  }
+
+  function defectQueueSummaryCardHtml() {
+    const queue = defectQueueSummary();
+    const stateText = queue.enabled ? '连续推进中' : '自动建单关闭';
+    const stateClass = queue.enabled ? ' on' : '';
+    return (
+      "<div id='defectQueueSummaryCard' class='defect-detail-card defect-queue-summary-card'>" +
+        "<div class='defect-queue-summary-head'>" +
+          "<div>" +
+            "<div class='card-title'>顺序建单摘要</div>" +
+            "<div class='defect-section-sub'>默认排序：任务优先级高到低；同优先级按上报时间早到晚。</div>" +
+          '</div>' +
+          "<span class='defect-queue-summary-state" + stateClass + "'>" + escapeHtml(stateText) + '</span>' +
+        '</div>' +
+        "<div class='defect-queue-summary-grid'>" +
+          "<div class='defect-queue-summary-item'>" +
+            "<div class='defect-queue-summary-label'>当前主动处理缺陷</div>" +
+            "<div id='defectQueueSummaryActiveValue' class='defect-queue-summary-value'>" +
+              escapeHtml(defectQueueRefText(queue.active_display_id, queue.active_task_priority, queue.active_summary)) +
+            '</div>' +
+          '</div>' +
+          "<div class='defect-queue-summary-item'>" +
+            "<div class='defect-queue-summary-label'>下一条待建单缺陷</div>" +
+            "<div id='defectQueueSummaryNextValue' class='defect-queue-summary-value'>" +
+              escapeHtml(defectQueueRefText(queue.next_display_id, queue.next_task_priority, queue.next_summary)) +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        "<div id='defectQueueSummaryRule' class='defect-queue-summary-rule'>" + escapeHtml(defectQueueRuleText(queue)) + '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderDefectQueueHeader() {
     const queue = defectQueueSummary();
     const toggleBtn = $('defectQueueToggleBtn');
-    const activeNode = $('defectQueueActiveValue');
-    const nextNode = $('defectQueueNextValue');
-    if (activeNode) {
-      activeNode.textContent = defectQueueRefText(queue.active_display_id, queue.active_task_priority, queue.active_summary);
-    }
-    if (nextNode) {
-      nextNode.textContent = defectQueueRefText(queue.next_display_id, queue.next_task_priority, queue.next_summary);
-    }
     if (!toggleBtn) return;
-    const enabled = !!queue.enabled;
-    toggleBtn.classList.toggle('on', enabled);
-    toggleBtn.classList.toggle('off', !enabled);
+    toggleBtn.classList.toggle('on', !!queue.enabled);
+    toggleBtn.classList.toggle('off', !queue.enabled);
     toggleBtn.disabled = !!state.defectQueueSaving;
     toggleBtn.textContent = state.defectQueueSaving
       ? '切换中...'
-      : ('按顺序创建任务：' + (enabled ? '开启' : '关闭'));
+      : ('按顺序创建任务：' + (queue.enabled ? '开启' : '关闭'));
   }
 
   function defectEvidenceShotsHtml(images) {
@@ -166,25 +200,87 @@
     }).join('');
   }
 
+  function defectTaskActionText(action) {
+    const key = safe(action).trim().toLowerCase();
+    if (key === 'mark-success') return '标记成功';
+    if (key === 'mark-failed') return '标记失败';
+    if (key === 'rerun') return '重跑任务';
+    if (key === 'override-status') return '修改状态';
+    if (key === 'deliver-artifact') return '提交产物';
+    if (key === 'view-artifact') return '查看产物';
+    if (key === 'delete') return '删除任务';
+    return safe(action).trim();
+  }
+
+  function defectTaskCardMetaHtml(label, value) {
+    return (
+      "<div class='defect-task-card-meta'>" +
+        "<div class='defect-task-card-meta-key'>" + escapeHtml(label) + '</div>' +
+        "<div class='defect-task-card-meta-value'>" + escapeHtml(safe(value).trim() || '-') + '</div>' +
+      '</div>'
+    );
+  }
+
+  function defectTaskCardNoteHtml(text, tone) {
+    const content = safe(text).trim();
+    if (!content) return '';
+    const toneClass = safe(tone).trim() ? (' ' + safe(tone).trim()) : '';
+    return "<div class='defect-task-card-note" + toneClass + "'>" + escapeHtml(content) + '</div>';
+  }
+
   function defectTaskRefsHtml(taskRefs) {
     const rows = Array.isArray(taskRefs) ? taskRefs : [];
     if (!rows.length) {
       return "<div class='defect-empty-note'>尚未创建任务中心任务引用</div>";
     }
     return rows.map((item) => {
+      const node = item && item.selected_node && typeof item.selected_node === 'object' ? item.selected_node : {};
       const ticketMeta = safe(item.graph_name).trim() || safe(item.ticket_id).trim() || '-';
-      const nodeMeta = safe(item.node_name).trim() || safe(item.title).trim() || safe(item.focus_node_id).trim() || '-';
+      const nodeMeta = safe(node.node_name || item.node_name || item.title || item.focus_node_id).trim() || '-';
+      const nodeIdText = safe(node.node_id || item.focus_node_id).trim() || '-';
+      const assignedAgent = safe(node.assigned_agent_name || node.assigned_agent_id).trim() || '-';
+      const priorityText = safe(node.priority_label || node.priority).trim() || '-';
+      const artifactStatusText = safe(node.artifact_delivery_status_text).trim() || '-';
+      const completedAt = safe(node.completed_at).trim()
+        ? defectFormatTime(node.completed_at)
+        : defectFormatTime(item.created_at);
+      const receiptParts = [];
+      if (safe(node.result_ref).trim()) receiptParts.push('结果引用：' + safe(node.result_ref).trim());
+      if (safe(node.success_reason).trim()) receiptParts.push('成功理由：' + safe(node.success_reason).trim());
+      if (safe(node.failure_reason).trim()) receiptParts.push('失败原因：' + safe(node.failure_reason).trim());
+      const blockingText = Array.isArray(item.blocking_reasons) && item.blocking_reasons.length
+        ? ('阻塞来源：' + item.blocking_reasons.map((reason) => {
+          const entry = reason && typeof reason === 'object' ? reason : {};
+          return safe(entry.node_name || entry.node_id).trim() || '-';
+        }).join(' / '))
+        : '';
+      const footerParts = [];
+      const actions = Array.isArray(item.available_actions)
+        ? item.available_actions.map((action) => defectTaskActionText(action)).filter((text) => !!safe(text).trim())
+        : [];
+      if (actions.length) footerParts.push('可操作：' + actions.join(' / '));
+      if (Array.isArray(item.audit_refs) && item.audit_refs.length) footerParts.push('人工处置 ' + String(item.audit_refs.length) + ' 条');
+      if (Array.isArray(node.artifact_paths) && node.artifact_paths.length) footerParts.push('已交付 ' + String(node.artifact_paths.length) + ' 份产物');
       return (
         "<div class='defect-task-card'>" +
           "<div class='defect-task-card-head'>" +
             "<div class='defect-task-card-title'>" + escapeHtml(safe(item.title) || nodeMeta) + '</div>' +
-            "<span class='defect-status-chip " + escapeHtml(defectStatusTone(item.node_status || item.scheduler_state)) + "'>" +
-              escapeHtml(safe(item.node_status_text) || safe(item.scheduler_state_text) || '待查看') +
+            "<span class='defect-status-chip " + escapeHtml(defectStatusTone(node.status || item.node_status || item.scheduler_state)) + "'>" +
+              escapeHtml(safe(node.status_text || item.node_status_text || item.scheduler_state_text) || '待查看') +
             '</span>' +
           '</div>' +
           "<div class='defect-task-card-sub'>" + escapeHtml(ticketMeta) + '</div>' +
-          "<div class='defect-task-card-sub'>" + escapeHtml(nodeMeta) + '</div>' +
-          "<div class='defect-task-card-sub'>" + escapeHtml(defectFormatTime(item.created_at)) + '</div>' +
+          "<div class='defect-task-card-sub'>任务 ID：" + escapeHtml(nodeIdText) + '</div>' +
+          "<div class='defect-task-card-grid'>" +
+            defectTaskCardMetaHtml('执行角色', assignedAgent) +
+            defectTaskCardMetaHtml('优先级', priorityText) +
+            defectTaskCardMetaHtml('产物状态', artifactStatusText) +
+            defectTaskCardMetaHtml('完成时间', completedAt) +
+          '</div>' +
+          defectTaskCardNoteHtml(safe(node.expected_artifact).trim() ? ('预期产物：' + safe(node.expected_artifact).trim()) : '', '') +
+          defectTaskCardNoteHtml(receiptParts.join(' / '), '') +
+          defectTaskCardNoteHtml(blockingText, 'warn') +
+          defectTaskCardNoteHtml(footerParts.join(' · '), '') +
           "<div class='defect-task-card-actions'>" + defectTaskRefOpenButton(item) + '</div>' +
         '</div>'
       );
@@ -279,7 +375,9 @@
     const report = defectCurrentReport();
     if (!safe(report.report_id).trim()) {
       if (meta) meta.textContent = '请选择左侧缺陷记录';
-      body.innerHTML = "<div class='defect-empty-card'><div class='defect-empty-title'>暂无记录详情</div><div class='hint'>筛选或选择左侧记录后，可在这里查看 DTS、结论、任务引用和状态历史。</div></div>";
+      body.innerHTML =
+        defectQueueSummaryCardHtml() +
+        "<div class='defect-empty-card'><div class='defect-empty-title'>暂无记录详情</div><div class='hint'>筛选或选择左侧记录后，可在这里查看 DTS、结论、任务引用和状态历史。</div></div>";
       return;
     }
     if (meta) meta.textContent = safe(report.display_id || report.dts_id || report.report_id);
@@ -299,6 +397,7 @@
       ? "<div class='defect-empty-note'>当前上报没有进入正式缺陷流程，因此没有 DTS，也没有任务中心处理链。</div>"
       : '';
     body.innerHTML =
+      defectQueueSummaryCardHtml() +
       "<div class='defect-detail-card defect-issue-card'>" +
         "<div class='defect-issue-head'>" +
           "<div>" +
@@ -403,7 +502,7 @@
     if (composerToggleBtn) {
       composerToggleBtn.textContent = state.defectComposerCollapsed ? '展开提缺陷' : '收起';
     }
-    renderDefectQueueStrip();
+    renderDefectQueueHeader();
     renderDefectList();
     renderDefectDetail();
     setDefectError(state.defectError);
