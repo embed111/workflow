@@ -7,6 +7,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlencode
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -68,6 +69,53 @@ def task_ids_from_detail(detail: dict) -> list[str]:
             if node_id:
                 node_ids.append(node_id)
     return node_ids
+
+
+def task_ref_ids_from_detail(detail: dict) -> list[str]:
+    node_ids: list[str] = []
+    for task_ref in list(detail.get("task_refs") or []):
+        node_id = str(task_ref.get("node_id") or "").strip()
+        if node_id:
+            node_ids.append(node_id)
+    return node_ids
+
+
+def all_task_ids_from_detail(detail: dict) -> list[str]:
+    ordered: dict[str, None] = {}
+    for node_id in task_ids_from_detail(detail) + task_ref_ids_from_detail(detail):
+        ordered.setdefault(node_id, None)
+    return list(ordered.keys())
+
+
+def wait_for_role_creation_delete_available(
+    base_url: str,
+    session_id: str,
+    timeout_s: float = 120.0,
+) -> dict[str, Any]:
+    deadline = time.time() + timeout_s
+    last_payload: dict[str, Any] = {}
+    while time.time() < deadline:
+        status, data = api_request(base_url, "GET", f"/api/training/role-creation/sessions/{session_id}")
+        if status == 200 and isinstance(data, dict) and data.get("ok"):
+            last_payload = data
+            session = dict(data.get("session") or {})
+            if bool(session.get("delete_available")):
+                return data
+        time.sleep(1)
+    raise RuntimeError(
+        "role creation delete-available timeout: "
+        + str(
+            {
+                "session_id": session_id,
+                "last_status": (last_payload.get("session") or {}).get("status"),
+                "last_delete_available": (last_payload.get("session") or {}).get("delete_available"),
+                "last_delete_block_reason": (last_payload.get("session") or {}).get("delete_block_reason"),
+                "last_assignment_running_node_count": (last_payload.get("session") or {}).get(
+                    "assignment_running_node_count"
+                ),
+            }
+        )
+    )
 
 
 def main() -> int:
@@ -313,138 +361,417 @@ def main() -> int:
             assert_true(len(async_processed_users) >= 2, "async user messages should end as processed")
             assert_true(len(async_assistant_rows) == 2, "async flow should keep welcome + one merged assistant reply")
 
-            creating_payload = {"session_title": "AsyncDelete Creating", "operator": operator}
-            status, creating_create = api_request(base_url, "POST", "/api/training/role-creation/sessions", creating_payload)
-            assert_true(status == 200 and isinstance(creating_create, dict) and creating_create.get("ok"), "creating create failed")
-            creating_session_id = str((creating_create.get("session") or {}).get("session_id") or "").strip()
-            evidence["api"]["creating_create"] = record_api(
+            cleanup_payload = {"session_title": "AsyncDelete Creating Cleanup", "operator": operator}
+            status, cleanup_create = api_request(base_url, "POST", "/api/training/role-creation/sessions", cleanup_payload)
+            assert_true(status == 200 and isinstance(cleanup_create, dict) and cleanup_create.get("ok"), "cleanup create failed")
+            cleanup_session_id = str((cleanup_create.get("session") or {}).get("session_id") or "").strip()
+            evidence["api"]["cleanup_create"] = record_api(
                 api_dir,
-                stage="creating",
+                stage="cleanup",
                 name="create_session",
                 method="POST",
                 path="/api/training/role-creation/sessions",
-                payload=creating_payload,
+                payload=cleanup_payload,
                 status=status,
-                body=creating_create,
+                body=cleanup_create,
             )
 
-            creating_message_payload = {
-                "content": role_message_text("Async Delete Acceptance Role"),
+            cleanup_message_payload = {
+                "content": role_message_text("Async Delete Cleanup Role"),
                 "operator": operator,
-                "client_message_id": "creating-role-spec",
+                "client_message_id": "cleanup-role-spec",
             }
-            status, creating_message = api_request(
+            status, cleanup_message = api_request(
                 base_url,
                 "POST",
-                f"/api/training/role-creation/sessions/{creating_session_id}/messages",
-                creating_message_payload,
+                f"/api/training/role-creation/sessions/{cleanup_session_id}/messages",
+                cleanup_message_payload,
             )
             assert_true(
-                status == 200 and isinstance(creating_message, dict) and creating_message.get("ok"),
-                "creating role-spec message failed",
+                status == 200 and isinstance(cleanup_message, dict) and cleanup_message.get("ok"),
+                "cleanup role-spec message failed",
             )
-            evidence["api"]["creating_message"] = record_api(
+            evidence["api"]["cleanup_message"] = record_api(
                 api_dir,
-                stage="creating",
+                stage="cleanup",
                 name="message",
                 method="POST",
-                path=f"/api/training/role-creation/sessions/{creating_session_id}/messages",
-                payload=creating_message_payload,
+                path=f"/api/training/role-creation/sessions/{cleanup_session_id}/messages",
+                payload=cleanup_message_payload,
                 status=status,
-                body=creating_message,
+                body=cleanup_message,
             )
 
-            creating_ready = wait_for_role_creation_idle(base_url, creating_session_id)
-            evidence["api"]["creating_idle"] = record_api(
+            cleanup_ready = wait_for_role_creation_idle(base_url, cleanup_session_id)
+            evidence["api"]["cleanup_idle"] = record_api(
                 api_dir,
-                stage="creating",
+                stage="cleanup",
                 name="idle_detail",
                 method="GET",
-                path=f"/api/training/role-creation/sessions/{creating_session_id}",
+                path=f"/api/training/role-creation/sessions/{cleanup_session_id}",
                 payload=None,
                 status=200,
-                body=creating_ready,
+                body=cleanup_ready,
             )
 
-            status, creating_start = api_request(
+            status, cleanup_start = api_request(
                 base_url,
                 "POST",
-                f"/api/training/role-creation/sessions/{creating_session_id}/start",
+                f"/api/training/role-creation/sessions/{cleanup_session_id}/start",
                 {"operator": operator},
             )
-            assert_true(status == 200 and isinstance(creating_start, dict) and creating_start.get("ok"), "creating start failed")
-            creating_session = dict(creating_start.get("session") or {})
-            creating_ticket_id = str(
-                creating_session.get("assignment_ticket_id")
-                or (creating_start.get("stage_meta") or {}).get("ticket_id")
+            assert_true(status == 200 and isinstance(cleanup_start, dict) and cleanup_start.get("ok"), "cleanup start failed")
+            cleanup_session = dict(cleanup_start.get("session") or {})
+            cleanup_ticket_id = str(
+                cleanup_session.get("assignment_ticket_id")
+                or (cleanup_start.get("stage_meta") or {}).get("ticket_id")
                 or ""
             ).strip()
             assert_true(
-                str(creating_session.get("status") or "").strip().lower() == "creating" and creating_ticket_id,
-                "creating session should enter creating with ticket",
+                str(cleanup_session.get("status") or "").strip().lower() == "creating" and cleanup_ticket_id,
+                "cleanup session should enter creating with ticket",
             )
-            evidence["api"]["creating_start"] = record_api(
+            evidence["api"]["cleanup_start"] = record_api(
                 api_dir,
-                stage="creating",
+                stage="cleanup",
                 name="start_session",
                 method="POST",
-                path=f"/api/training/role-creation/sessions/{creating_session_id}/start",
+                path=f"/api/training/role-creation/sessions/{cleanup_session_id}/start",
                 payload={"operator": operator},
                 status=status,
-                body=creating_start,
+                body=cleanup_start,
             )
 
-            status, creating_delete_blocked = api_request(
+            status, cleanup_started_detail = api_request(
                 base_url,
-                "DELETE",
-                f"/api/training/role-creation/sessions/{creating_session_id}",
-                {"operator": operator},
+                "GET",
+                f"/api/training/role-creation/sessions/{cleanup_session_id}",
             )
             assert_true(
-                status == 409
-                and isinstance(creating_delete_blocked, dict)
-                and str(creating_delete_blocked.get("code") or "").strip() == "role_creation_delete_creating_blocked",
-                "creating delete should be blocked",
+                status == 200 and isinstance(cleanup_started_detail, dict) and cleanup_started_detail.get("ok"),
+                "cleanup started detail fetch failed",
             )
-            evidence["api"]["creating_delete_blocked"] = record_api(
+            evidence["api"]["cleanup_detail_started"] = record_api(
                 api_dir,
-                stage="creating",
-                name="delete_creating_blocked",
-                method="DELETE",
-                path=f"/api/training/role-creation/sessions/{creating_session_id}",
-                payload={"operator": operator},
+                stage="cleanup",
+                name="detail_started",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{cleanup_session_id}",
+                payload=None,
                 status=status,
-                body=creating_delete_blocked,
+                body=cleanup_started_detail,
             )
+            cleanup_started_session = dict(cleanup_started_detail.get("session") or {})
+            cleanup_workspace_path = str(
+                cleanup_started_session.get("created_agent_workspace_path")
+                or cleanup_session.get("created_agent_workspace_path")
+                or ""
+            ).strip()
+            assert_true(bool(cleanup_workspace_path), "cleanup workspace path missing after start")
+            cleanup_workspace = Path(cleanup_workspace_path).resolve(strict=False)
+            assert_true(cleanup_workspace.exists(), "cleanup workspace should exist before delete")
+            cleanup_task_ids = all_task_ids_from_detail(cleanup_started_detail)
+            if not cleanup_task_ids:
+                cleanup_runtime_detail = ws.get_role_creation_session_detail(runtime_root, cleanup_session_id)
+                cleanup_task_ids = all_task_ids_from_detail(cleanup_runtime_detail)
+            assert_true(bool(cleanup_task_ids), "cleanup session task ids missing")
 
-            creating_dom_path = capture_dom(edge_path, base_url, evidence_root, "creating-delete-hidden", creating_session_id)
-            evidence["dom"]["creating_delete_hidden"] = creating_dom_path
-            creating_dom_text = Path(creating_dom_path).read_text(encoding="utf-8")
-            assert_true(
-                f"data-rc-delete-session=\"{creating_session_id}\"" not in creating_dom_text
-                and f"data-rc-delete-session='{creating_session_id}'" not in creating_dom_text,
-                "creating session should not expose delete button in DOM",
-            )
+            cleanup_running_node_count = int(cleanup_started_session.get("assignment_running_node_count") or 0)
+            cleanup_running_block_checked = False
+            if cleanup_running_node_count > 0:
+                status, cleanup_delete_blocked = api_request(
+                    base_url,
+                    "DELETE",
+                    f"/api/training/role-creation/sessions/{cleanup_session_id}",
+                    {"operator": operator},
+                )
+                assert_true(
+                    status == 409
+                    and isinstance(cleanup_delete_blocked, dict)
+                    and str(cleanup_delete_blocked.get("code") or "").strip() == "role_creation_delete_running_tasks_blocked",
+                    "cleanup delete should be blocked while assignment nodes are running",
+                )
+                evidence["api"]["cleanup_delete_blocked_running"] = record_api(
+                    api_dir,
+                    stage="cleanup",
+                    name="delete_running_blocked",
+                    method="DELETE",
+                    path=f"/api/training/role-creation/sessions/{cleanup_session_id}",
+                    payload={"operator": operator},
+                    status=status,
+                    body=cleanup_delete_blocked,
+                )
+                cleanup_running_block_checked = True
 
-            creating_detail = ws.get_role_creation_session_detail(runtime_root, creating_session_id)
-            creating_task_ids = task_ids_from_detail(creating_detail)
-            assert_true(bool(creating_task_ids), "creating session task ids missing")
-            for node_id in creating_task_ids:
+            for node_id in cleanup_task_ids:
                 ws.deliver_assignment_artifact(
                     runtime_root,
-                    ticket_id_text=creating_ticket_id,
+                    ticket_id_text=cleanup_ticket_id,
                     node_id_text=node_id,
                     operator=operator,
                     artifact_label=f"{node_id}.html",
-                    delivery_note="async delete acceptance delivered",
+                    delivery_note="async cleanup acceptance delivered",
                 )
                 ws.override_assignment_node_status(
                     runtime_root,
-                    ticket_id_text=creating_ticket_id,
+                    ticket_id_text=cleanup_ticket_id,
                     node_id_text=node_id,
                     target_status="succeeded",
                     operator=operator,
-                    reason="async delete acceptance completed",
+                    reason="async cleanup acceptance completed",
+                    result_ref=f"acceptance://{node_id}",
+                )
+
+            cleanup_delete_ready = wait_for_role_creation_delete_available(base_url, cleanup_session_id)
+            evidence["api"]["cleanup_delete_ready"] = record_api(
+                api_dir,
+                stage="cleanup",
+                name="delete_ready_detail",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{cleanup_session_id}",
+                payload=None,
+                status=200,
+                body=cleanup_delete_ready,
+            )
+            cleanup_delete_ready_session = dict(cleanup_delete_ready.get("session") or {})
+            assert_true(
+                str(cleanup_delete_ready_session.get("status") or "").strip().lower() == "creating",
+                "cleanup session should still be creating before cleanup delete",
+            )
+            assert_true(
+                int(cleanup_delete_ready_session.get("assignment_running_node_count") or 0) == 0,
+                "cleanup delete should wait until running assignment nodes drop to zero",
+            )
+
+            cleanup_dom_path = capture_dom(edge_path, base_url, evidence_root, "cleanup-delete-visible", cleanup_session_id)
+            evidence["dom"]["cleanup_delete_visible"] = cleanup_dom_path
+            cleanup_dom_text = Path(cleanup_dom_path).read_text(encoding="utf-8")
+            assert_true(
+                f"data-rc-delete-session=\"{cleanup_session_id}\"" in cleanup_dom_text
+                or f"data-rc-delete-session='{cleanup_session_id}'" in cleanup_dom_text,
+                "cleanup-ready creating session should expose delete button in DOM",
+            )
+
+            status, cleanup_delete = api_request(
+                base_url,
+                "DELETE",
+                f"/api/training/role-creation/sessions/{cleanup_session_id}",
+                {"operator": operator},
+            )
+            assert_true(
+                status == 200 and isinstance(cleanup_delete, dict) and cleanup_delete.get("ok"),
+                "cleanup delete failed",
+            )
+            cleanup_result = dict(cleanup_delete.get("cleanup_result") or {})
+            assert_true(
+                str(cleanup_result.get("mode") or "").strip() == "creating_cleanup",
+                "cleanup delete should return creating_cleanup result",
+            )
+            assert_true(
+                bool((cleanup_result.get("assignment_cleanup") or {}).get("removed")),
+                "cleanup delete should remove assignment workspace",
+            )
+            assert_true(
+                bool((cleanup_result.get("workspace_cleanup") or {}).get("removed")),
+                "cleanup delete should remove role workspace",
+            )
+            evidence["api"]["cleanup_delete"] = record_api(
+                api_dir,
+                stage="cleanup",
+                name="delete_session",
+                method="DELETE",
+                path=f"/api/training/role-creation/sessions/{cleanup_session_id}",
+                payload={"operator": operator},
+                status=status,
+                body=cleanup_delete,
+            )
+
+            status, cleanup_detail_missing = api_request(
+                base_url,
+                "GET",
+                f"/api/training/role-creation/sessions/{cleanup_session_id}",
+            )
+            assert_true(
+                status == 404
+                and isinstance(cleanup_detail_missing, dict)
+                and str(cleanup_detail_missing.get("code") or "").strip() == "role_creation_session_not_found",
+                "cleanup-deleted session detail should return not found",
+            )
+            evidence["api"]["cleanup_detail_missing"] = record_api(
+                api_dir,
+                stage="cleanup",
+                name="detail_after_delete",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{cleanup_session_id}",
+                payload=None,
+                status=status,
+                body=cleanup_detail_missing,
+            )
+
+            status, cleanup_graph_missing = api_request(
+                base_url,
+                "GET",
+                f"/api/assignments/{cleanup_ticket_id}/graph",
+            )
+            assert_true(
+                status == 404
+                and isinstance(cleanup_graph_missing, dict)
+                and str(cleanup_graph_missing.get("code") or "").strip() == "assignment_graph_not_found",
+                "cleanup-deleted assignment graph should return not found",
+            )
+            evidence["api"]["cleanup_graph_missing"] = record_api(
+                api_dir,
+                stage="cleanup",
+                name="graph_after_delete",
+                method="GET",
+                path=f"/api/assignments/{cleanup_ticket_id}/graph",
+                payload=None,
+                status=status,
+                body=cleanup_graph_missing,
+            )
+            assert_true(not cleanup_workspace.exists(), "cleanup delete should remove created workspace directory")
+
+            completed_payload = {"session_title": "AsyncDelete Completed Record", "operator": operator}
+            status, completed_create = api_request(
+                base_url,
+                "POST",
+                "/api/training/role-creation/sessions",
+                completed_payload,
+            )
+            assert_true(
+                status == 200 and isinstance(completed_create, dict) and completed_create.get("ok"),
+                "completed flow create failed",
+            )
+            completed_session_id = str((completed_create.get("session") or {}).get("session_id") or "").strip()
+            evidence["api"]["completed_create"] = record_api(
+                api_dir,
+                stage="completed",
+                name="create_session",
+                method="POST",
+                path="/api/training/role-creation/sessions",
+                payload=completed_payload,
+                status=status,
+                body=completed_create,
+            )
+
+            completed_message_payload = {
+                "content": role_message_text("Async Delete Completed Role"),
+                "operator": operator,
+                "client_message_id": "completed-role-spec",
+            }
+            status, completed_message = api_request(
+                base_url,
+                "POST",
+                f"/api/training/role-creation/sessions/{completed_session_id}/messages",
+                completed_message_payload,
+            )
+            assert_true(
+                status == 200 and isinstance(completed_message, dict) and completed_message.get("ok"),
+                "completed flow role-spec message failed",
+            )
+            evidence["api"]["completed_message"] = record_api(
+                api_dir,
+                stage="completed",
+                name="message",
+                method="POST",
+                path=f"/api/training/role-creation/sessions/{completed_session_id}/messages",
+                payload=completed_message_payload,
+                status=status,
+                body=completed_message,
+            )
+
+            completed_idle = wait_for_role_creation_idle(base_url, completed_session_id)
+            evidence["api"]["completed_idle"] = record_api(
+                api_dir,
+                stage="completed",
+                name="idle_detail",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{completed_session_id}",
+                payload=None,
+                status=200,
+                body=completed_idle,
+            )
+
+            status, completed_start = api_request(
+                base_url,
+                "POST",
+                f"/api/training/role-creation/sessions/{completed_session_id}/start",
+                {"operator": operator},
+            )
+            assert_true(
+                status == 200 and isinstance(completed_start, dict) and completed_start.get("ok"),
+                "completed flow start failed",
+            )
+            completed_started_session = dict(completed_start.get("session") or {})
+            completed_ticket_id = str(
+                completed_started_session.get("assignment_ticket_id")
+                or (completed_start.get("stage_meta") or {}).get("ticket_id")
+                or ""
+            ).strip()
+            assert_true(
+                str(completed_started_session.get("status") or "").strip().lower() == "creating" and completed_ticket_id,
+                "completed flow session should enter creating with ticket",
+            )
+            evidence["api"]["completed_start"] = record_api(
+                api_dir,
+                stage="completed",
+                name="start_session",
+                method="POST",
+                path=f"/api/training/role-creation/sessions/{completed_session_id}/start",
+                payload={"operator": operator},
+                status=status,
+                body=completed_start,
+            )
+
+            status, completed_started_detail = api_request(
+                base_url,
+                "GET",
+                f"/api/training/role-creation/sessions/{completed_session_id}",
+            )
+            assert_true(
+                status == 200 and isinstance(completed_started_detail, dict) and completed_started_detail.get("ok"),
+                "completed flow started detail fetch failed",
+            )
+            evidence["api"]["completed_detail_started"] = record_api(
+                api_dir,
+                stage="completed",
+                name="detail_started",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{completed_session_id}",
+                payload=None,
+                status=status,
+                body=completed_started_detail,
+            )
+            completed_workspace_path = str(
+                ((completed_started_detail.get("session") or {}).get("created_agent_workspace_path"))
+                or completed_started_session.get("created_agent_workspace_path")
+                or ""
+            ).strip()
+            completed_workspace = Path(completed_workspace_path).resolve(strict=False) if completed_workspace_path else None
+            if completed_workspace is not None:
+                assert_true(completed_workspace.exists(), "completed flow workspace should exist before record delete")
+
+            completed_task_ids = all_task_ids_from_detail(completed_started_detail)
+            if not completed_task_ids:
+                completed_runtime_detail = ws.get_role_creation_session_detail(runtime_root, completed_session_id)
+                completed_task_ids = all_task_ids_from_detail(completed_runtime_detail)
+            assert_true(bool(completed_task_ids), "completed flow task ids missing")
+            for node_id in completed_task_ids:
+                ws.deliver_assignment_artifact(
+                    runtime_root,
+                    ticket_id_text=completed_ticket_id,
+                    node_id_text=node_id,
+                    operator=operator,
+                    artifact_label=f"{node_id}.html",
+                    delivery_note="async completed acceptance delivered",
+                )
+                ws.override_assignment_node_status(
+                    runtime_root,
+                    ticket_id_text=completed_ticket_id,
+                    node_id_text=node_id,
+                    target_status="succeeded",
+                    operator=operator,
+                    reason="async completed acceptance completed",
                     result_ref=f"acceptance://{node_id}",
                 )
 
@@ -456,7 +783,7 @@ def main() -> int:
             status, completed = api_request(
                 base_url,
                 "POST",
-                f"/api/training/role-creation/sessions/{creating_session_id}/complete",
+                f"/api/training/role-creation/sessions/{completed_session_id}/complete",
                 complete_payload,
             )
             assert_true(status == 200 and isinstance(completed, dict) and completed.get("ok"), "complete session failed")
@@ -470,52 +797,84 @@ def main() -> int:
                 stage="completed",
                 name="complete_session",
                 method="POST",
-                path=f"/api/training/role-creation/sessions/{creating_session_id}/complete",
+                path=f"/api/training/role-creation/sessions/{completed_session_id}/complete",
                 payload=complete_payload,
                 status=status,
                 body=completed,
             )
 
-            completed_dom_path = capture_dom(edge_path, base_url, evidence_root, "completed-delete-visible", creating_session_id)
+            completed_dom_path = capture_dom(edge_path, base_url, evidence_root, "completed-delete-visible", completed_session_id)
             evidence["dom"]["completed_delete_visible"] = completed_dom_path
             completed_dom_text = Path(completed_dom_path).read_text(encoding="utf-8")
             assert_true(
-                f"data-rc-delete-session=\"{creating_session_id}\"" in completed_dom_text
-                or f"data-rc-delete-session='{creating_session_id}'" in completed_dom_text,
+                f"data-rc-delete-session=\"{completed_session_id}\"" in completed_dom_text
+                or f"data-rc-delete-session='{completed_session_id}'" in completed_dom_text,
                 "completed session should expose delete button in DOM",
             )
 
             status, completed_delete = api_request(
                 base_url,
                 "DELETE",
-                f"/api/training/role-creation/sessions/{creating_session_id}",
+                f"/api/training/role-creation/sessions/{completed_session_id}",
                 {"operator": operator},
             )
             assert_true(
                 status == 200 and isinstance(completed_delete, dict) and completed_delete.get("ok"),
                 "completed delete failed",
             )
+            assert_true(
+                not bool(completed_delete.get("cleanup_result")),
+                "completed delete should only remove record, not run creating cleanup",
+            )
             evidence["api"]["completed_delete"] = record_api(
                 api_dir,
                 stage="completed",
                 name="delete_session",
                 method="DELETE",
-                path=f"/api/training/role-creation/sessions/{creating_session_id}",
+                path=f"/api/training/role-creation/sessions/{completed_session_id}",
                 payload={"operator": operator},
                 status=status,
                 body=completed_delete,
             )
+
+            status, completed_detail_missing = api_request(
+                base_url,
+                "GET",
+                f"/api/training/role-creation/sessions/{completed_session_id}",
+            )
+            assert_true(
+                status == 404
+                and isinstance(completed_detail_missing, dict)
+                and str(completed_detail_missing.get("code") or "").strip() == "role_creation_session_not_found",
+                "completed-deleted session detail should return not found",
+            )
+            evidence["api"]["completed_detail_missing"] = record_api(
+                api_dir,
+                stage="completed",
+                name="detail_after_delete",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{completed_session_id}",
+                payload=None,
+                status=status,
+                body=completed_detail_missing,
+            )
+            if completed_workspace is not None:
+                assert_true(completed_workspace.exists(), "completed record delete should keep created workspace directory")
 
             evidence["assertions"] = {
                 "async_post_latencies_ms": [round(item * 1000, 1) for item in timings],
                 "async_unhandled_after_second_post": int(second_session.get("unhandled_user_message_count") or 0),
                 "async_final_user_processed_count": len(async_processed_users),
                 "async_final_assistant_chat_count": len(async_assistant_rows),
-                "creating_task_count": len(creating_task_ids),
+                "cleanup_task_count": len(cleanup_task_ids),
+                "completed_task_count": len(completed_task_ids),
                 "draft_session_id": draft_session_id,
                 "async_session_id": async_session_id,
-                "creating_session_id": creating_session_id,
-                "creating_ticket_id": creating_ticket_id,
+                "cleanup_session_id": cleanup_session_id,
+                "cleanup_ticket_id": cleanup_ticket_id,
+                "completed_session_id": completed_session_id,
+                "completed_ticket_id": completed_ticket_id,
+                "cleanup_running_block_checked": cleanup_running_block_checked,
             }
 
             summary_md = evidence_root / "summary.md"
@@ -533,13 +892,17 @@ def main() -> int:
                         "",
                         f"- draft delete visible in DOM and API delete succeeds: session `{draft_session_id}`",
                         f"- async batching returns quickly, delete blocked during processing, then settles idle: session `{async_session_id}`",
-                        f"- creating session hides delete in DOM and blocks delete API, completed session shows delete and can be removed: session `{creating_session_id}`",
+                        (
+                            f"- creating session only exposes cleanup delete after running assignment nodes drop to zero; "
+                            f"cleanup delete removes session, assignment graph, and workspace: session `{cleanup_session_id}`"
+                        ),
+                        f"- completed session shows delete and can remove only the session record: session `{completed_session_id}`",
                         "",
                         "## Evidence",
                         "",
                         f"- api_dir: {api_dir.as_posix()}",
                         f"- draft_dom: {draft_dom_path}",
-                        f"- creating_dom: {creating_dom_path}",
+                        f"- cleanup_dom: {cleanup_dom_path}",
                         f"- completed_dom: {completed_dom_path}",
                         f"- server_stdout: {(log_root / 'server.stdout.log').as_posix()}",
                         f"- server_stderr: {(log_root / 'server.stderr.log').as_posix()}",
@@ -550,7 +913,9 @@ def main() -> int:
                         f"- async_unhandled_after_second_post: {evidence['assertions']['async_unhandled_after_second_post']}",
                         f"- async_final_user_processed_count: {evidence['assertions']['async_final_user_processed_count']}",
                         f"- async_final_assistant_chat_count: {evidence['assertions']['async_final_assistant_chat_count']}",
-                        f"- creating_task_count: {evidence['assertions']['creating_task_count']}",
+                        f"- cleanup_task_count: {evidence['assertions']['cleanup_task_count']}",
+                        f"- completed_task_count: {evidence['assertions']['completed_task_count']}",
+                        f"- cleanup_running_block_checked: {evidence['assertions']['cleanup_running_block_checked']}",
                         "",
                     ]
                 )

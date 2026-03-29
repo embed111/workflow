@@ -1,0 +1,33 @@
+{
+    "test_gate":  {
+                      "status":  "passed",
+                      "evidence_path":  "D:\\code\\AI\\J-Agents\\workflow\\.running\\control\\reports\\test-gate-20260329-012854.json"
+                  },
+    "deploy_root":  "D:\\code\\AI\\J-Agents\\workflow\\.running\\test",
+    "finished_at":  "2026-03-28T17:28:54.6739142Z",
+    "runtime_root":  "D:\\code\\AI\\J-Agents\\workflow\\.running\\control\\runtime\\test",
+    "version":  "20260329-012854",
+    "prod_candidate":  {
+                           "version":  "20260329-012854",
+                           "test_batch_id":  "test-gate-20260329-012854",
+                           "candidate_meta_path":  "D:\\code\\AI\\J-Agents\\workflow\\.running\\control\\candidates\\20260329-012854\\candidate.json",
+                           "source_environment":  "test",
+                           "version_rank":  "20260329-012854",
+                           "evidence_path":  "D:\\code\\AI\\J-Agents\\workflow\\.running\\control\\reports\\test-gate-20260329-012854.json",
+                           "passed_at":  "2026-03-28T17:28:57.5964723Z",
+                           "candidate_app_root":  "D:\\code\\AI\\J-Agents\\workflow\\.running\\control\\candidates\\20260329-012854\\app"
+                       },
+    "deployment_metadata_path":  "D:\\code\\AI\\J-Agents\\workflow\\.running\\test\\.workflow-deployment.json",
+    "action":  "deploy",
+    "result":  "success",
+    "host":  "127.0.0.1",
+    "artifact_root":  "C:\\work\\J-Agents\\.output-test",
+    "started_at":  "2026-03-28T17:28:54.5276118Z",
+    "agent_search_root":  "C:\\work\\J-Agents",
+    "show_test_data":  true,
+    "source_root":  "D:\\code\\AI\\J-Agents\\workflow",
+    "environment":  "test",
+    "local_deployment_marker_path":  "D:\\code\\AI\\J-Agents\\workflow\\.running\\test\\.workflow-local-deployment.json",
+    "port":  8092,
+    "runtime_config_path":  "D:\\code\\AI\\J-Agents\\workflow\\.running\\control\\runtime\\test\\state\\runtime-config.json"
+}

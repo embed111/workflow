@@ -112,6 +112,7 @@
     tcLoopSelectedNodeId: '',
     tcLoopCreateTab: 'basic', // basic | workset | launch
     tcLoopStatusTab: 'overview', // overview | workset | eval | history
+    tcLoopRightTab: 'tasks', // tasks | baseline
     tcLoopQueueFilter: 'all',
     tcLoopRoundIndexByQueueTaskId: {},
     tcLoopQueryApplied: false,
@@ -127,11 +128,14 @@
     tcRoleCreationLoading: false,
     tcRoleCreationError: '',
     tcRoleCreationOptimisticMessages: {},
+    tcRoleCreationMessagesRenderedSessionId: '',
     tcRoleCreationPoller: 0,
     tcRoleCreationPollBusy: false,
     tcRoleCreationDetailTab: 'evolution',
     tcRoleCreationDraftAttachments: [],
     tcRoleCreationDraftCollapsed: false,
+    tcRoleCreationQuery: '',
+    tcRoleCreationStatusFilter: 'all',
     tcRoleCreationTaskPreview: {
       kind: '',
       stage_key: '',
@@ -159,6 +163,11 @@
     defectListHasMore: false,
     defectDraftImages: [],
     defectSupplementDraftImages: [],
+    defectTaskDraftAction: '',
+    defectTaskDraftReportId: '',
+    defectTaskDraftBaseName: '',
+    defectTaskDraftDefaultBaseName: '',
+    defectTaskDraftError: '',
     assignmentGraphs: [],
     assignmentSelectedTicketId: '',
     assignmentGraphData: null,

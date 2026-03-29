@@ -365,6 +365,7 @@
   }
 
   function renderAssignmentCenter() {
+    renderAssignmentGraphSelector();
     renderAssignmentScheduler();
     renderAssignmentGraph();
     renderAssignmentDetail();
@@ -466,9 +467,54 @@
 
   function assignmentGraphsUrl() {
     return withTestDataQuery(
-      '/api/assignments?source_workflow=' + encodeURIComponent(ASSIGNMENT_UI_SOURCE_WORKFLOW) +
-      '&limit=12',
+      '/api/assignments?limit=24',
     );
+  }
+
+  function assignmentGraphOptionLabel(item) {
+    const row = item && typeof item === 'object' ? item : {};
+    const baseLabel = typeof assignmentGraphDisplayName === 'function'
+      ? assignmentGraphDisplayName(row)
+      : (safe(row.graph_name).trim() || safe(row.ticket_id).trim() || '未命名任务图');
+    return row.is_test_data ? (baseLabel + ' · 测试') : baseLabel;
+  }
+
+  function isAssignmentGraphSelectorVisibleItem(item) {
+    const row = item && typeof item === 'object' ? item : {};
+    const sourceWorkflow = safe(row.source_workflow).trim().toLowerCase();
+    return !!row.is_test_data || sourceWorkflow === ASSIGNMENT_UI_SOURCE_WORKFLOW;
+  }
+
+  function assignmentVisibleGraphs() {
+    const items = Array.isArray(state.assignmentGraphs) ? state.assignmentGraphs : [];
+    return items.filter((item) => isAssignmentGraphSelectorVisibleItem(item));
+  }
+
+  function renderAssignmentGraphSelector() {
+    const select = $('assignmentGraphSelect');
+    if (!select) return;
+    if (!state.agentSearchRootReady) {
+      select.innerHTML = "<option value=''>任务中心已锁定</option>";
+      select.disabled = true;
+      return;
+    }
+    const selectedTicketId = selectedAssignmentTicketId();
+    const options = assignmentVisibleGraphs();
+    if (!options.length) {
+      select.innerHTML = "<option value=''>暂无任务图</option>";
+      select.disabled = true;
+      return;
+    }
+    select.innerHTML = options.map((item) => {
+      const ticketId = safe(item && item.ticket_id).trim();
+      return "<option value='" + escapeHtml(ticketId) + "'" +
+        (ticketId === selectedTicketId ? ' selected' : '') +
+        '>' + escapeHtml(assignmentGraphOptionLabel(item)) + '</option>';
+    }).join('');
+    select.disabled = false;
+    if (selectedTicketId) {
+      select.value = selectedTicketId;
+    }
   }
 
   function assignmentDelay(ms) {
@@ -575,6 +621,7 @@
     const previous = safe(state.assignmentSelectedTicketId).trim();
     const data = await getJSON(assignmentGraphsUrl());
     state.assignmentGraphs = Array.isArray(data.items) ? data.items : [];
+    const visibleGraphs = assignmentVisibleGraphs();
     const emptyPrototypeGraph = state.assignmentGraphs.find((item) => {
       const metrics = item && item.metrics_summary && typeof item.metrics_summary === 'object'
         ? item.metrics_summary
@@ -586,7 +633,7 @@
     if (
       !!state.showTestData &&
       !opts.testBootstrapAttempted &&
-      (!state.assignmentGraphs.length || (!!emptyPrototypeGraph && state.assignmentGraphs.length === 1))
+      (!visibleGraphs.length || (!!emptyPrototypeGraph && visibleGraphs.length === 1))
     ) {
       await ensureAssignmentPrototypeTestData();
       return refreshAssignmentGraphs({
@@ -594,39 +641,21 @@
         testBootstrapAttempted: true,
       });
     }
-    const selectedExists = state.assignmentGraphs.some((item) => safe(item && item.ticket_id).trim() === previous);
+    const selectedExists = visibleGraphs.some((item) => safe(item && item.ticket_id).trim() === previous);
     const globalTicketId = globalAssignmentTicketId();
     const preferredTicketId = preferredAssignmentTicketId();
-    if (globalTicketId) {
-      state.assignmentSelectedTicketId = globalTicketId;
-      if (previous !== globalTicketId) {
-        state.assignmentActiveLoaded = 0;
-        state.assignmentHistoryLoaded = 0;
-      }
-    } else if (previous && selectedExists) {
-      state.assignmentSelectedTicketId = previous;
-    } else if (!selectedExists) {
-      state.assignmentSelectedTicketId = preferredTicketId ||
-        (state.assignmentGraphs.length
-          ? safe(state.assignmentGraphs[0].ticket_id).trim()
-          : '');
-      state.assignmentActiveLoaded = 0;
-      state.assignmentHistoryLoaded = 0;
-    } else if (!opts.preserveSelection && !previous && preferredTicketId) {
-      state.assignmentSelectedTicketId = preferredTicketId;
+    const nextTicketId = selectedExists
+      ? previous
+      : (globalTicketId || preferredTicketId || (
+        visibleGraphs.length
+          ? safe(visibleGraphs[0].ticket_id).trim()
+          : ''
+      ));
+    if (nextTicketId !== previous) {
       state.assignmentActiveLoaded = 0;
       state.assignmentHistoryLoaded = 0;
     }
-    if (!state.assignmentSelectedTicketId && preferredTicketId) {
-      state.assignmentSelectedTicketId = preferredTicketId;
-    }
-    if (!state.assignmentSelectedTicketId) {
-      state.assignmentSelectedTicketId = state.assignmentGraphs.length
-        ? safe(state.assignmentGraphs[0].ticket_id).trim()
-        : '';
-      state.assignmentActiveLoaded = 0;
-      state.assignmentHistoryLoaded = 0;
-    }
+    state.assignmentSelectedTicketId = nextTicketId;
     if (selectedAssignmentTicketId()) {
       return refreshAssignmentGraphData({ ticketId: selectedAssignmentTicketId() });
     }

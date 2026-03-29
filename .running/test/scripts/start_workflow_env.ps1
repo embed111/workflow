@@ -129,16 +129,13 @@ function Ensure-EnvironmentDeployment {
         return
     }
     Write-Host "[workflow-start] deploy $Environment because running copy is missing or untrusted ($($deploymentState.reason)) ..."
-    $deployArgs = @(
-        '-Environment',
-        $Environment,
-        '-BindHost',
-        $BindHost,
-        '-Port',
-        $Port
-    )
+    $deployArgs = @{
+        Environment = $Environment
+        BindHost = $BindHost
+        Port = $Port
+    }
     if ($Environment -eq 'prod') {
-        $deployArgs += '-AllowDirectProdDeploy'
+        $deployArgs['AllowDirectProdDeploy'] = $true
     }
     & (Join-Path $SourceRoot 'scripts\deploy_workflow_env.ps1') @deployArgs
     if ($LASTEXITCODE -ne 0) {
@@ -552,14 +549,6 @@ Assert-WorkflowArtifactIsolation -Descriptor $descriptor
 
 $pendingUpgrade = $null
 $openedBrowser = $false
-if ($OpenBrowser) {
-    $openedBrowser = Open-WorkflowBrowser `
-        -BindHost ([string]$descriptor.host) `
-        -Port ([int]$descriptor.port) `
-        -Environment $Environment `
-        -SourceRoot $sourceRoot `
-        -UseSplash
-}
 
 while ($true) {
     $launcher = Start-EnvironmentLauncher -Descriptor $descriptor -SkipBackfill:$SkipBackfill -OpenBrowser:$false

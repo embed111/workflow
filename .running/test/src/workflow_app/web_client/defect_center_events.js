@@ -371,8 +371,18 @@
           return;
         }
         try {
+          if (target.closest('#defectCancelTaskNameBtn')) {
+            defectTaskDraftReset();
+            renderDefectCenter();
+            return;
+          }
+          const confirmTaskDraftBtn = target.closest('#defectConfirmTaskNameBtn');
+          if (confirmTaskDraftBtn) {
+            await submitDefectTaskDraftAction(confirmTaskDraftBtn.getAttribute('data-action-kind'));
+            return;
+          }
           if (target.closest('#defectCreateProcessTaskBtn')) {
-            await createDefectProcessTaskAction();
+            await requestDefectProcessTaskAction();
             return;
           }
           if (target.closest('#defectResolvedVersionBtn')) {
@@ -388,10 +398,18 @@
             return;
           }
           if (target.closest('#defectSubmitReviewBtn')) {
-            await submitDefectReviewFlow();
+            await requestDefectReviewTaskAction();
           }
         } catch (err) {
           setDefectError(err.message || String(err));
+        }
+      });
+      $('defectDetailBody').addEventListener('input', (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        if (target.id === 'defectTaskNameBaseInput') {
+          state.defectTaskDraftBaseName = safe(target.value);
+          setDefectTaskDraftError('');
         }
       });
       $('defectDetailBody').addEventListener('paste', (event) => {

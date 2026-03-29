@@ -31,9 +31,12 @@ from .defect_service import (
 DEFECT_ASSIGNMENT_SOURCE_WORKFLOW = "workflow-ui"
 DEFECT_ASSIGNMENT_GRAPH_NAME = "任务中心全局主图"
 DEFECT_ASSIGNMENT_GRAPH_REQUEST_ID = "workflow-ui-global-graph-v1"
+DEFECT_TASK_NAME_BASE_MAX_LEN = 160
 _DEFECT_LEGACY_REQUEST_RE = re.compile(r"^defect:(process|review):(dr-[A-Za-z0-9-]+)$")
+_DEFECT_STAGE_TITLE_RE = re.compile(r"^(?P<base>.+?)\s*(?:-|/|·|:|：)\s*(?P<stage>.+?)$")
 _DEFECT_ASSIGNMENT_REPAIR_SIGNATURES: dict[str, tuple[int, int]] = {}
 _DEFECT_ASSIGNMENT_REPAIR_FAST_SIGNATURES: dict[str, tuple[int, int, int]] = {}
+_DEFECT_LEGACY_CHAIN_NAME_BASE = "__legacy_defect_chain__"
 
 
 class _DefectRootCfg:
@@ -179,13 +182,163 @@ def _ensure_assignment_node(
     return True
 
 
-def _process_node_specs(report_key: str, assignee: str, priority_label: str) -> list[dict[str, Any]]:
+def _defect_stage_layout(report_key: str, action_kind: str) -> list[tuple[str, str, str]]:
+    if action_kind == DEFECT_PROCESS_ACTION_KIND:
+        return [
+            (f"{report_key}-analyze", "分析", "分析缺陷"),
+            (f"{report_key}-fix", "修复", "修复缺陷"),
+            (f"{report_key}-release", "推送到目标版本", "推送到目标版本"),
+        ]
+    if action_kind == DEFECT_REVIEW_ACTION_KIND:
+        return [
+            (f"{report_key}-review", "复核", "复核争议"),
+        ]
+    raise DefectCenterError(400, "defect action_kind invalid", "defect_action_kind_invalid", {"action_kind": action_kind})
+
+
+def _normalize_defect_task_name_base(value: Any) -> str:
+    text = _normalize_text(
+        value,
+        field="task_name_base",
+        required=False,
+        max_len=DEFECT_TASK_NAME_BASE_MAX_LEN,
+    )
+    return " ".join(text.split())
+
+
+def _default_defect_task_name_base(report: dict[str, Any]) -> str:
+    payload = report if isinstance(report, dict) else {}
+    display_id = str(payload.get("display_id") or payload.get("dts_id") or payload.get("report_id") or "").strip()
+    summary = str(payload.get("defect_summary") or "").strip()
+    if display_id and summary:
+        if summary.startswith(display_id):
+            return _normalize_defect_task_name_base(summary)
+        return _normalize_defect_task_name_base(f"{display_id} {summary}")
+    if display_id:
+        return _normalize_defect_task_name_base(f"{display_id} 缺陷问题")
+    return _normalize_defect_task_name_base(summary or "缺陷问题")
+
+
+def _resolve_requested_task_name_base(body: dict[str, Any], report: dict[str, Any]) -> str:
+    raw = (
+        body.get("task_name_base")
+        or body.get("taskNameBase")
+        or body.get("task_name")
+        or body.get("taskName")
+        or ""
+    )
+    explicit = _normalize_defect_task_name_base(raw)
+    if explicit:
+        return explicit
+    return _default_defect_task_name_base(report)
+
+
+def _defect_stage_title(task_name_base: str, stage_name: str, legacy_title: str) -> str:
+    if task_name_base == _DEFECT_LEGACY_CHAIN_NAME_BASE:
+        return legacy_title
+    return f"{task_name_base} - {stage_name}"
+
+
+def _active_defect_node_title_map(root: Path, ticket_id: str, node_ids: set[str]) -> dict[str, str]:
+    if not ticket_id or not node_ids:
+        return {}
+    node_records = assignment_service._assignment_load_node_records(root, ticket_id, include_deleted=True)
+    out: dict[str, str] = {}
+    for row in _assignment_active_rows(node_records):
+        node_id = str(row.get("node_id") or "").strip()
+        if node_id in node_ids:
+            title = str(row.get("node_name") or "").strip()
+            if title:
+                out[node_id] = title
+    return out
+
+
+def _existing_defect_task_name_base(
+    report_key: str,
+    *,
+    action_kind: str,
+    title_map: dict[str, str],
+) -> str:
+    if not title_map:
+        return ""
+    legacy_only = False
+    for node_id, stage_name, legacy_title in _defect_stage_layout(report_key, action_kind):
+        title = str(title_map.get(node_id) or "").strip()
+        if not title:
+            continue
+        if title == legacy_title:
+            legacy_only = True
+            continue
+        matched = _DEFECT_STAGE_TITLE_RE.match(title)
+        if matched is None:
+            continue
+        if str(matched.group("stage") or "").strip() != stage_name:
+            continue
+        base = str(matched.group("base") or "").strip()
+        if base:
+            return base
+    return _DEFECT_LEGACY_CHAIN_NAME_BASE if legacy_only else ""
+
+
+def _resolved_defect_task_name_base(
+    root: Path,
+    *,
+    ticket_id: str,
+    report_key: str,
+    action_kind: str,
+    requested_base: str,
+) -> str:
+    existing_title_map = _active_defect_node_title_map(
+        root,
+        ticket_id,
+        {
+            node_id
+            for node_id, _stage_name, _legacy_title in _defect_stage_layout(report_key, action_kind)
+        },
+    )
+    existing_base = _existing_defect_task_name_base(
+        report_key,
+        action_kind=action_kind,
+        title_map=existing_title_map,
+    )
+    if existing_base:
+        return existing_base
+    return requested_base
+
+
+def _current_defect_ref_specs(
+    root: Path,
+    *,
+    ticket_id: str,
+    node_specs: list[dict[str, Any]],
+) -> list[tuple[str, str]]:
+    node_ids = {
+        str(item.get("node_id") or "").strip()
+        for item in list(node_specs or [])
+        if str(item.get("node_id") or "").strip()
+    }
+    current_title_map = _active_defect_node_title_map(root, ticket_id, node_ids)
+    return [
+        (
+            str(item.get("node_id") or "").strip(),
+            str(current_title_map.get(str(item.get("node_id") or "").strip()) or item.get("node_name") or "").strip(),
+        )
+        for item in list(node_specs or [])
+        if str(item.get("node_id") or "").strip()
+    ]
+
+
+def _public_defect_task_name_base(task_name_base: str) -> str:
+    return "" if str(task_name_base or "").strip() == _DEFECT_LEGACY_CHAIN_NAME_BASE else str(task_name_base or "").strip()
+
+
+def _process_node_specs(report_key: str, assignee: str, priority_label: str, task_name_base: str) -> list[dict[str, Any]]:
     analyze_node_id = f"{report_key}-analyze"
     fix_node_id = f"{report_key}-fix"
     return [
         {
             "node_id": analyze_node_id,
-            "node_name": "分析缺陷",
+            "node_name": _defect_stage_title(task_name_base, "分析", "分析缺陷"),
             "assigned_agent_id": assignee,
             "node_goal": "分析当前缺陷成因、复现条件和修复范围。",
             "expected_artifact": "分析缺陷报告.html",
@@ -196,7 +349,7 @@ def _process_node_specs(report_key: str, assignee: str, priority_label: str) -> 
         },
         {
             "node_id": fix_node_id,
-            "node_name": "修复缺陷",
+            "node_name": _defect_stage_title(task_name_base, "修复", "修复缺陷"),
             "assigned_agent_id": assignee,
             "node_goal": "完成缺陷修复并输出修复说明。",
             "expected_artifact": "缺陷修复说明.html",
@@ -207,7 +360,7 @@ def _process_node_specs(report_key: str, assignee: str, priority_label: str) -> 
         },
         {
             "node_id": f"{report_key}-release",
-            "node_name": "推送到目标版本",
+            "node_name": _defect_stage_title(task_name_base, "推送到目标版本", "推送到目标版本"),
             "assigned_agent_id": assignee,
             "node_goal": "确认修复进入目标版本并产出发布记录。",
             "expected_artifact": "目标版本发布记录.html",
@@ -219,11 +372,11 @@ def _process_node_specs(report_key: str, assignee: str, priority_label: str) -> 
     ]
 
 
-def _review_node_specs(report_key: str, assignee: str, priority_label: str) -> list[dict[str, Any]]:
+def _review_node_specs(report_key: str, assignee: str, priority_label: str, task_name_base: str) -> list[dict[str, Any]]:
     return [
         {
             "node_id": f"{report_key}-review",
-            "node_name": "复核争议",
+            "node_name": _defect_stage_title(task_name_base, "复核", "复核争议"),
             "assigned_agent_id": assignee,
             "node_goal": "结合补充证据和当前结论完成复核。",
             "expected_artifact": "复核争议结论.html",
@@ -241,11 +394,12 @@ def _defect_action_specs(
     action_kind: str,
     assignee: str,
     priority_label: str,
+    task_name_base: str,
 ) -> tuple[str, list[dict[str, Any]], list[tuple[str, str]]]:
     if action_kind == DEFECT_PROCESS_ACTION_KIND:
-        node_specs = _process_node_specs(report_key, assignee, priority_label)
+        node_specs = _process_node_specs(report_key, assignee, priority_label, task_name_base)
     elif action_kind == DEFECT_REVIEW_ACTION_KIND:
-        node_specs = _review_node_specs(report_key, assignee, priority_label)
+        node_specs = _review_node_specs(report_key, assignee, priority_label, task_name_base)
     else:
         raise DefectCenterError(400, "defect action_kind invalid", "defect_action_kind_invalid", {"action_kind": action_kind})
     return (
@@ -391,6 +545,7 @@ def _ensure_assignment_chain(
     now_text: str,
     operator: str,
     reason: str,
+    preserve_existing_node_names: bool = False,
 ) -> dict[str, int | bool]:
     task_record = assignment_service._assignment_load_task_record(root, ticket_id)
     node_records = assignment_service._assignment_load_node_records(root, ticket_id, include_deleted=True)
@@ -472,6 +627,8 @@ def _ensure_assignment_chain(
             "delivery_mode",
             "delivery_receiver_agent_id",
         ):
+            if key == "node_name" and preserve_existing_node_names and str(existing.get("node_name") or "").strip():
+                continue
             next_value = str(spec.get(key) or "").strip()
             if str(existing.get(key) or "").strip() != next_value:
                 existing[key] = next_value
@@ -606,11 +763,19 @@ def _repair_defect_action_group(
         return {"changed": False}
     global_ticket_id = _ensure_defect_assignment_graph(_DefectRootCfg(root))
     initial_priority = str(report.get("task_priority") or "P1").strip() or "P1"
+    task_name_base = _resolved_defect_task_name_base(
+        root,
+        ticket_id=global_ticket_id,
+        report_key=report_id,
+        action_kind=action_kind,
+        requested_base=_default_defect_task_name_base(report),
+    )
     _, node_specs, ref_specs = _defect_action_specs(
         report_id,
         action_kind=action_kind,
         assignee="",
         priority_label=initial_priority,
+        task_name_base=task_name_base,
     )
     assignee = _pick_chain_assignee(
         root,
@@ -623,6 +788,7 @@ def _repair_defect_action_group(
         action_kind=action_kind,
         assignee=assignee,
         priority_label=initial_priority,
+        task_name_base=task_name_base,
     )
     chain_result = _ensure_assignment_chain(
         root,
@@ -631,7 +797,9 @@ def _repair_defect_action_group(
         now_text=now_text,
         operator="defect-system",
         reason=f"repair defect {action_kind} chain into global graph",
+        preserve_existing_node_names=True,
     )
+    ref_specs = _current_defect_ref_specs(root, ticket_id=global_ticket_id, node_specs=node_specs)
     conn = connect_db(root)
     try:
         conn.execute("BEGIN")
@@ -800,9 +968,6 @@ def create_defect_process_task(
     assignee = _normalize_text(body.get("assigned_agent_id") or body.get("assignedAgentId") or _default_assignee(cfg), field="assigned_agent_id", required=True, max_len=120)
     now_text = _now_text()
     external_request_id = f"defect:process:{report_key}"
-    analyze_node_id = f"{report_key}-analyze"
-    fix_node_id = f"{report_key}-fix"
-    release_node_id = f"{report_key}-release"
     if not auto_queue:
         gate = _defect_manual_task_gate(root, report_key, include_test_data=include_test_data)
         if not bool(gate.get("allowed")):
@@ -820,15 +985,24 @@ def create_defect_process_task(
             raise DefectCenterError(409, "not a formal defect yet", "defect_process_requires_formal")
         report = _report_row_to_payload(row)
         priority_label = str(report.get("task_priority") or "P1").strip() or "P1"
+        requested_task_name_base = _resolve_requested_task_name_base(body, report)
         conn.commit()
     finally:
         conn.close()
     ticket_id = _ensure_defect_assignment_graph(cfg)
+    task_name_base = _resolved_defect_task_name_base(
+        root,
+        ticket_id=ticket_id,
+        report_key=report_key,
+        action_kind=DEFECT_PROCESS_ACTION_KIND,
+        requested_base=requested_task_name_base,
+    )
     _external_request_id, node_specs, _ref_specs = _defect_action_specs(
         report_key,
         action_kind=DEFECT_PROCESS_ACTION_KIND,
         assignee=assignee,
         priority_label=priority_label,
+        task_name_base=task_name_base,
     )
     chain_result = _ensure_assignment_chain(
         root,
@@ -837,17 +1011,15 @@ def create_defect_process_task(
         now_text=now_text,
         operator="defect-center",
         reason="ensure defect process chain on global graph",
+        preserve_existing_node_names=True,
     )
     created_node_count = int(chain_result.get("created_node_count") or 0)
+    ref_specs = _current_defect_ref_specs(root, ticket_id=ticket_id, node_specs=node_specs)
     conn = connect_db(root)
     try:
         conn.execute("BEGIN")
         _load_report_row(conn, report_key, include_test_data=include_test_data)
-        for focus_node_id, title in (
-            (analyze_node_id, "分析缺陷"),
-            (fix_node_id, "修复缺陷"),
-            (release_node_id, "推送到目标版本"),
-        ):
+        for focus_node_id, title in ref_specs:
             _upsert_task_ref(
                 conn,
                 report_key,
@@ -872,6 +1044,7 @@ def create_defect_process_task(
                 "task_priority": priority_label,
                 "created_node_count": created_node_count,
                 "auto_queue": auto_queue,
+                "task_name_base": _public_defect_task_name_base(task_name_base),
             },
             created_at=now_text,
         )
@@ -882,6 +1055,7 @@ def create_defect_process_task(
     detail = get_defect_detail(root, report_key, include_test_data=include_test_data)
     detail["created_task_ticket_id"] = ticket_id
     detail["external_request_id"] = external_request_id
+    detail["task_name_base"] = _public_defect_task_name_base(task_name_base)
     return detail
 
 
@@ -916,6 +1090,7 @@ def create_defect_review_task(
         row = _load_report_row(conn, report_key, include_test_data=include_test_data)
         payload = _report_row_to_payload(row)
         priority_label = str(payload.get("task_priority") or "P1").strip() or "P1"
+        requested_task_name_base = _resolve_requested_task_name_base(body, payload)
         if str(row["status"] or "").strip().lower() != DEFECT_STATUS_DISPUTE:
             current_decision = _json_loads_object(row["current_decision_json"])
             current_decision.update(
@@ -939,11 +1114,19 @@ def create_defect_review_task(
     finally:
         conn.close()
     ticket_id = _ensure_defect_assignment_graph(cfg)
+    task_name_base = _resolved_defect_task_name_base(
+        root,
+        ticket_id=ticket_id,
+        report_key=report_key,
+        action_kind=DEFECT_REVIEW_ACTION_KIND,
+        requested_base=requested_task_name_base,
+    )
     _external_request_id, node_specs, _ref_specs = _defect_action_specs(
         report_key,
         action_kind=DEFECT_REVIEW_ACTION_KIND,
         assignee=assignee,
         priority_label=priority_label,
+        task_name_base=task_name_base,
     )
     chain_result = _ensure_assignment_chain(
         root,
@@ -952,8 +1135,10 @@ def create_defect_review_task(
         now_text=now_text,
         operator="defect-center",
         reason="ensure defect review chain on global graph",
+        preserve_existing_node_names=True,
     )
     created_node_count = int(chain_result.get("created_node_count") or 0)
+    ref_specs = _current_defect_ref_specs(root, ticket_id=ticket_id, node_specs=node_specs)
     conn = connect_db(root)
     try:
         conn.execute("BEGIN")
@@ -964,7 +1149,7 @@ def create_defect_review_task(
             ticket_id=ticket_id,
             focus_node_id=review_node_id,
             action_kind=DEFECT_REVIEW_ACTION_KIND,
-            title="复核争议",
+            title=str(ref_specs[0][1] if ref_specs else "").strip() or "复核争议",
             external_request_id=external_request_id,
             created_at=now_text,
         )
@@ -983,6 +1168,7 @@ def create_defect_review_task(
                 "task_priority": priority_label,
                 "created_node_count": created_node_count,
                 "auto_queue": auto_queue,
+                "task_name_base": _public_defect_task_name_base(task_name_base),
             },
             created_at=now_text,
         )
@@ -993,4 +1179,5 @@ def create_defect_review_task(
     detail = get_defect_detail(root, report_key, include_test_data=include_test_data)
     detail["created_task_ticket_id"] = ticket_id
     detail["external_request_id"] = external_request_id
+    detail["task_name_base"] = _public_defect_task_name_base(task_name_base)
     return detail

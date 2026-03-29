@@ -265,7 +265,11 @@ Write-Host "[workflow-deploy] agent root: $($descriptor.agent_search_root)"
 Write-Host "[workflow-deploy] artifact root: $($descriptor.artifact_root)"
 Write-Host "[workflow-deploy] version: $version"
 
-Copy-WorkflowTree -SourcePath $sourceRoot -TargetPath ([string]$descriptor.deploy_root) -ExcludeDirs $script:WorkflowCopyExcludeDirs
+Copy-WorkflowTree `
+    -SourcePath $sourceRoot `
+    -TargetPath ([string]$descriptor.deploy_root) `
+    -ExcludeDirs $script:WorkflowCopyExcludeDirs `
+    -ExcludeFiles $script:WorkflowCopyExcludeFiles
 $metadataPath = Write-DeploymentMetadata -Descriptor $descriptor -Version $version -DeployedAt $deployedAt
 $localDeploymentMarkerPath = Write-WorkflowLocalDeploymentMarker -Descriptor $descriptor -Version $version -DeployedAt $deployedAt
 

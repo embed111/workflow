@@ -54,6 +54,16 @@
 - 验收结果需落盘到 `logs/runs/`，并在必要时更新 `docs/workflow/验收证据矩阵-Phase0.md`。
 - 最低回归建议：`healthz` 可用、会话创建成功、任务可中断并可重试、训练链路事件可查询。
 
+## Default Release Rule
+- 默认发布约束文件：`docs/workflow/governance/默认发布约束.md`。
+- 只要存在实际代码改动，且已完成验证并跑完门禁通过，默认继续执行：
+  - 部署 `test`
+  - 生成/刷新 `prod` 升级候选
+  - 由用户手动升级 `prod`
+- 本仓库中“推送到生产环境”默认解释为“生成/刷新 `prod` candidate”，不是自动升级正式环境。
+- 未经用户明确要求，不得直接执行 `prod` 覆盖式部署或自动 apply 正式升级。
+- 代码改动默认先跑 `scripts/quality/check_workspace_line_budget.py --root .`；若本轮触达文件命中行数重构门槛，优先做职责拆分/设计模式重构，再发布。
+
 ## Architecture & Workflow Notes
 - 典型链路：`workflow_web_server.py` 接收请求 -> `task_agent_runner.py` 执行任务 -> 事件与消息写入 `state/workflow.db` 与 `logs/events/*.jsonl`。
 - 前端资源由后端直接托管，核心交互脚本已拆分到 `src/workflow_app/web_client/*.js`（由 `workflow_web_server.py` 运行时拼接），修改 UI 时需同步检查 API 字段兼容性。

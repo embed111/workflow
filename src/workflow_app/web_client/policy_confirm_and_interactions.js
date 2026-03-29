@@ -351,6 +351,120 @@
     });
   }
 
+  function taskRunIsActiveStatus(status) {
+    const text = safe(status).trim().toLowerCase();
+    return text === 'pending' || text === 'queued' || text === 'running';
+  }
+
+  function latestSessionTaskRun(sessionId) {
+    const sid = safe(sessionId).trim();
+    const runs = Array.isArray(state.sessionTaskRuns[sid]) ? state.sessionTaskRuns[sid] : [];
+    if (!runs.length) return null;
+    return runs[runs.length - 1] || null;
+  }
+
+  function sessionMessageIndexByTaskId(sessionId, taskId) {
+    const sid = safe(sessionId).trim();
+    const taskKey = safe(taskId).trim();
+    const session = state.sessionsById[sid];
+    if (!session || !Array.isArray(session.messages) || !taskKey) return -1;
+    return session.messages.findIndex((row) => safe(row && row.task_id).trim() === taskKey);
+  }
+
+  function nonPlaceholderAssistantContent(row) {
+    const item = row && typeof row === 'object' ? row : null;
+    if (!item) return '';
+    if (item.pending_placeholder) return '';
+    return safe(item.content).trim();
+  }
+
+  function recoveredTaskPlaceholderText(status) {
+    return taskRunIsActiveStatus(status) && safe(status).trim().toLowerCase() === 'running'
+      ? '正在恢复本轮执行输出...'
+      : '任务已恢复，等待继续执行...';
+  }
+
+  function ensureRecoveredTaskMessage(sessionId, taskRun) {
+    const sid = safe(sessionId).trim();
+    const item = taskRun && typeof taskRun === 'object' ? taskRun : {};
+    const taskId = safe(item.task_id).trim();
+    if (!sid || !taskId) return null;
+    const phase = normalizeRuntimePhase(item.status);
+    const active = taskRunIsActiveStatus(item.status);
+    const summary = safe(item.summary).trim();
+    const fallbackContent = active
+      ? recoveredTaskPlaceholderText(item.status)
+      : phase === 'done'
+        ? '（已完成，但未返回文本内容）'
+        : '执行结束：' + statusText(item.status) + (summary ? ' ' + summary : '');
+    const fallbackHint = active
+      ? '检测到页面重连，正在恢复本轮执行...'
+      : phase === 'done'
+        ? ''
+        : '执行未完成，可点击“重试上一轮”再次尝试。';
+    let pendingIndex = sessionMessageIndexByTaskId(sid, taskId);
+    if (pendingIndex < 0) {
+      pendingIndex = appendSessionMessage(sid, 'assistant', fallbackContent, {
+        task_id: taskId,
+        run_state: phase,
+        pending_placeholder: !!active,
+        run_hint: fallbackHint,
+      });
+    } else {
+      const session = state.sessionsById[sid];
+      const current =
+        session &&
+        Array.isArray(session.messages) &&
+        pendingIndex >= 0 &&
+        pendingIndex < session.messages.length
+          ? session.messages[pendingIndex]
+          : null;
+      patchSessionMessage(sid, pendingIndex, {
+        task_id: taskId,
+        run_state: phase,
+        pending_placeholder: !!active,
+        run_hint: fallbackHint,
+        content: nonPlaceholderAssistantContent(current) || fallbackContent,
+      });
+    }
+    return {
+      pending_index: pendingIndex,
+      active: !!active,
+      task_id: taskId,
+      started_at: safe(item.start_at || item.created_at),
+      status: safe(item.status || 'pending'),
+      agent_name: safe(item.agent_name),
+    };
+  }
+
+  function recoverSessionTaskRuntime(sessionId) {
+    const sid = safe(sessionId).trim();
+    if (!sid) return null;
+    const latestRun = latestSessionTaskRun(sid);
+    if (!latestRun || !safe(latestRun.task_id).trim()) {
+      delete state.runningTasks[sid];
+      return null;
+    }
+    const recovered = ensureRecoveredTaskMessage(sid, latestRun);
+    if (!recovered) {
+      delete state.runningTasks[sid];
+      return null;
+    }
+    if (!recovered.active) {
+      delete state.runningTasks[sid];
+      return recovered;
+    }
+    state.runningTasks[sid] = {
+      task_id: recovered.task_id,
+      since_id: 0,
+      pending_index: recovered.pending_index,
+      started_at: recovered.started_at,
+      status: recovered.status,
+      agent_name: recovered.agent_name,
+    };
+    return recovered;
+  }
+
   function renderAgentSelectOptions(manual) {
     const sel = $('agentSelect');
     const currentSelection = manual ? selectedAgent() : '';
@@ -608,7 +722,14 @@
       ? taskData.items.map((row) => normalizeTaskRunRow(row))
       : [];
     linkSessionMessagesToTasks(sessionId);
+    const recoveredTask = recoverSessionTaskRuntime(sessionId);
+    renderSessionList();
     renderFeed();
+    if (recoveredTask && recoveredTask.active) {
+      startTaskPolling();
+    } else {
+      stopTaskPollingIfIdle();
+    }
   }
 
   async function selectSession(sessionId) {
@@ -771,7 +892,7 @@
             meta.pending_index < current.messages.length
               ? current.messages[meta.pending_index]
               : null;
-          const existing = msgRow ? safe(msgRow.content).trim() : '';
+          const existing = nonPlaceholderAssistantContent(msgRow);
           patchSessionMessage(sessionId, meta.pending_index, {
             run_state: phase,
             pending_placeholder: false,
@@ -819,7 +940,7 @@
             meta.pending_index < current.messages.length
               ? current.messages[meta.pending_index]
               : null;
-          const existing = msgRow ? safe(msgRow.content).trim() : '';
+          const existing = nonPlaceholderAssistantContent(msgRow);
           patchSessionMessage(sessionId, meta.pending_index, {
             run_state: phase,
             pending_placeholder: false,

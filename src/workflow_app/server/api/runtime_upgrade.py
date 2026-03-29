@@ -5,7 +5,7 @@ from ..services import runtime_upgrade_service as rus
 
 
 def _running_gate_payload(cfg, state) -> tuple[int, int]:
-    session_running = int(ws.active_runtime_task_count(state))
+    session_running = int(ws.active_runtime_task_count(state, root=cfg.root))
     assignment_metrics = ws.get_assignment_runtime_metrics(cfg.root, include_test_data=True)
     assignment_running = int(assignment_metrics.get("running_task_count") or 0)
     assignment_calls = int(assignment_metrics.get("agent_call_count") or 0)

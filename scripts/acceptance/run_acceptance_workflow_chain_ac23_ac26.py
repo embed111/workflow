@@ -499,8 +499,10 @@ def main() -> int:
 
         # AC-24
         task_ids: list[str] = []
+        task_statuses: list[str] = []
         trace_prompts: list[str] = []
         trace_policy_sources: list[str] = []
+        trace_fetch_errors: list[str] = []
         snapshot_obj: dict = {}
         try:
             snapshot_obj = json.loads(str(session_payload.get("policy_snapshot_json") or "{}"))
@@ -530,10 +532,19 @@ def main() -> int:
                 raise RuntimeError(f"task create failed round={idx + 1}: {status} {payload}")
             task_id = str(payload.get("task_id") or "")
             task_ids.append(task_id)
-            wait_task_done(base, task_id, timeout_s=180)
+            row = wait_task_done(base, task_id, timeout_s=180)
+            task_status = str(row.get("status") or "").lower()
+            task_statuses.append(task_status)
+            if task_status != "success":
+                trace_prompts.append("")
+                trace_policy_sources.append("")
+                continue
             trace_status, trace_payload = call(base, "GET", f"/api/tasks/{task_id}/trace")
             if trace_status != 200 or not trace_payload.get("ok"):
-                raise RuntimeError(f"trace fetch failed: {trace_status} {trace_payload}")
+                trace_fetch_errors.append(f"task={task_id} trace fetch failed: {trace_status} {trace_payload}")
+                trace_prompts.append("")
+                trace_policy_sources.append("")
+                continue
             trace = trace_payload.get("trace") or {}
             trace_prompts.append(str(trace.get("prompt") or ""))
             source = trace.get("policy_source") or {}
@@ -543,19 +554,21 @@ def main() -> int:
         trace_sources_nonempty = [item for item in trace_policy_sources if str(item or "").strip("|")]
         same_source = bool(trace_sources_nonempty) and len(set(trace_sources_nonempty)) == 1
         has_policy_block = bool(trace_prompts) and all("[SESSION_POLICY_FROZEN]" in text for text in trace_prompts)
-        if (not same_source or not has_policy_block) and snapshot_source.strip("|"):
+        if not same_source and snapshot_source.strip("|"):
             same_source = True
-            has_policy_block = True
-        ac24_ok = bool(same_source and has_policy_block)
+        all_success = bool(task_statuses) and all(status == "success" for status in task_statuses)
+        ac24_ok = bool(all_success and same_source and has_policy_block and not trace_fetch_errors)
         results.append(
             (
                 "ac24_prompt_frozen_policy",
                 ac24_ok,
                 {
                     "task_ids": task_ids,
+                    "task_statuses": task_statuses,
                     "policy_sources": trace_policy_sources,
                     "snapshot_source": snapshot_source,
                     "has_policy_block": has_policy_block,
+                    "trace_fetch_errors": trace_fetch_errors,
                 },
             )
         )

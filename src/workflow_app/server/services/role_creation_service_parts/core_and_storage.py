@@ -173,8 +173,8 @@ def _ensure_role_creation_tables(root: Path) -> None:
                 session_id TEXT PRIMARY KEY,
                 session_title TEXT NOT NULL DEFAULT '',
                 status TEXT NOT NULL DEFAULT 'draft',
-                current_stage_key TEXT NOT NULL DEFAULT 'persona_collection',
-                current_stage_index INTEGER NOT NULL DEFAULT 2,
+                current_stage_key TEXT NOT NULL DEFAULT 'workspace_init',
+                current_stage_index INTEGER NOT NULL DEFAULT 1,
                 role_spec_json TEXT NOT NULL DEFAULT '{}',
                 missing_fields_json TEXT NOT NULL DEFAULT '[]',
                 assignment_ticket_id TEXT NOT NULL DEFAULT '',
@@ -494,19 +494,26 @@ def _session_row_to_summary(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]
     role_spec = _json_loads_dict(current.get("role_spec_json"))
     missing_fields = [str(item).strip() for item in _json_loads_list(current.get("missing_fields_json")) if str(item).strip()]
     message_processing_status = _normalize_role_creation_queue_state(current.get("message_processing_status"), default="idle")
+    status = _normalize_session_status(current.get("status"))
+    workspace_init_status = str(current.get("workspace_init_status") or "").strip()
+    current_stage_key = str(current.get("current_stage_key") or "workspace_init").strip()
+    current_stage_index = int(current.get("current_stage_index") or 1)
+    if status != "completed" and workspace_init_status != "completed":
+        current_stage_key = "workspace_init"
+        current_stage_index = 1
     return {
         "session_id": str(current.get("session_id") or "").strip(),
         "session_title": str(current.get("session_title") or "").strip(),
-        "status": _normalize_session_status(current.get("status")),
-        "current_stage_key": str(current.get("current_stage_key") or "persona_collection").strip(),
-        "current_stage_index": int(current.get("current_stage_index") or 2),
+        "status": status,
+        "current_stage_key": current_stage_key,
+        "current_stage_index": current_stage_index,
         "last_message_preview": str(current.get("last_message_preview") or "").strip(),
         "last_message_at": str(current.get("last_message_at") or "").strip(),
         "assignment_ticket_id": str(current.get("assignment_ticket_id") or "").strip(),
         "created_agent_id": str(current.get("created_agent_id") or "").strip(),
         "created_agent_name": str(current.get("created_agent_name") or "").strip(),
         "created_agent_workspace_path": str(current.get("created_agent_workspace_path") or "").strip(),
-        "workspace_init_status": str(current.get("workspace_init_status") or "").strip(),
+        "workspace_init_status": workspace_init_status,
         "workspace_init_ref": str(current.get("workspace_init_ref") or "").strip(),
         "dialogue_agent_name": str(current.get("dialogue_agent_name") or "").strip(),
         "dialogue_agent_workspace_path": str(current.get("dialogue_agent_workspace_path") or "").strip(),

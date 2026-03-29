@@ -1,0 +1,40 @@
+{
+  "round1_historical_result": {
+    "status": "not_affected",
+    "summary": "未影响历史能力，可继续沿主线推进。",
+    "blocking": false,
+    "impact_items": []
+  },
+  "round2_blocked_capability": {
+    "status": "regressed",
+    "summary": "该能力项触发历史能力退化，自动发布保持阻塞。",
+    "blocking": true,
+    "impact_items": [
+      "优化训练优化能力列表主视图 20260329-173344"
+    ]
+  },
+  "round2_auto_publish": {
+    "status": "blocked",
+    "reason": "存在能力项门禁阻塞，自动发布保持关闭。"
+  },
+  "round2_blockers": [
+    {
+      "capability_id": "tq-20260329-173347-909a00:capability:1",
+      "capability_name": "优化训练优化能力列表主视图 20260329-173344",
+      "gate": "Gate-C",
+      "reason": "该能力项导致历史能力下降，自动发布保持阻塞。"
+    },
+    {
+      "capability_id": "tq-20260329-173347-909a00:capability:2",
+      "capability_name": "补齐 Gate-B Gate-C 绑定取证 20260329-173344",
+      "gate": "Gate-B",
+      "reason": "当前能力得分仍未达到目标阈值。"
+    },
+    {
+      "capability_id": "tq-20260329-173347-909a00:capability:3",
+      "capability_name": "校验默认右侧标签与能力基线切换 20260329-173344",
+      "gate": "Gate-B",
+      "reason": "当前能力得分仍未达到目标阈值。"
+    }
+  ]
+}

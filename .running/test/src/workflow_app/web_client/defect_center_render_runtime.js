@@ -152,6 +152,59 @@
       : '';
   }
 
+  function defectTaskDraftMeta(actionKind) {
+    const action = safe(actionKind).trim().toLowerCase();
+    if (action === 'review') {
+      return {
+        card_title: '确认复核任务名称',
+        input_label: '复核任务名称基名',
+        submit_label: '确认并提交复核',
+        helper_text: '会创建 1 个复核节点，名称会自动派生成“<任务名称基名> - 复核”。',
+        stages: ['复核'],
+      };
+    }
+    return {
+      card_title: '确认处理任务名称',
+      input_label: '处理任务名称基名',
+      submit_label: '确认并创建处理任务',
+      helper_text: '会在任务中心全局主图中追加 3 个节点，分别对应分析、修复和推送到目标版本。',
+      stages: ['分析', '修复', '推送到目标版本'],
+    };
+  }
+
+  function defectTaskDraftPreviewHtml(actionKind) {
+    const meta = defectTaskDraftMeta(actionKind);
+    const baseName = defectTaskDraftPreviewBaseName();
+    return meta.stages.map((stage) => (
+      "<div class='defect-task-card-note'>" + escapeHtml(baseName + ' - ' + stage) + '</div>'
+    )).join('');
+  }
+
+  function defectTaskDraftCardHtml(report, actionKind) {
+    const reportId = safe(report && report.report_id).trim();
+    if (!defectTaskDraftVisible(actionKind, reportId)) return '';
+    const meta = defectTaskDraftMeta(actionKind);
+    return (
+      "<div class='defect-detail-card defect-section-card'>" +
+        "<div class='card-title'>" + escapeHtml(meta.card_title) + '</div>' +
+        "<div class='defect-section-sub'>" + escapeHtml(meta.helper_text) + '</div>' +
+        "<div class='defect-action-grid'>" +
+          "<label class='defect-field defect-span-2'>" +
+            "<span class='hint'>" + escapeHtml(meta.input_label) + '</span>' +
+            "<input id='defectTaskNameBaseInput' type='text' value='" + escapeHtml(defectTaskDraftPreviewBaseName()) + "' placeholder='" + escapeHtml(defectTaskDraftDefaultBaseName(report)) + "' />" +
+          '</label>' +
+        '</div>' +
+        "<div class='hint'>将创建以下任务节点：</div>" +
+        "<div class='defect-task-list'>" + defectTaskDraftPreviewHtml(actionKind) + '</div>' +
+        "<div id='defectTaskDraftError' class='error'>" + escapeHtml(safe(state.defectTaskDraftError)) + '</div>' +
+        "<div class='defect-detail-actions'>" +
+          "<button id='defectConfirmTaskNameBtn' type='button' data-action-kind='" + escapeHtml(actionKind) + "'>" + escapeHtml(meta.submit_label) + '</button>' +
+          "<button id='defectCancelTaskNameBtn' class='alt' type='button'>取消</button>" +
+        '</div>' +
+      '</div>'
+    );
+  }
+
   function defectHistoryBodyHtml(detail) {
     const row = detail && typeof detail === 'object' ? detail : {};
     const text = safe(row.text).trim();
@@ -420,6 +473,7 @@
         '</div>' +
         defectTopActionsHtml(report, detail) +
       '</div>' +
+      defectTaskDraftCardHtml(report, 'process') +
       emptyFormalNote +
       "<div class='defect-detail-card defect-section-card'>" +
         "<div class='card-title'>原始上报</div>" +
@@ -450,6 +504,7 @@
                 "<div class='defect-detail-actions'>" +
                   "<button id='defectSubmitReviewBtn' type='button'" + (detail.can_review ? '' : ' disabled') + ">" + escapeHtml(reviewButtonText) + '</button>' +
                 '</div>' +
+                defectTaskDraftCardHtml(report, 'review') +
               '</div>' +
             '</div>' +
           '</div>'
@@ -532,6 +587,7 @@
     if (!key) {
       state.defectSelectedReportId = '';
       state.defectDetail = null;
+      defectTaskDraftReset();
       renderDefectCenter();
       return null;
     }
@@ -541,6 +597,9 @@
       state.defectSelectedReportId = key;
       state.defectDetail = data;
       state.defectQueueSummary = normalizeDefectQueueSummary(data.queue);
+      if (defectTaskDraftReportId() && defectTaskDraftReportId() !== key) {
+        defectTaskDraftReset();
+      }
       setDefectError('');
       if (!opts.skipRender) {
         renderDefectCenter();
@@ -586,6 +645,7 @@
       }
       if (!nextReportId) {
         state.defectDetail = null;
+        defectTaskDraftReset();
       }
       renderDefectCenter();
       return data;
@@ -642,10 +702,40 @@
     }
   }
 
+  function focusDefectTaskDraftInput() {
+    const input = $('defectTaskNameBaseInput');
+    if (!input) return;
+    input.focus();
+    if (typeof input.setSelectionRange === 'function') {
+      const length = safe(input.value).length;
+      input.setSelectionRange(length, length);
+    }
+  }
+
+  async function requestDefectReviewTaskAction() {
+    const report = defectCurrentReport();
+    const reportId = safe(report.report_id).trim();
+    if (!reportId) return null;
+    const text = safe($('defectSharedTextInput') ? $('defectSharedTextInput').value : '').trim();
+    const images = Array.isArray(state.defectSupplementDraftImages) ? state.defectSupplementDraftImages : [];
+    if (!text && !images.length) {
+      throw new Error('请先补充说明或图片证据');
+    }
+    defectTaskDraftOpen('review', report);
+    renderDefectCenter();
+    focusDefectTaskDraftInput();
+    return null;
+  }
+
   async function submitDefectReviewFlow() {
     const report = defectCurrentReport();
     const reportId = safe(report.report_id).trim();
     if (!reportId) return null;
+    const taskNameBase = defectTaskDraftPreviewBaseName();
+    if (!taskNameBase) {
+      setDefectTaskDraftError('任务名称基名不能为空');
+      throw new Error('任务名称基名不能为空');
+    }
     const text = safe($('defectSharedTextInput') ? $('defectSharedTextInput').value : '').trim();
     const images = Array.isArray(state.defectSupplementDraftImages) ? state.defectSupplementDraftImages : [];
     if (!text && !images.length) {
@@ -671,23 +761,56 @@
     }
     const result = await postJSON('/api/defects/' + encodeURIComponent(reportId) + '/review-task', {
       operator: 'web-user',
+      task_name_base: taskNameBase,
     });
+    defectTaskDraftReset();
     clearDefectSharedDraft();
     await refreshDefectList({ preferredReportId: reportId });
     setStatus('复核任务已创建');
     return result;
   }
 
+  async function requestDefectProcessTaskAction() {
+    const report = defectCurrentReport();
+    const reportId = safe(report.report_id).trim();
+    if (!reportId) return null;
+    defectTaskDraftOpen('process', report);
+    renderDefectCenter();
+    focusDefectTaskDraftInput();
+    return null;
+  }
+
   async function createDefectProcessTaskAction() {
     const report = defectCurrentReport();
     const reportId = safe(report.report_id).trim();
     if (!reportId) return null;
+    const taskNameBase = defectTaskDraftPreviewBaseName();
+    if (!taskNameBase) {
+      setDefectTaskDraftError('任务名称基名不能为空');
+      throw new Error('任务名称基名不能为空');
+    }
     const result = await postJSON('/api/defects/' + encodeURIComponent(reportId) + '/process-task', {
       operator: 'web-user',
+      task_name_base: taskNameBase,
     });
+    defectTaskDraftReset();
     await refreshDefectList({ preferredReportId: reportId });
     setStatus('处理任务已创建');
     return result;
+  }
+
+  async function submitDefectTaskDraftAction(actionKind) {
+    const action = safe(actionKind || defectTaskDraftAction()).trim().toLowerCase();
+    syncDefectTaskDraftInput();
+    if (!defectTaskDraftPreviewBaseName()) {
+      setDefectTaskDraftError('任务名称基名不能为空');
+      throw new Error('任务名称基名不能为空');
+    }
+    setDefectTaskDraftError('');
+    if (action === 'review') {
+      return submitDefectReviewFlow();
+    }
+    return createDefectProcessTaskAction();
   }
 
   async function writeDefectResolvedVersionAction() {

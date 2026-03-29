@@ -121,6 +121,34 @@ def _extract_natural_language_values(text: str) -> dict[str, list[str]]:
     return out
 
 
+def _normalize_role_name_candidate(text: str) -> str:
+    candidate = _normalize_text(text, max_len=40).strip().strip("`'\"“”‘’[]()（）{}")
+    if not candidate:
+        return ""
+    lowered = candidate.lower()
+    invalid_exact = {
+        "agent",
+        "assistant",
+        "role",
+        "一个",
+        "一个agent",
+        "一位",
+        "一位agent",
+        "角色",
+        "助手",
+        "草稿",
+        "当前不构成缺陷",
+        "不构成缺陷",
+    }
+    if lowered in invalid_exact or candidate in invalid_exact:
+        return ""
+    if re.fullmatch(r"(?:一个|一位|这个|那个|该)(?:agent|助手|角色)?", candidate, flags=re.IGNORECASE):
+        return ""
+    if re.fullmatch(r"(?:当前)?(?:不构成)?缺陷", candidate, flags=re.IGNORECASE):
+        return ""
+    return candidate
+
+
 def _guess_role_name(texts: list[str]) -> str:
     patterns = (
         re.compile(r"(?:创建|做|想要|需要)(?:一个|一位|个)?([^\n，,。.!！？]{2,32}?)(?:角色|助手|agent)", re.IGNORECASE),
@@ -132,9 +160,29 @@ def _guess_role_name(texts: list[str]) -> str:
             match = pattern.search(text)
             if not match:
                 continue
-            candidate = _normalize_text(match.group(1), max_len=40)
+            candidate = _normalize_role_name_candidate(match.group(1))
             if candidate:
                 return candidate
+    return ""
+
+
+def _guess_role_name_from_assistant_suggestions(texts: list[str]) -> str:
+    cue_words = ("角色名", "名字", "命名", "收口", "建议", "先用", "叫", "英文名")
+    patterns = (
+        re.compile(r"`([^`\n]{2,40})`"),
+        re.compile(r"「([^」\n]{2,40})」"),
+        re.compile(r"“([^”\n]{2,40})”"),
+    )
+    for text in reversed(list(texts or [])):
+        content = str(text or "")
+        for pattern in patterns:
+            for match in pattern.finditer(content):
+                context = content[max(0, match.start() - 24) : min(len(content), match.end() + 24)]
+                if not any(cue in context for cue in cue_words):
+                    continue
+                candidate = _normalize_role_name_candidate(match.group(1))
+                if candidate:
+                    return candidate
     return ""
 
 
@@ -160,7 +208,9 @@ def _collect_sentence_items(texts: list[str], keywords: tuple[str, ...], *, limi
 
 def _build_role_spec(messages: list[dict[str, Any]]) -> tuple[dict[str, Any], list[str]]:
     user_messages = [item for item in messages if str(item.get("role") or "").strip().lower() == "user"]
+    assistant_messages = [item for item in messages if str(item.get("role") or "").strip().lower() == "assistant"]
     user_texts = _session_messages_texts(user_messages, role="user")
+    assistant_texts = _session_messages_texts(assistant_messages, role="assistant")
     labeled: dict[str, list[str]] = {key: [] for key in ROLE_CREATION_ALL_FIELDS if key != "example_assets"}
     for text in user_texts:
         extracted = _extract_labeled_values(text)
@@ -183,7 +233,11 @@ def _build_role_spec(messages: list[dict[str, Any]]) -> tuple[dict[str, Any], li
                     "data_url": str(item.get("data_url") or ""),
                 }
             )
-    role_name = _normalize_text((labeled.get("role_name") or [""])[-1], max_len=40) or _guess_role_name(user_texts)
+    role_name = _normalize_role_name_candidate((labeled.get("role_name") or [""])[-1])
+    if not role_name:
+        role_name = _guess_role_name(user_texts)
+    if not role_name:
+        role_name = _guess_role_name_from_assistant_suggestions(assistant_texts)
     role_goal = _normalize_text((labeled.get("role_goal") or [""])[-1], max_len=280)
     if not role_goal:
         guesses = _collect_sentence_items(user_texts, ("目标", "职责", "负责", "帮助", "用于", "希望它", "用来"), limit=3)

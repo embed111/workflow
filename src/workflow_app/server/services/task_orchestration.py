@@ -38,11 +38,17 @@ def session_lock_for(state: RuntimeState, session_id: str) -> SessionLockEntry:
         return entry
 
 
-def acquire_generation_slot(state: RuntimeState, session_id: str) -> GenerationLease:
+def acquire_generation_slot(
+    state: RuntimeState,
+    session_id: str,
+    *,
+    blocking: bool = False,
+) -> GenerationLease:
     entry = session_lock_for(state, session_id)
     lock = entry.lock
     lock.acquire()
-    if not state.generation_semaphore.acquire(blocking=False):
+    acquired = state.generation_semaphore.acquire(blocking=blocking)
+    if not acquired:
         lock.release()
         _decref_session_lock(state, session_id, lock)
         raise ConcurrencyLimitError(
@@ -88,9 +94,13 @@ def build_agent_command(
     focus: str,
     write_targets: list[str],
 ) -> tuple[list[str], list[str]]:
-    runner = (cfg.root / "scripts" / "task_agent_runner.py").resolve()
-    if not runner.exists():
-        runner = (WORKFLOW_APP_ROOT / "task_agent_runner.py").resolve()
+    runner_candidates = [
+        (cfg.root / "scripts" / "task_agent_runner.py").resolve(),
+        (cfg.root / "scripts" / "bin" / "task_agent_runner.py").resolve(),
+        (WORKFLOW_APP_ROOT.parents[1] / "scripts" / "bin" / "task_agent_runner.py").resolve(),
+        (WORKFLOW_APP_ROOT / "runtime" / "task_agent_runner.py").resolve(),
+    ]
+    runner = next((candidate for candidate in runner_candidates if candidate.exists()), runner_candidates[-1])
     trace_file = task_trace_file(cfg.root, task_id_text)
     cmd = [
         sys.executable,
@@ -289,17 +299,88 @@ def set_runtime_task(state: RuntimeState, runtime: TaskRuntime | None, task_id_t
             state.active_tasks[task_id_text] = runtime
 
 
-def get_runtime_task(state: RuntimeState, task_id_text: str) -> TaskRuntime | None:
+def _task_run_record_is_active(row: dict[str, Any] | None) -> bool:
+    status = str((row or {}).get("status") or "").strip().lower()
+    return status in {"pending", "queued", "running"}
+
+
+def reconcile_active_runtime_tasks(root: Path, state: RuntimeState) -> int:
     with state.task_runtime_lock:
-        return state.active_tasks.get(task_id_text)
+        items = list(state.active_tasks.items())
+    if not items:
+        return 0
 
+    stale_task_ids: list[str] = []
+    for task_id_text, runtime in items:
+        process = runtime.process
+        if process is not None:
+            try:
+                if process.poll() is None:
+                    continue
+            except Exception:
+                continue
+            stale_task_ids.append(task_id_text)
+            continue
+        row = get_task_run_record(root, task_id_text)
+        if _task_run_record_is_active(row):
+            continue
+        stale_task_ids.append(task_id_text)
 
-def active_runtime_task_count(state: RuntimeState) -> int:
+    if stale_task_ids:
+        with state.task_runtime_lock:
+            for task_id_text in stale_task_ids:
+                runtime = state.active_tasks.get(task_id_text)
+                if runtime is None:
+                    continue
+                process = runtime.process
+                if process is not None:
+                    try:
+                        if process.poll() is None:
+                            continue
+                    except Exception:
+                        continue
+                else:
+                    row = get_task_run_record(root, task_id_text)
+                    if _task_run_record_is_active(row):
+                        continue
+                state.active_tasks.pop(task_id_text, None)
+            return len(state.active_tasks)
+
     with state.task_runtime_lock:
         return len(state.active_tasks)
 
 
-def has_session_runtime_task(state: RuntimeState, session_id: str) -> bool:
+def get_runtime_task(
+    state: RuntimeState,
+    task_id_text: str,
+    *,
+    root: Path | None = None,
+) -> TaskRuntime | None:
+    if root is not None:
+        reconcile_active_runtime_tasks(root, state)
+    with state.task_runtime_lock:
+        return state.active_tasks.get(task_id_text)
+
+
+def active_runtime_task_count(
+    state: RuntimeState,
+    *,
+    root: Path | None = None,
+) -> int:
+    if root is not None:
+        return reconcile_active_runtime_tasks(root, state)
+    with state.task_runtime_lock:
+        return len(state.active_tasks)
+
+
+def has_session_runtime_task(
+    state: RuntimeState,
+    session_id: str,
+    *,
+    root: Path | None = None,
+) -> bool:
+    if root is not None:
+        reconcile_active_runtime_tasks(root, state)
     with state.task_runtime_lock:
         return any(rt.session_id == session_id for rt in state.active_tasks.values())
 
@@ -309,7 +390,7 @@ def training_workflow_has_running_task(root: Path, state: RuntimeState, workflow
     if not workflow:
         return False
     session_id = str(workflow.get("session_id") or "")
-    if session_id and has_session_runtime_task(state, session_id):
+    if session_id and has_session_runtime_task(state, session_id, root=root):
         return True
     analysis_id = str(workflow.get("analysis_id") or "")
     if not analysis_id:
@@ -371,7 +452,7 @@ def execute_task_worker(
             "agent_name": session["agent_name"],
         },
     )
-    lock: threading.Lock | None = None
+    lease: GenerationLease | None = None
     start_ts = now_local()
     start_at = iso_ts(start_ts)
     stdout_chunks: list[str] = []
@@ -381,9 +462,7 @@ def execute_task_worker(
     ref = ""
     try:
         mark_task_status(cfg.root, task_id_text, "queued")
-        lock = session_lock_for(state, session["session_id"])
-        lock.acquire()
-        state.generation_semaphore.acquire()
+        lease = acquire_generation_slot(state, session["session_id"], blocking=True)
         if runtime.stop_event.is_set():
             status = "interrupted"
             summary = "interrupted before command start"
@@ -576,14 +655,12 @@ def execute_task_worker(
             sync_training_workflows(cfg.root)
         except Exception:
             pass
-        if lock is not None:
-            state.generation_semaphore.release()
-            lock.release()
+        release_generation_slot(state, lease)
         set_runtime_task(state, None, task_id_text)
 
 
 def request_task_interrupt(cfg: AppConfig, state: RuntimeState, task_id_text: str) -> tuple[bool, str]:
-    runtime = get_runtime_task(state, task_id_text)
+    runtime = get_runtime_task(state, task_id_text, root=cfg.root)
     if runtime is None:
         row = get_task_run(cfg.root, task_id_text)
         if not row:

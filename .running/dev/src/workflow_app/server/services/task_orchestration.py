@@ -38,11 +38,17 @@ def session_lock_for(state: RuntimeState, session_id: str) -> SessionLockEntry:
         return entry
 
 
-def acquire_generation_slot(state: RuntimeState, session_id: str) -> GenerationLease:
+def acquire_generation_slot(
+    state: RuntimeState,
+    session_id: str,
+    *,
+    blocking: bool = False,
+) -> GenerationLease:
     entry = session_lock_for(state, session_id)
     lock = entry.lock
     lock.acquire()
-    if not state.generation_semaphore.acquire(blocking=False):
+    acquired = state.generation_semaphore.acquire(blocking=blocking)
+    if not acquired:
         lock.release()
         _decref_session_lock(state, session_id, lock)
         raise ConcurrencyLimitError(
@@ -371,7 +377,7 @@ def execute_task_worker(
             "agent_name": session["agent_name"],
         },
     )
-    lock: threading.Lock | None = None
+    lease: GenerationLease | None = None
     start_ts = now_local()
     start_at = iso_ts(start_ts)
     stdout_chunks: list[str] = []
@@ -381,9 +387,7 @@ def execute_task_worker(
     ref = ""
     try:
         mark_task_status(cfg.root, task_id_text, "queued")
-        lock = session_lock_for(state, session["session_id"])
-        lock.acquire()
-        state.generation_semaphore.acquire()
+        lease = acquire_generation_slot(state, session["session_id"], blocking=True)
         if runtime.stop_event.is_set():
             status = "interrupted"
             summary = "interrupted before command start"
@@ -576,9 +580,7 @@ def execute_task_worker(
             sync_training_workflows(cfg.root)
         except Exception:
             pass
-        if lock is not None:
-            state.generation_semaphore.release()
-            lock.release()
+        release_generation_slot(state, lease)
         set_runtime_task(state, None, task_id_text)
 
 
@@ -608,5 +610,4 @@ def request_task_interrupt(cfg: AppConfig, state: RuntimeState, task_id_text: st
         except Exception:
             pass
     return True, "interrupt requested"
-
 

@@ -561,11 +561,13 @@ def _project_stages(
     preferred_stage_key = str(session_summary.get("current_stage_key") or "").strip().lower()
     if session_summary.get("status") == "completed":
         current_stage_key = "complete_creation"
+    elif str(session_summary.get("workspace_init_status") or "").strip() != "completed":
+        current_stage_key = "workspace_init"
     elif preferred_stage_key in ROLE_CREATION_STAGE_BY_KEY:
         current_stage_key = preferred_stage_key
     else:
         current_stage_key = auto_stage_key
-    current_stage_index = int((ROLE_CREATION_STAGE_BY_KEY.get(current_stage_key) or {}).get("index") or 2)
+    current_stage_index = int((ROLE_CREATION_STAGE_BY_KEY.get(current_stage_key) or {}).get("index") or 1)
     stage_rows: list[dict[str, Any]] = []
     archive_total = 0
     active_total = 0

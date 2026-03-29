@@ -1,0 +1,169 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>训练优化参考图</title>
+  <style>
+    :root{--bg:#f4f5f7;--panel:#fff;--soft:#f6f7f9;--line:#e5e8ed;--line2:#eceff3;--text:#1f2329;--muted:#646a73;--blue:#2c63cf;--blue-soft:#edf1f7;--green:#1b8c65;--green-soft:#f1f5f3;--orange:#ab6b17;--orange-soft:#faf5ee;--red:#c35a5a;--red-soft:#faf2f2;--shadow:0 1px 2px rgba(31,35,41,.04)}
+    *{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font:13px/1.5 "PingFang SC","Microsoft YaHei",sans-serif}button,textarea{font:inherit}button{border:none;border-radius:8px;padding:7px 12px;background:var(--blue);color:#fff}button.alt{border:1px solid var(--line);background:#fff;color:var(--text)}
+    .app{display:grid;grid-template-columns:240px minmax(0,1fr);gap:10px;height:100vh;padding:10px}.rail,.window,.panel{border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:var(--shadow)}.rail{padding:12px;display:grid;grid-template-rows:auto auto 1fr;gap:10px;min-height:0}.brand{border:1px solid var(--line2);border-radius:8px;background:var(--soft);padding:10px}.title{font-size:15px;font-weight:700}.meta,.helper,.desc,.minor{font-size:12px;color:var(--muted);line-height:1.45}.tabs,.session-list,.stream,.right-scroll,.ability-list,.task-list,.baseline-list,.gate-list{display:flex;flex-direction:column;gap:8px;min-height:0}.tab,.card,.chip{border-radius:8px}.tab{border:1px solid var(--line2);background:var(--soft);color:#4e5969;padding:8px 12px;font-weight:600}.tab.active{border-color:#c8d9ff;background:var(--blue-soft);color:#245bdb;font-weight:700}.window{padding:8px;display:flex;flex-direction:column;gap:8px;min-width:0;min-height:0;overflow:hidden}.head,.row,.panel-head,.composer-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.window-title{font-size:20px;font-weight:700;line-height:1.1}.line-tabs{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;padding-bottom:6px;border-bottom:1px solid var(--line)}.line-tab{position:relative;border:none;background:transparent;color:var(--muted);font-weight:700;padding:4px 8px 5px;border-radius:7px 7px 0 0}.line-tab.active{color:#245bdb;background:#f5f6f8}.line-tab.active:after{content:"";position:absolute;left:0;right:0;bottom:-7px;height:2px;border-radius:999px;background:var(--blue)}.workbench{display:grid;grid-template-columns:232px minmax(0,1fr) 352px;gap:10px;min-height:0;flex:1 1 auto;overflow:hidden}.panel{display:flex;flex-direction:column;min-height:0;overflow:hidden}.panel-head{padding:12px 14px;border-bottom:1px solid var(--line)}.panel-title{font-size:15px;font-weight:700}.scroll{flex:1 1 auto;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:#c9cfda #f5f6f8}.scroll::-webkit-scrollbar{width:10px;height:10px}.scroll::-webkit-scrollbar-track{background:#f5f6f8;border-radius:999px}.scroll::-webkit-scrollbar-thumb{background:#c9cfda;border-radius:999px;border:2px solid #f5f6f8}.body{padding:10px;display:flex;flex-direction:column;gap:10px}.card,.bubble-box,.hero,.ability,.task,.summary,.baseline,.graph,.composer,.preview,.gate-box{border:1px solid var(--line2);background:var(--soft);border-radius:8px}.card,.task,.summary,.baseline,.graph,.composer{padding:10px}.card.active{border-color:#c8d9ff;background:#f5f8ff}.label{font-size:14px;font-weight:700}.hero{padding:10px 12px;background:linear-gradient(180deg,#fbfdff 0%,#f6f9ff 100%);border-color:#dce6f7}.hero-title{font-size:18px;font-weight:800;line-height:1.15}.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:8px}.metric{border:1px solid var(--line2);background:#fff;border-radius:8px;padding:8px 9px}.k{font-size:11px;color:var(--muted)}.v{margin-top:2px;font-size:13px;font-weight:700}.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;font-size:11px;font-weight:700;border:1px solid transparent;white-space:nowrap}.blue{background:var(--blue-soft);color:#245bdb;border-color:#d7e4ff}.green{background:var(--green-soft);color:var(--green);border-color:#d7ebe1}.orange{background:var(--orange-soft);color:var(--orange);border-color:#ecd8b9}.red{background:var(--red-soft);color:var(--red);border-color:#efdbdb}.gray{background:#f1f3f6;color:#5b6472;border-color:#e2e6ec}.chat{background:#fff;padding:0}.chat-head{padding:12px 16px;border-bottom:1px solid var(--line2)}.identity{display:flex;align-items:center;gap:12px;min-width:0}.avatar{width:38px;height:38px;border-radius:14px;display:inline-flex;align-items:center;justify-content:center;background:#dce7ff;color:#245bdb;font-weight:700}.stream{padding:14px 16px 12px}.bubble{display:flex;align-items:flex-start;gap:10px}.bubble.user{justify-content:flex-end}.bubble.user .bubble-main{align-items:flex-end}.bubble.user .bubble-box{background:#f1f4f9;border-color:#dfe5ef}.bubble-mini{width:32px;height:32px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#eef1f5;color:#4e5969;font-size:12px;font-weight:700}.bubble.assistant .bubble-mini{background:#edf1f7;color:#245bdb}.bubble-main{display:flex;flex-direction:column;gap:4px;max-width:min(80%,760px)}.bubble-box{padding:10px 12px;background:#f7f8fa}.bubble-text{white-space:pre-line;line-height:1.68}.ability-wrap{border:1px solid #dce6f7;background:linear-gradient(180deg,#fbfdff 0%,#f7f9fc 100%);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:10px}.ability{background:#fff;padding:10px;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(170px,.8fr);gap:12px}.ability-main,.ability-side{display:flex;flex-direction:column;gap:8px}.ability-desc{font-size:12px;line-height:1.55;color:#3f4752}.preview{padding:8px;background:linear-gradient(180deg,#fcfcfd 0%,#f5f7fa 100%)}.preview-shell{margin-top:8px;border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden}.preview-bar-top{border-bottom:1px solid var(--line2);background:#f8f9fb;padding:6px 8px;display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted)}.preview-inner{padding:10px;display:flex;flex-direction:column;gap:8px}.pill-row{display:flex;gap:8px;flex-wrap:wrap}.sketch-pill,.sketch-line,.sketch-box{background:#eef2f7;border-radius:999px}.sketch-pill{height:24px;width:92px;display:inline-flex;align-items:center;justify-content:center;color:#4e5969;font-size:11px;font-weight:700}.sketch-line{height:8px}.split{display:grid;grid-template-columns:1fr 92px;gap:8px}.sketch-box{height:10px}.score,.gate-box{border:1px solid var(--line2);border-radius:8px;background:var(--soft);padding:8px}.score-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}.delta{margin-top:6px;font-size:12px;font-weight:700;color:#245bdb}.gate-item{border:1px solid #e4e8ee;background:#fff;border-radius:8px;padding:7px 8px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.composer{margin:0 16px 14px;background:#fff;border-color:var(--line)}.composer-box{border:1px solid var(--line2);border-radius:12px;background:#fff;padding:10px 11px;min-height:96px}.composer-input{width:100%;min-height:58px;border:none;resize:none;outline:none;padding:0;background:transparent;color:var(--text);line-height:1.6}.attach{display:inline-flex;align-items:center;gap:6px;border:1px solid #dce2eb;border-radius:999px;padding:5px 10px;background:#fff;color:#4e5969;font-size:12px;font-weight:600}.right{padding:0;background:#fff}.summary{background:linear-gradient(180deg,#fbfdff 0%,#f6f9ff 100%);border-color:#dce6f7}.progress{margin-top:8px;height:8px;border-radius:999px;background:#e8edf5;overflow:hidden}.progress>span{display:block;height:100%;background:linear-gradient(90deg,#4f7fe5 0%,#2c63cf 100%)}.graph svg{width:100%;height:150px;display:block;margin-top:8px}.g-line{fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-width:3}.main{stroke:#3370ff}.branch{stroke:#b7c8ff}.fail{stroke:#d84b4b}.future{stroke:#b7bec8;stroke-dasharray:6 4}.node{stroke-width:2}.base{fill:#00a871;stroke:#00a871}.done{fill:#3370ff;stroke:#3370ff}.rollback{fill:#fff7eb;stroke:#d97904}.active-node{fill:#3370ff;stroke:#245bdb;stroke-width:4}.future-node{fill:#fff;stroke:#b7bec8}.g-label{fill:#1f2329;font:11px "PingFang SC","Microsoft YaHei",sans-serif;font-weight:700}.g-muted{fill:#646a73;font:10px "PingFang SC","Microsoft YaHei",sans-serif}.pane{display:none;flex-direction:column;gap:10px}.pane.active{display:flex}
+    @media (max-width:1280px){.workbench{grid-template-columns:208px minmax(0,1fr) 320px}.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.ability{grid-template-columns:1fr}}
+    @media (max-width:960px){html,body{overflow:auto}.app{grid-template-columns:1fr;height:auto;min-height:100vh}.workbench{grid-template-columns:1fr}.rail,.window,.panel{min-height:auto}.scroll{overflow:visible}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="rail">
+      <div class="brand">
+        <div class="title">角色中心</div>
+        <div class="meta">训练优化默认采用“中部对话 + 右侧任务 / 能力演进”。</div>
+      </div>
+      <div class="tabs">
+        <div class="tab">角色资产与版本</div>
+        <div class="tab">创建角色</div>
+        <div class="tab active">训练优化</div>
+      </div>
+      <section class="panel">
+        <div class="panel-head">
+          <div><div class="panel-title">优化会话</div><div class="desc">左侧只切会话，不在这里堆能力明细。</div></div>
+          <span class="chip blue">3 个</span>
+        </div>
+        <div class="scroll"><div class="body session-list">
+          <div class="card active"><div class="row"><div class="label">workflow_tester · 角色创建中文化</div><span class="chip blue">进行中</span></div><div class="desc">目标：把角色画像、能力说明、门禁提示统一成中文展示，并补回历史能力回归。</div><div class="row"><span class="chip orange">3 项能力待过门禁</span><span class="desc">01:42 更新</span></div></div>
+          <div class="card"><div class="row"><div class="label">Analyst · 缺陷命名链路</div><span class="chip gray">等待回写</span></div><div class="desc">目标：缺陷处理任务名支持确定化命名，和任务中心节点对齐。</div></div>
+          <div class="card"><div class="row"><div class="label">Developer · 任务图唯一化</div><span class="chip green">已通过</span></div><div class="desc">目标：所有模块只向全局唯一任务图追加节点，不再新建第二张图。</div></div>
+        </div></div>
+      </section>
+    </aside>
+
+    <main class="window">
+      <div class="head">
+        <div><div class="window-title">训练优化</div><div class="helper">当前会话：`workflow_tester` · 目标先补“能力列表可回看 + 效果展示 + 能力评分”。</div></div>
+        <div class="helper">默认右侧先看任务推进与能力演进，能力基线作为第二视角。</div>
+      </div>
+      <div class="line-tabs"><div class="line-tab">角色资产与版本</div><div class="line-tab">创建角色</div><div class="line-tab active">训练优化</div></div>
+
+      <div class="workbench">
+        <section class="panel">
+          <div class="panel-head"><div><div class="panel-title">会话摘要</div><div class="desc">对话先收敛 `improvement_spec`，任务从这里进入任务中心。</div></div><span class="chip orange">Gate-A 已过</span></div>
+          <div class="scroll"><div class="body">
+            <div class="summary">
+              <div class="row"><div class="label">当前目标</div><span class="chip blue">对话收敛中</span></div>
+              <div class="grid4">
+                <div class="metric"><div class="k">目标 Agent</div><div class="v">workflow_tester</div></div>
+                <div class="metric"><div class="k">新增能力</div><div class="v">3 项</div></div>
+                <div class="metric"><div class="k">历史回归</div><div class="v">4 项</div></div>
+                <div class="metric"><div class="k">自动发布</div><div class="v">已开启</div></div>
+              </div>
+            </div>
+            <div class="task"><div class="row"><div class="label">当前 `improvement_spec`</div><span class="chip green">可执行</span></div><div class="desc">目标：让训练优化页直接以能力列表展示本轮要补的能力，且每项都能看效果证据、评分与门禁。</div><div class="desc">约束：不允许只给分不展示效果；不允许只过新能力不验证历史能力；默认右侧先看任务 / 能力演进。</div></div>
+            <div class="task"><div class="row"><div class="label">共享门禁状态</div><span class="chip orange">2 项待通过</span></div>
+              <div class="gate-list">
+                <div class="gate-item"><div><div class="label" style="font-size:12px">Gate-B 新能力验收</div><div class="minor">3 项目标能力中，2 项已过阈值，1 项还差 4 分。</div></div><span class="chip orange">进行中</span></div>
+                <div class="gate-item"><div><div class="label" style="font-size:12px">Gate-C 历史能力防退化</div><div class="minor">历史“缺陷探测”能力轻微下降，需补一次回归。</div></div><span class="chip red">待处理</span></div>
+                <div class="gate-item"><div><div class="label" style="font-size:12px">Gate-D 回写冲突</div><div class="minor">当前无并发写回冲突，锁空闲。</div></div><span class="chip green">已通过</span></div>
+              </div>
+            </div>
+          </div></div>
+        </section>
+
+        <section class="panel chat">
+          <div class="chat-head"><div class="identity"><div class="avatar">训优</div><div><div class="label">workflow_tester 训练优化会话</div><div class="helper">中部只保留一个聊天壳；能力列表、效果和评分都以内嵌卡的方式回收到会话里。</div></div></div></div>
+          <div class="scroll"><div class="stream">
+            <div class="hero"><div class="row"><div><div class="hero-title">本轮先补“能力列表可视化”</div><div class="helper">用户要先看到每项能力的展示效果、能力评分，以及是否拖累历史能力。</div></div><div class="row"><span class="chip blue">第 2 轮</span><span class="chip orange">待回归</span></div></div>
+              <div class="grid4">
+                <div class="metric"><div class="k">能力平均分</div><div class="v">82.7 / 100</div></div>
+                <div class="metric"><div class="k">目标阈值</div><div class="v">86</div></div>
+                <div class="metric"><div class="k">历史回归通过</div><div class="v">3 / 4</div></div>
+                <div class="metric"><div class="k">下一步</div><div class="v">补回退化能力</div></div>
+              </div>
+            </div>
+
+            <div class="bubble user"><div class="bubble-mini">我</div><div class="bubble-main"><div class="minor">用户 · 10:18</div><div class="bubble-box"><div class="bubble-text">目前先做列表展示能力，并且要能看到对应的能力展示效果，以及能力评分。训练优化默认使用 对话 + 右侧任务 / 能力演进。</div></div></div></div>
+            <div class="bubble assistant"><div class="bubble-mini">系</div><div class="bubble-main"><div class="minor">系统 · 10:18</div><div class="bubble-box"><div class="bubble-text">已收敛为 3 个能力对象。下面直接回看本轮能力列表：每条能力都带效果预览、分数、门禁状态和历史能力影响。</div></div></div></div>
+
+            <div class="ability-wrap">
+              <div class="row"><div><div class="panel-title">本轮能力列表</div><div class="desc">列表是当前主视图，不再先让用户切图表或评分页签。</div></div><div class="row"><span class="chip blue">目标能力 3 项</span><span class="chip gray">历史能力回归 4 项</span></div></div>
+              <div class="ability-list">
+                <article class="ability">
+                  <div class="ability-main">
+                    <div class="row"><div class="label">能力 01 · 列表化展示能力</div><span class="chip green">已达标</span></div>
+                    <div class="ability-desc">把“本轮要补什么能力”从抽象说明改成稳定列表，每项独立呈现状态、预览、评分与门禁，不再埋在长消息或右侧说明里。</div>
+                    <div class="preview"><div class="label" style="font-size:12px">能力展示效果</div><div class="preview-shell"><div class="preview-bar-top"><span>训练优化页 · 能力列表</span><span>效果预览</span></div><div class="preview-inner"><div class="pill-row"><span class="sketch-pill">能力列表</span><span class="sketch-pill">状态</span><span class="sketch-pill">评分</span></div><div class="sketch-line" style="width:94%"></div><div class="split"><div class="sketch-line"></div><div class="sketch-box"></div></div><div class="sketch-line" style="width:78%"></div></div></div><div class="minor">证据：首屏已能直接看到 3 项能力列表，且每项都带评分与效果区。</div></div>
+                  </div>
+                  <div class="ability-side">
+                    <div class="score"><div class="row"><div class="label">能力评分</div><span class="chip green">+12</span></div><div class="score-grid"><div><div class="k">基线</div><div class="v">71</div></div><div><div class="k">当前</div><div class="v">83</div></div><div><div class="k">目标</div><div class="v">80</div></div></div><div class="delta">结论：已超过目标阈值，可进入回写候选。</div></div>
+                    <div class="gate-box"><div class="label">门禁绑定</div><div class="gate-list"><div class="gate-item"><div><div class="label" style="font-size:12px">Gate-B</div><div class="minor">展示规则与验收样例一一对应。</div></div><span class="chip green">通过</span></div><div class="gate-item"><div><div class="label" style="font-size:12px">历史影响</div><div class="minor">未影响原有缺陷探测链路。</div></div><span class="chip green">安全</span></div></div></div>
+                  </div>
+                </article>
+
+                <article class="ability">
+                  <div class="ability-main">
+                    <div class="row"><div class="label">能力 02 · 效果预览能力</div><span class="chip orange">待补强</span></div>
+                    <div class="ability-desc">用户不接受只有一行“通过/不通过”；每项能力都要看到对应展示效果，至少能回看一块预览、一段输出或一张截图引用。</div>
+                    <div class="preview"><div class="label" style="font-size:12px">能力展示效果</div><div class="preview-shell"><div class="preview-bar-top"><span>预览样例 · 右侧任务 / 能力演进</span><span>引用证据</span></div><div class="preview-inner"><div class="sketch-line" style="width:88%"></div><div class="sketch-line" style="width:64%"></div><div class="pill-row"><span class="sketch-pill">截图引用</span><span class="sketch-pill">输出片段</span></div><div class="sketch-box" style="width:76%"></div></div></div><div class="minor">证据：现在能看到效果区，但预览说明与证据引用还不够稳定，用户可能仍觉得“像占位图”。</div></div>
+                  </div>
+                  <div class="ability-side">
+                    <div class="score"><div class="row"><div class="label">能力评分</div><span class="chip orange">+6</span></div><div class="score-grid"><div><div class="k">基线</div><div class="v">68</div></div><div><div class="k">当前</div><div class="v">74</div></div><div><div class="k">目标</div><div class="v">78</div></div></div><div class="delta">结论：还有 4 分缺口，需补一条“证据来源 + 预览含义”说明。</div></div>
+                    <div class="gate-box"><div class="label">门禁绑定</div><div class="gate-list"><div class="gate-item"><div><div class="label" style="font-size:12px">Gate-B</div><div class="minor">能力有效，但验收证据解释不足。</div></div><span class="chip orange">待过</span></div><div class="gate-item"><div><div class="label" style="font-size:12px">历史影响</div><div class="minor">未拖累其他能力，但也未补足历史证据可读性。</div></div><span class="chip gray">中性</span></div></div></div>
+                  </div>
+                </article>
+
+                <article class="ability">
+                  <div class="ability-main">
+                    <div class="row"><div class="label">能力 03 · 历史能力防退化展示</div><span class="chip red">有风险</span></div>
+                    <div class="ability-desc">训练优化不仅要展示新增能力，还要把“哪些历史能力被回归、有没有下降、下降在哪个能力对象上”放回同一能力列表语境里。</div>
+                    <div class="preview"><div class="label" style="font-size:12px">能力展示效果</div><div class="preview-shell"><div class="preview-bar-top"><span>历史能力回归</span><span>异常样例</span></div><div class="preview-inner"><div class="pill-row"><span class="sketch-pill">缺陷探测</span><span class="sketch-pill">-3 分</span></div><div class="sketch-line" style="width:92%"></div><div class="sketch-line" style="width:58%"></div><div class="sketch-box" style="width:44%;background:#f3d7d7"></div></div></div><div class="minor">证据：历史“缺陷探测”能力评分从 84 降到 81，虽然幅度不大，但还没有给出回补动作。</div></div>
+                  </div>
+                  <div class="ability-side">
+                    <div class="score"><div class="row"><div class="label">能力评分</div><span class="chip red">-3</span></div><div class="score-grid"><div><div class="k">基线</div><div class="v">84</div></div><div><div class="k">当前</div><div class="v">81</div></div><div><div class="k">警戒线</div><div class="v">82</div></div></div><div class="delta">结论：触发历史能力回归告警，不能直接自动发布。</div></div>
+                    <div class="gate-box"><div class="label">门禁绑定</div><div class="gate-list"><div class="gate-item"><div><div class="label" style="font-size:12px">Gate-C</div><div class="minor">历史能力低于警戒线，需补一轮回归任务。</div></div><span class="chip red">阻塞</span></div><div class="gate-item"><div><div class="label" style="font-size:12px">影响范围</div><div class="minor">波及“创建角色后探测 workflow bug”链路。</div></div><span class="chip red">需修复</span></div></div></div>
+                  </div>
+                </article>
+              </div>
+            </div>
+          </div></div>
+
+          <div class="composer"><div class="composer-box"><textarea class="composer-input" readonly>请补一条专门针对“历史缺陷探测能力”回归的任务，并把能力 02 的效果预览说明补到可验收。</textarea></div><div class="composer-actions"><div class="row"><span class="attach">引用：历史能力用例 4 项</span><span class="attach">任务中心：准备追加 2 个节点</span></div><div class="row"><button class="alt">保存草稿</button><button>发送并继续优化</button></div></div></div>
+        </section>
+
+        <aside class="panel right">
+          <div class="panel-head"><div><div class="panel-title">任务 / 能力演进</div><div class="desc">默认先看任务推进和能力演进；能力基线放在第二标签。</div></div><span class="chip blue">默认视图</span></div>
+          <div class="line-tabs"><button class="line-tab active" data-pane-tab="tasks">任务 / 能力演进</button><button class="line-tab" data-pane-tab="baseline">能力基线</button></div>
+          <div class="scroll"><div class="right-scroll">
+            <div class="pane active" data-pane="tasks">
+              <div class="summary"><div class="row"><div class="label">当前推进</div><span class="chip orange">2 / 4 节点完成</span></div><div class="grid4"><div class="metric"><div class="k">当前阶段</div><div class="v">能力回补</div></div><div class="metric"><div class="k">当前阻塞</div><div class="v">Gate-C</div></div><div class="metric"><div class="k">待追加节点</div><div class="v">2 个</div></div><div class="metric"><div class="k">自动发布</div><div class="v">未放行</div></div></div></div>
+              <div class="task-list">
+                <div class="task"><div class="row"><div class="label">T-201 收敛能力对象模型</div><span class="chip green">已完成</span></div><div class="desc">把“能力”定义成独立对象，附带 `score / preview / gate_status / regression_result`。</div><div class="progress"><span style="width:100%"></span></div></div>
+                <div class="task"><div class="row"><div class="label">T-202 渲染列表化能力卡</div><span class="chip green">已完成</span></div><div class="desc">中部聊天壳已回收能力卡，每项都有预览和评分。</div><div class="progress"><span style="width:100%"></span></div></div>
+                <div class="task"><div class="row"><div class="label">T-203 回归历史缺陷探测能力</div><span class="chip red">阻塞中</span></div><div class="desc">当前分数 81，低于警戒线 82，需补一轮回归验证。</div><div class="progress"><span style="width:56%"></span></div></div>
+                <div class="task"><div class="row"><div class="label">T-204 自动发布评审</div><span class="chip gray">未开始</span></div><div class="desc">只有 Gate-B / Gate-C 全过后才可启动。</div><div class="progress"><span style="width:0%"></span></div></div>
+              </div>
+              <div class="graph"><div class="row"><div class="label">能力演进</div><span class="chip blue">R0 -> R2</span></div><div class="desc">右侧直接看“能力往哪走了”，不用先切评分明细。红色分支表示历史能力退化导致回补。</div><svg viewBox="0 0 620 150" preserveAspectRatio="none" aria-label="能力演进图"><path class="g-line branch" d="M76 74 H196" /><path class="g-line main" d="M196 74 V112 H374" /><path class="g-line fail" d="M196 74 V38 H374" /><path class="g-line main" d="M374 112 H514" /><path class="g-line future" d="M514 112 H596" /><circle class="node base" cx="76" cy="74" r="7"></circle><circle class="node done" cx="196" cy="74" r="7"></circle><circle class="node rollback" cx="374" cy="38" r="7"></circle><circle class="node active-node" cx="374" cy="112" r="7"></circle><circle class="node done" cx="514" cy="112" r="7"></circle><circle class="node future-node" cx="596" cy="112" r="7"></circle><text class="g-label" x="48" y="96">R0 基线</text><text class="g-muted" x="32" y="110">Avg 71.0</text><text class="g-label" x="166" y="61">R1 列表化</text><text class="g-muted" x="150" y="75">能力开始对象化</text><text class="g-label" x="326" y="22">R1-A 回归下滑</text><text class="g-muted" x="316" y="36">历史能力 -3</text><text class="g-label" x="336" y="130">R2 当前主线</text><text class="g-muted" x="314" y="144">新增能力通过，待补回归</text><text class="g-label" x="478" y="130">R2-B 回补</text><text class="g-muted" x="470" y="144">准备重跑回归</text><text class="g-label" x="568" y="100">发布</text><text class="g-muted" x="548" y="114">门禁全过后进入</text></svg></div>
+            </div>
+            <div class="pane" data-pane="baseline">
+              <div class="summary"><div class="row"><div class="label">当前能力基线</div><span class="chip gray">正式版 v0.9.3</span></div><div class="grid4"><div class="metric"><div class="k">当前画像</div><div class="v">中文 fallback</div></div><div class="metric"><div class="k">正式能力数</div><div class="v">6</div></div><div class="metric"><div class="k">稳定能力</div><div class="v">4</div></div><div class="metric"><div class="k">高风险能力</div><div class="v">1</div></div></div></div>
+              <div class="baseline-list">
+                <div class="baseline"><div class="row"><div class="label">基线能力 A · 缺陷探测</div><span class="chip red">81 / 84</span></div><div class="desc">历史关键能力，当前轻微退化，必须在这轮训练优化中补回来。</div></div>
+                <div class="baseline"><div class="row"><div class="label">基线能力 B · 角色创建流程理解</div><span class="chip green">88 / 86</span></div><div class="desc">保持稳定，无需额外回归动作。</div></div>
+                <div class="baseline"><div class="row"><div class="label">基线能力 C · 中文缺陷建单</div><span class="chip green">86 / 82</span></div><div class="desc">已经在本轮能力列表中保持通过，可作为历史能力安全样本。</div></div>
+                <div class="baseline"><div class="row"><div class="label">画像摘要</div><span class="chip blue">用于回写</span></div><div class="desc">当前 live 仍是 fallback 画像，训练优化通过后会同步回写 `AGENTS.md` 与画像字段。</div></div>
+              </div>
+            </div>
+          </div></div>
+        </aside>
+      </div>
+    </main>
+  </div>
+  <script>
+    (function(){
+      var tabs=[].slice.call(document.querySelectorAll('[data-pane-tab]'));
+      var panes=[].slice.call(document.querySelectorAll('[data-pane]'));
+      function activate(name){tabs.forEach(function(t){t.classList.toggle('active',t.getAttribute('data-pane-tab')===name)});panes.forEach(function(p){p.classList.toggle('active',p.getAttribute('data-pane')===name)})}
+      tabs.forEach(function(tab){tab.addEventListener('click',function(){activate(tab.getAttribute('data-pane-tab'))})});
+      activate('tasks');
+    })();
+  </script>
+</body>
+</html>

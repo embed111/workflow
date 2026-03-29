@@ -1,0 +1,43 @@
+{
+  "capability_id": "tq-20260329-173347-909a00:capability:1",
+  "capability_name": "优化训练优化能力列表主视图 20260329-173344",
+  "capability_goal": "tc-loop-capability-binding 20260329-173344",
+  "current_status": "有风险",
+  "preview_evidence": {
+    "title": "优化训练优化能力列表主视图 20260329-173344 展示效果",
+    "summary": "R2/Run3 清空上下文完成独立评测，score=76.50，execution_engine=workflow_native。",
+    "source_kind": "evaluation_run",
+    "evidence_ref": "workflow://native/eval/ter-20260329-173347-3e4a29",
+    "run_label": "Run3",
+    "updated_at": "2026-03-29T17:33:47+08:00"
+  },
+  "score_current": 74.0,
+  "score_target": 86.0,
+  "score_baseline": 78.0,
+  "score_delta": -4.0,
+  "score_conclusion": "历史能力下降，需回补后再发布",
+  "gate_status": {
+    "overall": "blocked",
+    "gate_b": {
+      "status": "blocked",
+      "label": "Gate-B",
+      "reason": "当前能力得分仍未达到目标阈值。"
+    },
+    "gate_c": {
+      "status": "blocked",
+      "label": "Gate-C",
+      "reason": "该能力项导致历史能力下降，自动发布保持阻塞。"
+    },
+    "auto_publish_blocked": true
+  },
+  "historical_regression_result": {
+    "status": "regressed",
+    "summary": "该能力项触发历史能力退化，自动发布保持阻塞。",
+    "blocking": true,
+    "impact_items": [
+      "优化训练优化能力列表主视图 20260329-173344"
+    ]
+  },
+  "impact_scope": "tc-loop-capability-binding 20260329-173344",
+  "baseline_reference_version": "v1.0.0"
+}

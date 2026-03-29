@@ -40,6 +40,23 @@ def _sync_training_loop_read_model(
     eval_run_map = _load_loop_eval_runs(conn, queue_ids)
     queue_audit_map = _load_queue_audits(conn, queue_ids)
     loop_audits = _load_loop_action_audits(conn, loop_id)
+    queue_order_map = {
+        str(row["queue_task_id"] or "").strip(): index
+        for index, row in enumerate(queue_rows)
+        if str(row["queue_task_id"] or "").strip()
+    }
+    queue_rows = sorted(
+        queue_rows,
+        key=lambda row: (
+            _round_index_for_queue(
+                order_index=queue_order_map.get(str(row["queue_task_id"] or "").strip(), 0),
+                graph_node=graph_nodes_by_id.get(str(row["queue_task_id"] or "").strip(), {}),
+                eval_rows=eval_run_map.get(str(row["queue_task_id"] or "").strip(), []),
+            ),
+            str(row["enqueued_at"] or ""),
+            str(row["queue_task_id"] or ""),
+        ),
+    )
 
     base_node = _loop_node_base(str(loop_row["created_at"] or now_text).strip() or now_text)
     nodes: list[dict[str, Any]] = [base_node]
@@ -427,6 +444,406 @@ def _sync_training_loop_read_model(
     }
 
 
+def _training_loop_split_text_items(raw: object, *, limit: int = 8) -> list[str]:
+    items: list[str] = []
+    if isinstance(raw, list):
+        source_items = raw
+    else:
+        source_items = [str(raw or "")]
+    for source in source_items:
+        text = str(source or "").replace("\r", "\n")
+        if not text.strip():
+            continue
+        normalized = text
+        for mark in ("；", ";", "|", "，", ","):
+            normalized = normalized.replace(mark, "\n")
+        for part in normalized.split("\n"):
+            item = str(part or "").strip(" -•\t")
+            if not item or item in items:
+                continue
+            items.append(item)
+            if len(items) >= max(1, int(limit)):
+                return items
+    return items
+
+
+def _training_loop_agent_baseline(
+    conn: sqlite3.Connection,
+    *,
+    agent_id: str,
+) -> dict[str, Any]:
+    aid = str(agent_id or "").strip()
+    if not aid:
+        return {}
+    row = conn.execute(
+        """
+        SELECT
+            agent_id,agent_name,current_version,latest_release_version,bound_release_version,
+            core_capabilities,capability_summary,knowledge_scope,applicable_scenarios,version_notes,updated_at
+        FROM agent_registry
+        WHERE agent_id=?
+        LIMIT 1
+        """,
+        (aid,),
+    ).fetchone()
+    if row is None:
+        return {}
+    key_capabilities = _training_loop_split_text_items(
+        row["core_capabilities"] or row["capability_summary"] or row["knowledge_scope"] or "",
+        limit=8,
+    )
+    return {
+        "agent_id": aid,
+        "agent_name": str(row["agent_name"] or aid).strip() or aid,
+        "current_version": str(row["current_version"] or "").strip(),
+        "latest_release_version": str(row["latest_release_version"] or "").strip(),
+        "bound_release_version": str(row["bound_release_version"] or "").strip(),
+        "capability_summary": str(row["capability_summary"] or "").strip(),
+        "knowledge_scope": str(row["knowledge_scope"] or "").strip(),
+        "applicable_scenarios": _training_loop_split_text_items(row["applicable_scenarios"] or "", limit=6),
+        "version_notes": str(row["version_notes"] or "").strip(),
+        "history_key_capabilities": key_capabilities,
+        "updated_at": str(row["updated_at"] or "").strip(),
+    }
+
+
+def _training_loop_gate_status_chip(status: str) -> str:
+    key = str(status or "").strip().lower()
+    if key in {"pass", "passed", "safe", "ready"}:
+        return "pass"
+    if key in {"blocked", "risk", "regressed", "fail", "failed"}:
+        return "blocked"
+    return "pending"
+
+
+def _training_loop_preview_payload(
+    round_record: dict[str, Any],
+    *,
+    capability_name: str,
+    fallback_summary: str,
+    regression_summary: str,
+) -> dict[str, Any]:
+    run_results = round_record.get("run_results") if isinstance(round_record, dict) else []
+    if not isinstance(run_results, list):
+        run_results = []
+    preferred_run = None
+    for item in reversed(run_results):
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("summary") or "").strip() or str(item.get("evidence_ref") or "").strip():
+            preferred_run = item
+            break
+    preview_summary = (
+        str((preferred_run or {}).get("summary") or "").strip()
+        or str(round_record.get("latest_result_summary") or "").strip()
+        or str(fallback_summary or "").strip()
+        or str(regression_summary or "").strip()
+        or "当前能力暂无额外展示证据，先使用本轮结果摘要占位。"
+    )
+    return {
+        "title": f"{capability_name} 展示效果",
+        "summary": preview_summary,
+        "source_kind": (
+            "evaluation_run"
+            if preferred_run
+            else "result_summary"
+            if str(round_record.get("latest_result_summary") or "").strip()
+            else "workset_summary"
+        ),
+        "evidence_ref": str((preferred_run or {}).get("evidence_ref") or "").strip(),
+        "run_label": str((preferred_run or {}).get("run_label") or "").strip(),
+        "updated_at": str(
+            (preferred_run or {}).get("finished_at")
+            or (preferred_run or {}).get("started_at")
+            or round_record.get("updated_at")
+            or ""
+        ).strip(),
+    }
+
+
+def _build_training_loop_capabilities(
+    read_model: dict[str, Any],
+    *,
+    queue_task_id: str,
+    agent_baseline: dict[str, Any],
+) -> list[dict[str, Any]]:
+    overview = dict(read_model.get("current_overview") or {}) if isinstance(read_model, dict) else {}
+    workset = dict(read_model.get("workset_changes") or {}) if isinstance(read_model, dict) else {}
+    round_record_by_queue = read_model.get("round_record_by_queue") if isinstance(read_model, dict) else {}
+    if not isinstance(round_record_by_queue, dict):
+        round_record_by_queue = {}
+    selected_round = dict(round_record_by_queue.get(queue_task_id) or {})
+
+    labels = _training_loop_split_text_items(workset.get("current_items") or [], limit=12)
+    if not labels:
+        labels = _training_loop_split_text_items(workset.get("added_items") or [], limit=12)
+    if not labels:
+        labels = _training_loop_split_text_items(overview.get("capability_goal") or "", limit=6)
+    if not labels:
+        labels = ["当前轮能力目标"]
+
+    avg_score = _safe_float(selected_round.get("avg_score") if isinstance(selected_round, dict) else None)
+    target_score = _safe_float(overview.get("threshold"))
+    baseline_score = _safe_float(overview.get("previous_avg_score"))
+    metrics_available = bool(overview.get("metrics_available"))
+    decision_code = str(overview.get("decision_code") or "").strip().lower()
+    regression_blocked = decision_code == "degraded_vs_previous" or (
+        metrics_available and baseline_score is not None and avg_score is not None and avg_score < baseline_score
+    )
+    regression_summary = (
+        "历史能力较上一轮下降，自动发布保持阻塞。"
+        if regression_blocked
+        else "历史能力未出现明显退化。"
+        if metrics_available
+        else "历史能力回归尚未完成。"
+    )
+    impact_scope = str(
+        overview.get("capability_goal")
+        or workset.get("delta_summary")
+        or selected_round.get("decision")
+        or ""
+    ).strip()
+    fallback_summary = str(
+        selected_round.get("latest_result_summary")
+        or selected_round.get("decision")
+        or workset.get("delta_summary")
+        or overview.get("acceptance_criteria")
+        or ""
+    ).strip()
+    risk_index = 0
+    if isinstance(workset.get("items"), list):
+        for idx, item in enumerate(workset.get("items") or []):
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("state") or "").strip().lower() == "added":
+                risk_index = idx
+                break
+
+    capabilities: list[dict[str, Any]] = []
+    for idx, label in enumerate(labels):
+        capability_name = str(label or "").strip() or f"能力 {idx + 1}"
+        preview_evidence = _training_loop_preview_payload(
+            selected_round,
+            capability_name=capability_name,
+            fallback_summary=fallback_summary,
+            regression_summary=regression_summary,
+        )
+        delta_score = None
+        if avg_score is not None:
+            compare_base = baseline_score if baseline_score is not None else target_score
+            if compare_base is not None:
+                delta_score = round(float(avg_score) - float(compare_base), 2)
+        gate_b_status = (
+            "pass"
+            if metrics_available and avg_score is not None and target_score is not None and avg_score >= target_score
+            else "blocked"
+            if metrics_available
+            else "pending"
+        )
+        gate_c_status = "blocked" if regression_blocked and idx == risk_index else "pass" if metrics_available else "pending"
+        current_status = (
+            "有风险"
+            if gate_c_status == "blocked"
+            else "已达标"
+            if gate_b_status == "pass"
+            else "待补强"
+            if gate_b_status == "blocked"
+            else "待评测"
+        )
+        delta_conclusion = (
+            "历史能力下降，需回补后再发布"
+            if gate_c_status == "blocked"
+            else "已达到目标阈值"
+            if gate_b_status == "pass"
+            else "距离目标阈值仍有缺口"
+            if gate_b_status == "blocked"
+            else "等待三轮评测完成"
+        )
+        historical_result = {
+            "status": "regressed" if gate_c_status == "blocked" else "not_affected" if metrics_available else "pending",
+            "summary": (
+                "该能力项触发历史能力退化，自动发布保持阻塞。"
+                if gate_c_status == "blocked"
+                else "未影响历史能力，可继续沿主线推进。"
+                if metrics_available
+                else "历史能力回归尚未完成。"
+            ),
+            "blocking": bool(gate_c_status == "blocked"),
+            "impact_items": (
+                [capability_name]
+                if gate_c_status == "blocked"
+                else []
+            ),
+        }
+        capabilities.append(
+            {
+                "capability_id": f"{queue_task_id}:capability:{idx + 1}",
+                "capability_name": capability_name,
+                "capability_goal": str(overview.get("capability_goal") or capability_name).strip() or capability_name,
+                "current_status": current_status,
+                "preview_evidence": preview_evidence,
+                "score_current": avg_score,
+                "score_target": target_score,
+                "score_baseline": baseline_score,
+                "score_delta": delta_score,
+                "score_conclusion": delta_conclusion,
+                "gate_status": {
+                    "overall": _training_loop_gate_status_chip("blocked" if gate_c_status == "blocked" else gate_b_status),
+                    "gate_b": {
+                        "status": gate_b_status,
+                        "label": "Gate-B",
+                        "reason": (
+                            "当前能力得分已达到目标阈值。"
+                            if gate_b_status == "pass"
+                            else "当前能力得分仍未达到目标阈值。"
+                            if gate_b_status == "blocked"
+                            else "等待三轮评测完成后再判定。"
+                        ),
+                    },
+                    "gate_c": {
+                        "status": gate_c_status,
+                        "label": "Gate-C",
+                        "reason": (
+                            "该能力项导致历史能力下降，自动发布保持阻塞。"
+                            if gate_c_status == "blocked"
+                            else "未影响历史能力。"
+                            if gate_c_status == "pass"
+                            else "等待历史能力回归结果。"
+                        ),
+                    },
+                    "auto_publish_blocked": bool(gate_c_status == "blocked" or gate_b_status != "pass"),
+                },
+                "historical_regression_result": historical_result,
+                "impact_scope": impact_scope or capability_name,
+                "baseline_reference_version": str(
+                    agent_baseline.get("bound_release_version")
+                    or agent_baseline.get("latest_release_version")
+                    or agent_baseline.get("current_version")
+                    or ""
+                ).strip(),
+            }
+        )
+    return capabilities
+
+
+def _build_training_loop_tasks_evolution(
+    read_model: dict[str, Any],
+    *,
+    queue_task_id: str,
+    capabilities: list[dict[str, Any]],
+) -> dict[str, Any]:
+    overview = dict(read_model.get("current_overview") or {}) if isinstance(read_model, dict) else {}
+    round_records = list(read_model.get("round_records") or []) if isinstance(read_model, dict) else []
+    blockers: list[dict[str, Any]] = []
+    for capability in capabilities:
+        if not isinstance(capability, dict):
+            continue
+        gate_status = capability.get("gate_status") if isinstance(capability.get("gate_status"), dict) else {}
+        gate_b = gate_status.get("gate_b") if isinstance(gate_status, dict) else {}
+        gate_c = gate_status.get("gate_c") if isinstance(gate_status, dict) else {}
+        if str((gate_c or {}).get("status") or "").strip().lower() == "blocked":
+            blockers.append(
+                {
+                    "capability_id": str(capability.get("capability_id") or "").strip(),
+                    "capability_name": str(capability.get("capability_name") or "").strip(),
+                    "gate": "Gate-C",
+                    "reason": str((gate_c or {}).get("reason") or "").strip(),
+                }
+            )
+        elif str((gate_b or {}).get("status") or "").strip().lower() == "blocked":
+            blockers.append(
+                {
+                    "capability_id": str(capability.get("capability_id") or "").strip(),
+                    "capability_name": str(capability.get("capability_name") or "").strip(),
+                    "gate": "Gate-B",
+                    "reason": str((gate_b or {}).get("reason") or "").strip(),
+                }
+            )
+    auto_publish_ready = not blockers and bool(overview.get("metrics_available"))
+    return {
+        "default_tab": "tasks",
+        "current_stage": (
+            "能力回补"
+            if any(str(item.get("gate") or "").strip() == "Gate-C" for item in blockers)
+            else "结果回看与调向"
+            if blockers
+            else "等待发布评审"
+            if auto_publish_ready
+            else "执行三轮评测"
+        ),
+        "blockers": blockers,
+        "pending_nodes": [
+            {
+                "queue_task_id": str(item.get("queue_task_id") or "").strip(),
+                "title": str(item.get("title") or "").strip(),
+                "status": str(item.get("status") or "").strip(),
+                "decision": str(item.get("decision") or "").strip(),
+                "current": str(item.get("queue_task_id") or "").strip() == queue_task_id,
+            }
+            for item in round_records
+            if isinstance(item, dict)
+        ],
+        "auto_publish": {
+            "status": "ready" if auto_publish_ready else "blocked" if blockers else "pending",
+            "reason": (
+                "Gate-B / Gate-C 均已通过，可以进入发布评审。"
+                if auto_publish_ready
+                else "存在能力项门禁阻塞，自动发布保持关闭。"
+                if blockers
+                else "当前轮评测尚未完成，自动发布暂不放行。"
+            ),
+        },
+    }
+
+
+def _build_training_loop_baseline_view(
+    overview: dict[str, Any],
+    *,
+    agent_baseline: dict[str, Any],
+    capabilities: list[dict[str, Any]],
+) -> dict[str, Any]:
+    release_version = str(
+        agent_baseline.get("bound_release_version")
+        or agent_baseline.get("latest_release_version")
+        or agent_baseline.get("current_version")
+        or ""
+    ).strip()
+    history_items = list(agent_baseline.get("history_key_capabilities") or []) if isinstance(agent_baseline, dict) else []
+    if not history_items:
+        history_items = [
+            str(item.get("capability_name") or "").strip()
+            for item in capabilities
+            if isinstance(item, dict) and str(item.get("capability_name") or "").strip()
+        ][:6]
+    regression_rows = []
+    for capability in capabilities:
+        if not isinstance(capability, dict):
+            continue
+        history_result = capability.get("historical_regression_result") if isinstance(capability.get("historical_regression_result"), dict) else {}
+        regression_rows.append(
+            {
+                "capability_id": str(capability.get("capability_id") or "").strip(),
+                "capability_name": str(capability.get("capability_name") or "").strip(),
+                "status": str(history_result.get("status") or "").strip() or "pending",
+                "summary": str(history_result.get("summary") or "").strip(),
+                "current_score": capability.get("score_current"),
+                "baseline_score": capability.get("score_baseline"),
+            }
+        )
+    return {
+        "current_release_version": release_version,
+        "current_role_profile_summary": str(
+            agent_baseline.get("capability_summary")
+            or agent_baseline.get("knowledge_scope")
+            or overview.get("capability_goal")
+            or ""
+        ).strip(),
+        "history_key_capabilities": history_items,
+        "regression_results": regression_rows,
+        "source": "agent_registry" if agent_baseline else "training_queue_fallback",
+    }
+
+
 def get_training_queue_loop(
     root: Path,
     queue_task_id_text: str,
@@ -485,6 +902,10 @@ def get_training_queue_status_detail(
             queue_task_id=qid,
             now_text=iso_ts(now_local()),
         )
+        agent_baseline = _training_loop_agent_baseline(
+            conn,
+            agent_id=str((read_model.get("current_overview") or {}).get("target_agent_id") or "").strip(),
+        )
         conn.commit()
     finally:
         conn.close()
@@ -497,6 +918,22 @@ def get_training_queue_status_detail(
             {"queue_task_id": qid, "loop_id": str(read_model["loop_id"] or "")},
         )
 
+    capabilities = _build_training_loop_capabilities(
+        read_model,
+        queue_task_id=qid,
+        agent_baseline=agent_baseline,
+    )
+    tasks_evolution = _build_training_loop_tasks_evolution(
+        read_model,
+        queue_task_id=qid,
+        capabilities=capabilities,
+    )
+    baseline = _build_training_loop_baseline_view(
+        dict(read_model["current_overview"] or {}),
+        agent_baseline=agent_baseline,
+        capabilities=capabilities,
+    )
+
     return {
         "queue_task_id": qid,
         "loop_id": str(read_model["loop_id"] or ""),
@@ -506,6 +943,9 @@ def get_training_queue_status_detail(
         "workset_changes": dict(read_model["workset_changes"] or {}),
         "evaluations": list(read_model["evaluations"] or []),
         "history_records": list(read_model["history_records"] or []),
+        "capabilities": capabilities,
+        "tasks_evolution": tasks_evolution,
+        "baseline": baseline,
         "is_test_data": bool(read_model["is_test_data"]),
     }
 

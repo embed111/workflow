@@ -16,6 +16,7 @@ $script:WorkflowCopyExcludeDirs = @(
     '.runtime',
     '.test',
     '.tmp',
+    '.tmp*',
     '.codex',
     'state',
     'logs',
@@ -23,6 +24,10 @@ $script:WorkflowCopyExcludeDirs = @(
     '.pytest_cache',
     '.mypy_cache',
     '.ruff_cache'
+)
+
+$script:WorkflowCopyExcludeFiles = @(
+    '.tmp*'
 )
 
 function ConvertTo-WorkflowPlainData {
@@ -678,7 +683,9 @@ function Copy-WorkflowTree {
         [Parameter(Mandatory = $true)]
         [string]$TargetPath,
         [Parameter()]
-        [string[]]$ExcludeDirs = @()
+        [string[]]$ExcludeDirs = @(),
+        [Parameter()]
+        [string[]]$ExcludeFiles = @()
     )
 
     New-Item -ItemType Directory -Path $TargetPath -Force | Out-Null
@@ -698,10 +705,16 @@ function Copy-WorkflowTree {
         $args += '/XD'
         $args += $ExcludeDirs
     }
-    & robocopy @args | Out-Null
-    if ($LASTEXITCODE -gt 7) {
-        throw "robocopy failed with exit code $LASTEXITCODE"
+    if ($ExcludeFiles.Count -gt 0) {
+        $args += '/XF'
+        $args += $ExcludeFiles
     }
+    & robocopy @args | Out-Null
+    $robocopyExitCode = $LASTEXITCODE
+    if ($robocopyExitCode -gt 7) {
+        throw "robocopy failed with exit code $robocopyExitCode"
+    }
+    $global:LASTEXITCODE = 0
 }
 
 function Get-WorkflowDefaultArtifactRoot {

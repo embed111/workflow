@@ -35,6 +35,10 @@
     return 'overview';
   }
 
+  function normalizeTrainingLoopRightTab(value) {
+    return safe(value).toLowerCase() === 'baseline' ? 'baseline' : 'tasks';
+  }
+
   function scrollTrainingLoopCenterToTop() {
     const node = $('tcLoopCenterPane');
     if (node) node.scrollTop = 0;
@@ -61,6 +65,11 @@
     scrollTrainingLoopCenterToTop();
   }
 
+  function setTrainingLoopRightTab(tabKey) {
+    state.tcLoopRightTab = normalizeTrainingLoopRightTab(tabKey);
+    renderTrainingLoop();
+  }
+
   function setTrainingLoopSelectedNode(nodeId) {
     state.tcLoopSelectedNodeId = safe(nodeId).trim();
     renderTrainingLoop();
@@ -84,6 +93,7 @@
     state.tcLoopSelectedNodeId = '';
     state.tcLoopMode = 'status';
     if (!opts.preserveTab) state.tcLoopStatusTab = 'overview';
+    if (!opts.preserveRightTab) state.tcLoopRightTab = 'tasks';
     renderTrainingLoop();
     renderTrainingCenterQueue();
     scrollTrainingLoopCenterToTop();
@@ -100,6 +110,7 @@
     const key = safe(state.tcLoopSelectedQueueTaskId).trim();
     const rows = Array.isArray(state.tcQueue) ? state.tcQueue : [];
     if (mode !== 'status') return;
+    if (!rows.length) return;
     if (key && rows.some((row) => safe(row && row.queue_task_id).trim() === key)) {
       return;
     }
@@ -296,6 +307,18 @@
         payload && Array.isArray(payload.history_records)
           ? payload.history_records
           : [],
+      capabilities:
+        payload && Array.isArray(payload.capabilities)
+          ? payload.capabilities
+          : [],
+      tasksEvolution:
+        payload && payload.tasks_evolution && typeof payload.tasks_evolution === 'object'
+          ? payload.tasks_evolution
+          : {},
+      baseline:
+        payload && payload.baseline && typeof payload.baseline === 'object'
+          ? payload.baseline
+          : {},
     };
   }
 

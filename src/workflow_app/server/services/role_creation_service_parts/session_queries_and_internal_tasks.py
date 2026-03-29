@@ -5,14 +5,58 @@ def list_role_creation_sessions(root: Path) -> dict[str, Any]:
         rows = conn.execute(
             "SELECT * FROM role_creation_sessions ORDER BY updated_at DESC,created_at DESC,session_id DESC"
         ).fetchall()
+        items: list[dict[str, Any]] = []
+        for row in rows:
+            summary = _session_row_to_summary(row)
+            sync_payload = _role_creation_session_sync_payload(
+                row=row,
+                session_summary=summary,
+                messages=_list_session_messages(conn, summary.get("session_id") or ""),
+            )
+            if sync_payload["needs_sync"] and summary.get("status") != "completed":
+                conn.execute(
+                    """
+                    UPDATE role_creation_sessions
+                    SET session_title=?,role_spec_json=?,missing_fields_json=?,updated_at=?
+                    WHERE session_id=?
+                    """,
+                    (
+                        sync_payload["session_title"],
+                        _json_dumps(sync_payload["role_spec"]),
+                        _json_dumps(sync_payload["missing_fields"]),
+                        str(row["updated_at"] or ""),
+                        summary.get("session_id") or "",
+                    ),
+                )
+                summary["session_title"] = sync_payload["session_title"]
+                summary["missing_fields"] = list(sync_payload["missing_fields"])
+            summary.update(_role_creation_delete_state(root, summary))
+            items.append(summary)
+        conn.commit()
     finally:
         conn.close()
-    items: list[dict[str, Any]] = []
-    for row in rows:
-        summary = _session_row_to_summary(row)
-        summary.update(_role_creation_delete_state(root, summary))
-        items.append(summary)
     return {"items": items, "total": len(items)}
+
+
+def _role_creation_session_sync_payload(
+    *,
+    row: sqlite3.Row | dict[str, Any],
+    session_summary: dict[str, Any],
+    messages: list[dict[str, Any]],
+) -> dict[str, Any]:
+    role_spec, missing_fields = _build_role_spec(messages)
+    session_title = _role_creation_title_from_spec(role_spec, session_summary.get("session_title") or "")
+    needs_sync = (
+        _json_dumps(role_spec) != str(row["role_spec_json"] or "{}")
+        or _json_dumps(missing_fields) != str(row["missing_fields_json"] or "[]")
+        or session_title != session_summary.get("session_title")
+    )
+    return {
+        "role_spec": role_spec,
+        "missing_fields": list(missing_fields),
+        "session_title": session_title,
+        "needs_sync": needs_sync,
+    }
 
 
 def get_role_creation_session_detail(root: Path, session_id: str) -> dict[str, Any]:
@@ -43,8 +87,13 @@ def get_role_creation_session_detail(root: Path, session_id: str) -> dict[str, A
     session_summary["unhandled_user_message_count"] = int(message_counts["unhandled"] or 0)
     session_summary["message_processing_status"] = queue_status
     session_summary["message_processing_status_text"] = _role_creation_queue_state_text(queue_status)
-    session_summary.update(_role_creation_delete_state(root, session_summary))
-    role_spec, missing_fields = _build_role_spec(messages)
+    sync_payload = _role_creation_session_sync_payload(
+        row=row,
+        session_summary=session_summary,
+        messages=messages,
+    )
+    role_spec = dict(sync_payload["role_spec"])
+    missing_fields = list(sync_payload["missing_fields"])
     assignment_graph = {}
     if session_summary.get("assignment_ticket_id"):
         try:
@@ -59,15 +108,18 @@ def get_role_creation_session_detail(root: Path, session_id: str) -> dict[str, A
             )
         except Exception:
             assignment_graph = {}
-    stages, stage_meta = _project_stages(session_summary, task_refs=task_refs, assignment_graph=assignment_graph)
-    current_stage_key = str(stage_meta.get("current_stage_key") or session_summary.get("current_stage_key") or "persona_collection")
-    current_stage_index = int(stage_meta.get("current_stage_index") or session_summary.get("current_stage_index") or 2)
-    needs_sync = (
-        _json_dumps(role_spec) != str(row["role_spec_json"] or "{}")
-        or _json_dumps(missing_fields) != str(row["missing_fields_json"] or "[]")
-        or _role_creation_title_from_spec(role_spec, session_summary.get("session_title") or "") != session_summary.get("session_title")
+    session_summary.update(
+        _role_creation_delete_state(
+            root,
+            session_summary,
+            task_refs=task_refs,
+            assignment_graph=assignment_graph,
+        )
     )
-    if needs_sync and session_summary.get("status") != "completed":
+    stages, stage_meta = _project_stages(session_summary, task_refs=task_refs, assignment_graph=assignment_graph)
+    current_stage_key = str(stage_meta.get("current_stage_key") or session_summary.get("current_stage_key") or "workspace_init")
+    current_stage_index = int(stage_meta.get("current_stage_index") or session_summary.get("current_stage_index") or 1)
+    if sync_payload["needs_sync"] and session_summary.get("status") != "completed":
         conn = connect_db(root)
         try:
             conn.execute(
@@ -77,17 +129,17 @@ def get_role_creation_session_detail(root: Path, session_id: str) -> dict[str, A
                 WHERE session_id=?
                 """,
                 (
-                    _role_creation_title_from_spec(role_spec, session_summary.get("session_title") or ""),
+                    sync_payload["session_title"],
                     _json_dumps(role_spec),
                     _json_dumps(missing_fields),
-                    _tc_now_text(),
+                    str(row["updated_at"] or ""),
                     session_key,
                 ),
             )
             conn.commit()
         finally:
             conn.close()
-        session_summary["session_title"] = _role_creation_title_from_spec(role_spec, session_summary.get("session_title") or "")
+        session_summary["session_title"] = sync_payload["session_title"]
         session_summary["missing_fields"] = list(missing_fields)
     created_agent = _current_agent_runtime_payload(root, session_summary.get("created_agent_id") or "")
     dialogue_agent = {
@@ -115,7 +167,13 @@ def get_role_creation_session_detail(root: Path, session_id: str) -> dict[str, A
     }
 
 
-def _role_creation_delete_state(root: Path, session_summary: dict[str, Any]) -> dict[str, Any]:
+def _role_creation_delete_state(
+    root: Path,
+    session_summary: dict[str, Any],
+    *,
+    task_refs: list[dict[str, Any]] | None = None,
+    assignment_graph: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     status = _normalize_session_status((session_summary or {}).get("status"))
     out = {
         "delete_available": False,
@@ -156,10 +214,23 @@ def _role_creation_delete_state(root: Path, session_summary: dict[str, Any]) -> 
     if not ticket_id:
         out["delete_available"] = True
         return out
+    task_ref_rows = [dict(item) for item in list(task_refs or [])]
+    if not task_ref_rows:
+        session_id = str((session_summary or {}).get("session_id") or "").strip()
+        if session_id:
+            conn = connect_db(root)
+            try:
+                task_ref_rows = _list_task_refs(conn, session_id)
+            finally:
+                conn.close()
     try:
-        scheduler = assignment_service.get_assignment_scheduler_state(
+        graph_payload = assignment_graph if isinstance(assignment_graph, dict) and assignment_graph else assignment_service.get_assignment_graph(
             root,
-            ticket_id_text=ticket_id,
+            ticket_id,
+            active_loaded=0,
+            active_batch_size=24,
+            history_loaded=0,
+            history_batch_size=12,
             include_test_data=True,
         )
     except Exception as exc:
@@ -174,15 +245,34 @@ def _role_creation_delete_state(root: Path, session_summary: dict[str, Any]) -> 
             }
         )
         return out
-    running_node_count = int(scheduler.get("graph_running_node_count") or 0)
+    graph_overview = dict((graph_payload or {}).get("graph") or {})
+    scheduler = dict(graph_overview.get("scheduler") or {})
+    node_catalog = {
+        str(item.get("node_id") or "").strip(): dict(item)
+        for item in list((graph_payload or {}).get("node_catalog") or [])
+        if str(item.get("node_id") or "").strip()
+    }
+    running_node_count = 0
+    seen_node_ids: set[str] = set()
+    for item in task_ref_rows:
+        node_id = str(item.get("node_id") or "").strip()
+        if not node_id or node_id in seen_node_ids:
+            continue
+        seen_node_ids.add(node_id)
+        if str((node_catalog.get(node_id) or {}).get("status") or "").strip().lower() == "running":
+            running_node_count += 1
     out["assignment_running_node_count"] = running_node_count
-    out["assignment_scheduler_state"] = str(scheduler.get("state") or "").strip().lower()
-    out["assignment_scheduler_state_text"] = str(scheduler.get("state_text") or "").strip()
+    out["assignment_scheduler_state"] = str(
+        graph_overview.get("scheduler_state") or scheduler.get("state") or ""
+    ).strip().lower()
+    out["assignment_scheduler_state_text"] = str(
+        scheduler.get("state_text") or graph_overview.get("scheduler_state_text") or ""
+    ).strip()
     if running_node_count > 0:
         out.update(
             {
                 "delete_block_reason": "assignment_running_nodes",
-                "delete_block_reason_text": f"任务中心仍有 {running_node_count} 个运行中的任务，暂不支持清理删除",
+                "delete_block_reason_text": f"当前角色创建在任务中心主图中仍有 {running_node_count} 个运行中的任务，暂不支持清理删除",
             }
         )
         return out
@@ -227,12 +317,12 @@ def _update_session_role_spec(
     session_title = _role_creation_title_from_spec(role_spec, (session_summary or {}).get("session_title") or "")
     status = _normalize_session_status((session_summary or {}).get("status"))
     current_stage_key = _normalize_stage_key(
-        (session_summary or {}).get("current_stage_key") or "persona_collection",
+        (session_summary or {}).get("current_stage_key") or "workspace_init",
     )
-    current_stage_index = int((session_summary or {}).get("current_stage_index") or 2)
+    current_stage_index = int((session_summary or {}).get("current_stage_index") or 1)
     if status == "draft":
-        current_stage_key = "persona_collection"
-        current_stage_index = 2
+        current_stage_key = "workspace_init"
+        current_stage_index = 1
     conn.execute(
         """
         UPDATE role_creation_sessions
@@ -334,6 +424,7 @@ def _create_role_creation_task_internal(
         "priority": requested_priority,
         "upstream_node_ids": upstream_node_ids,
         "operator": operator,
+        "allow_creating_agent": True,
     }
     if not node_payload["node_name"]:
         raise TrainingCenterError(400, "任务名称不能为空", "role_creation_task_name_required")

@@ -619,7 +619,7 @@ def start_reconcile_scheduler(cfg: AppConfig, state: RuntimeState) -> threading.
                 next_reconcile_at = now_ts + reconcile_every
             if TEST_DATA_AUTO_CLEANUP_ENABLED and now_ts >= next_cleanup_at:
                 try:
-                    if active_runtime_task_count(state) <= 0:
+                    if active_runtime_task_count(state, root=cfg.root) <= 0:
                         cleanup_result = admin_cleanup_history(
                             cfg.root,
                             mode="test_data",

@@ -148,6 +148,20 @@
     return safe(state.assignmentSelectedTicketId).trim();
   }
 
+  function assignmentGraphSourceLabel(value) {
+    const key = safe(value).trim().toLowerCase();
+    if (key === 'workflow-ui') return '任务中心';
+    if (key === 'assignment-prototype-test-data') return '测试数据';
+    return safe(value).trim() || '其他来源';
+  }
+
+  function assignmentGraphDisplayName(graph) {
+    const row = graph && typeof graph === 'object' ? graph : {};
+    const graphName = safe(row.graph_name).trim() || safe(row.ticket_id).trim() || '未命名任务图';
+    const sourceLabel = assignmentGraphSourceLabel(row.source_workflow);
+    return graphName + ' · 来源=' + sourceLabel;
+  }
+
   function selectedAssignmentGraphOverview() {
     const data = state.assignmentGraphData && typeof state.assignmentGraphData === 'object'
       ? state.assignmentGraphData
@@ -669,6 +683,29 @@
     return { tone: tone, text: text };
   }
 
+  function assignmentGraphCounts() {
+    const items = Array.isArray(state.assignmentGraphs) ? state.assignmentGraphs : [];
+    const counts = {
+      total: 0,
+      workflowUi: 0,
+      testData: 0,
+      others: 0,
+    };
+    items.forEach((item) => {
+      const sourceWorkflow = safe(item && item.source_workflow).trim().toLowerCase();
+      if (item && item.is_test_data) {
+        counts.total += 1;
+        counts.testData += 1;
+      } else if (sourceWorkflow === 'workflow-ui') {
+        counts.total += 1;
+        counts.workflowUi += 1;
+      } else {
+        counts.others += 1;
+      }
+    });
+    return counts;
+  }
+
   function renderAssignmentScheduler() {
     const overview = selectedAssignmentGraphOverview();
     const scheduler = overview && overview.scheduler && typeof overview.scheduler === 'object'
@@ -708,7 +745,16 @@
         const summary = safe(overview.summary).trim();
         const graphName = safe(overview.graph_name).trim();
         const testSuffix = overview.is_test_data ? ' · 测试数据' : '';
-        note.textContent = (graphName ? graphName + testSuffix + ' · ' : '') + (summary || '按依赖关系与优先级展示当前任务图。');
+        const graphCounts = assignmentGraphCounts();
+        const noteParts = [];
+        if (graphName) {
+          noteParts.push(graphName + testSuffix);
+        }
+        noteParts.push(summary || '按依赖关系与优先级展示当前任务图。');
+        if (graphCounts.total > 1) {
+          noteParts.push('当前共 ' + String(graphCounts.total) + ' 张任务图，可在上方下拉切换。');
+        }
+        note.textContent = noteParts.join(' · ');
       }
     }
     if (pauseBtn) {
@@ -764,10 +810,12 @@
       Math.max(0, Number(history.remaining_completed_count || 0));
     if (metaNode) {
       if (!selectedAssignmentGraphOverview()) {
-        metaNode.textContent = '全局主图待加载';
+        metaNode.textContent = '当前任务图待加载';
       } else {
+        const overview = selectedAssignmentGraphOverview() || {};
         metaNode.textContent =
-          '全局主图 · 总任务 ' + String(Number(metrics.total_nodes || 0)) +
+          assignmentGraphDisplayName(overview) +
+          ' · 总任务 ' + String(Number(metrics.total_nodes || 0)) +
           ' · 已执行 ' + String(Number(metrics.executed_count || 0)) +
           ' · 待开始 ' + String(Number(metrics.unexecuted_count || 0)) +
           ' · 活跃展示 ' + String(activeVisible) + '/' + String(activeTotal);
@@ -778,7 +826,7 @@
       const hasMoreActive = !!active.has_more;
       loadTasksBtn.disabled = !state.agentSearchRootReady || !hasTicket || !hasMoreActive;
       if (!hasTicket) {
-        loadTasksBtn.title = '当前暂无可加载的全局主图';
+        loadTasksBtn.title = '当前暂无可加载的任务图';
       } else if (activeTotal <= 0) {
         loadTasksBtn.title = '当前没有未完成任务';
       } else if (!hasMoreActive) {

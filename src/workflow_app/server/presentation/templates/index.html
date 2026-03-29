@@ -388,6 +388,15 @@
                     </div>
                     <button id='rcNewSessionBtn' class='alt' type='button'>新建</button>
                   </div>
+                  <div class='rc-draft-toolbar'>
+                    <input id='rcSessionSearchInput' class='rc-session-search-input' type='search' placeholder='搜索角色名、草稿内容、任务图' spellcheck='false' />
+                    <div id='rcSessionFilterRow' class='rc-session-filter-row'>
+                      <button class='rc-session-filter-chip active' type='button' data-rc-session-filter='all'>全部</button>
+                      <button class='rc-session-filter-chip' type='button' data-rc-session-filter='draft'>草稿</button>
+                      <button class='rc-session-filter-chip' type='button' data-rc-session-filter='creating'>创建中</button>
+                      <button class='rc-session-filter-chip' type='button' data-rc-session-filter='completed'>已完成</button>
+                    </div>
+                  </div>
                   <div id='rcSessionList' class='rc-session-list'></div>
                   <div id='rcDraftCollapsedBody' class='rc-draft-collapsed' hidden>
                     <span id='rcDraftCollapsedCount' class='rc-draft-count'>0</span>
@@ -545,6 +554,9 @@
                 <div id='assignmentGraphMeta' class='hint'>全局主图待加载</div>
               </div>
               <div class='row'>
+                <select id='assignmentGraphSelect' class='assignment-graph-select' data-assignment-root-required='1'>
+                  <option value=''>暂无任务图</option>
+                </select>
                 <button id='assignmentRefreshBtn' class='alt' type='button' data-assignment-root-required='1'>刷新</button>
                 <button id='assignmentLoadMoreTasksBtn' class='alt' type='button' data-assignment-root-required='1'>加载更多任务</button>
                 <button id='assignmentLoadHistoryBtn' class='alt' type='button' data-assignment-root-required='1'>加载更多历史</button>

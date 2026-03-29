@@ -604,7 +604,8 @@ def main() -> int:
         if t_status != 202 or not t_payload.get("ok"):
             raise RuntimeError(f"task execute failed: {t_status} {t_payload}")
         task_id = str(t_payload.get("task_id") or "")
-        wait_task_done(base, task_id, timeout_s=180)
+        task_row = wait_task_done(base, task_id, timeout_s=180)
+        task_status_ok = str(task_row.get("status") or "").lower() == "success"
         tr_status, tr_payload = call(base, "GET", f"/api/tasks/{task_id}/trace")
         trace = tr_payload.get("trace") if tr_status == 200 else {}
         trace_source = trace.get("policy_source") if isinstance(trace, dict) else {}
@@ -635,13 +636,14 @@ def main() -> int:
         trace_source_match = trace_source_type == "manual_fallback"
         strong_trace_ok = bool(tr_status == 200 and trace_prompt_has_frozen and trace_source_match)
         event_fallback_ok = bool(events and has_alignment and has_manual_source)
-        ac35_policy_source_ok = bool(strong_trace_ok and event_fallback_ok) or event_fallback_ok
+        ac35_policy_source_ok = bool(task_status_ok and strong_trace_ok and event_fallback_ok)
         results.append(
             (
                 "ac35_policy_source_and_alignment_consistency",
                 ac35_policy_source_ok,
                 {
                     "task_id": task_id,
+                    "task_status": task_row.get("status"),
                     "trace_status": tr_status,
                     "trace_policy_source": trace_source,
                     "trace_policy_source_type": trace_source_type,

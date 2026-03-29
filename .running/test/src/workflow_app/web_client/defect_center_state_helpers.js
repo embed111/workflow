@@ -37,6 +37,72 @@
       : {};
   }
 
+  function defectTaskDraftAction() {
+    return safe(state.defectTaskDraftAction).trim().toLowerCase();
+  }
+
+  function defectTaskDraftReportId() {
+    return safe(state.defectTaskDraftReportId).trim();
+  }
+
+  function defectTaskDraftDefaultBaseName(report) {
+    const row = report && typeof report === 'object' ? report : defectCurrentReport();
+    const displayId = safe(row.display_id || row.dts_id || row.report_id).trim();
+    const summary = safe(row.defect_summary).trim();
+    if (displayId && summary) {
+      if (summary.startsWith(displayId)) return summary;
+      return (displayId + ' ' + summary).trim();
+    }
+    if (displayId) return displayId + ' 缺陷问题';
+    return summary || '缺陷问题';
+  }
+
+  function defectTaskDraftReset() {
+    state.defectTaskDraftAction = '';
+    state.defectTaskDraftReportId = '';
+    state.defectTaskDraftBaseName = '';
+    state.defectTaskDraftDefaultBaseName = '';
+    state.defectTaskDraftError = '';
+  }
+
+  function defectTaskDraftOpen(actionKind, report) {
+    const row = report && typeof report === 'object' ? report : defectCurrentReport();
+    const reportId = safe(row.report_id).trim();
+    if (!reportId) return;
+    const action = safe(actionKind).trim().toLowerCase();
+    const defaultBaseName = defectTaskDraftDefaultBaseName(row);
+    state.defectTaskDraftAction = action;
+    state.defectTaskDraftReportId = reportId;
+    state.defectTaskDraftDefaultBaseName = defaultBaseName;
+    state.defectTaskDraftBaseName = defaultBaseName;
+    state.defectTaskDraftError = '';
+  }
+
+  function defectTaskDraftVisible(actionKind, reportId) {
+    const action = safe(actionKind).trim().toLowerCase();
+    const reportKey = safe(reportId).trim();
+    return defectTaskDraftAction() === action && defectTaskDraftReportId() === reportKey;
+  }
+
+  function defectTaskDraftPreviewBaseName() {
+    const value = safe(state.defectTaskDraftBaseName).trim();
+    if (value) return value;
+    return safe(state.defectTaskDraftDefaultBaseName).trim() || defectTaskDraftDefaultBaseName(defectCurrentReport());
+  }
+
+  function setDefectTaskDraftError(text) {
+    state.defectTaskDraftError = safe(text);
+    const node = $('defectTaskDraftError');
+    if (node) node.textContent = state.defectTaskDraftError;
+  }
+
+  function syncDefectTaskDraftInput() {
+    const input = $('defectTaskNameBaseInput');
+    if (!input) return defectTaskDraftPreviewBaseName();
+    state.defectTaskDraftBaseName = safe(input.value);
+    return defectTaskDraftPreviewBaseName();
+  }
+
   function normalizeDefectQueueSummary(payload) {
     const row = payload && typeof payload === 'object' ? payload : {};
     return {

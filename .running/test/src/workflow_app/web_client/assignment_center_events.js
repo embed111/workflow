@@ -707,6 +707,21 @@
         }
       };
     }
+    if ($('assignmentGraphSelect')) {
+      $('assignmentGraphSelect').onchange = async () => {
+        try {
+          const ticketId = safe($('assignmentGraphSelect').value).trim();
+          if (!ticketId || ticketId === selectedAssignmentTicketId()) return;
+          state.assignmentSelectedTicketId = ticketId;
+          state.assignmentSelectedNodeId = '';
+          state.assignmentActiveLoaded = 0;
+          state.assignmentHistoryLoaded = 0;
+          await refreshAssignmentGraphData({ ticketId: ticketId });
+        } catch (err) {
+          setAssignmentError(err.message || String(err));
+        }
+      };
+    }
     if ($('assignmentLoadHistoryBtn')) {
       $('assignmentLoadHistoryBtn').onclick = async () => {
         try {
