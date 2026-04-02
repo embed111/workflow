@@ -154,7 +154,8 @@ function Wait-WorkflowHealth {
         [int]$TimeoutSeconds = 30
     )
 
-    $deadline = (Get-Date).AddSeconds([Math]::Max(5, $TimeoutSeconds))
+    $effectiveTimeoutSeconds = [Math]::Max(5, $TimeoutSeconds)
+    $deadline = (Get-Date).AddSeconds($effectiveTimeoutSeconds)
     $url = "http://$BindHost`:$Port/healthz"
     while ((Get-Date) -lt $deadline) {
         if ($LauncherProcess.HasExited) {
@@ -162,6 +163,7 @@ function Wait-WorkflowHealth {
                 ok        = $false
                 reason    = 'launcher_exited'
                 exit_code = $LauncherProcess.ExitCode
+                timeout_seconds = $effectiveTimeoutSeconds
             }
         }
         try {
@@ -170,6 +172,7 @@ function Wait-WorkflowHealth {
                 return @{
                     ok  = $true
                     url = $url
+                    timeout_seconds = $effectiveTimeoutSeconds
                 }
             }
         }
@@ -181,6 +184,7 @@ function Wait-WorkflowHealth {
         ok        = $false
         reason    = 'health_timeout'
         exit_code = if ($LauncherProcess.HasExited) { $LauncherProcess.ExitCode } else { -1 }
+        timeout_seconds = $effectiveTimeoutSeconds
     }
 }
 
@@ -552,7 +556,18 @@ $openedBrowser = $false
 
 while ($true) {
     $launcher = Start-EnvironmentLauncher -Descriptor $descriptor -SkipBackfill:$SkipBackfill -OpenBrowser:$false
-    $healthTimeoutSeconds = 60
+    $healthTimeoutSeconds = if ($pendingUpgrade -and $Environment -eq 'prod') {
+        240
+    }
+    elseif ($Environment -eq 'prod') {
+        180
+    }
+    else {
+        60
+    }
+    if ($pendingUpgrade -and $Environment -eq 'prod') {
+        Write-Host "[workflow-start] prod candidate switched, wait up to $healthTimeoutSeconds s for healthz ..."
+    }
     $health = Wait-WorkflowHealth -BindHost ([string]$descriptor.host) -Port ([int]$descriptor.port) -LauncherProcess $launcher -TimeoutSeconds $healthTimeoutSeconds
 
     if (-not $health.ok) {
@@ -568,6 +583,7 @@ while ($true) {
                 candidate_version = [string]$pendingUpgrade.candidate_version
                 evidence_path     = [string]$pendingUpgrade.evidence_path
                 reason            = [string]$health.reason
+                health_timeout_seconds = [int]$health.timeout_seconds
             }
             Write-WorkflowDeploymentEvent -SourceRoot $sourceRoot -Payload @{
                 environment   = 'prod'

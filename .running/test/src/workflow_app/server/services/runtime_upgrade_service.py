@@ -4,6 +4,7 @@ import json
 import os
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +77,12 @@ _RUNTIME_UPGRADE_GENERIC_HIGHLIGHTS: tuple[tuple[str, str], ...] = (
     ("src/workflow_app/server/services/", "服务端执行和稳定性逻辑有更新。"),
     ("scripts/", "部署与环境切换脚本有更新。"),
 )
+_RUNTIME_UPGRADE_TERMINAL_ACTION_STATUSES = {
+    "success",
+    "failed",
+    "rollback_success",
+    "rollback_failed",
+}
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -108,6 +115,17 @@ def _env_path(name: str) -> Path | None:
     if not text:
         return None
     return Path(text).resolve(strict=False)
+
+
+def _parse_timestamp(value: Any) -> float | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
+    try:
+        return datetime.fromisoformat(normalized).timestamp()
+    except Exception:
+        return None
 
 
 def _version_rank(value: dict[str, Any]) -> str:
@@ -165,6 +183,13 @@ def current_runtime_manifest() -> dict[str, Any]:
     payload = _read_json(path)
     payload.setdefault("manifest_path", path.as_posix())
     return payload
+
+
+def current_runtime_instance() -> dict[str, Any]:
+    path = _env_path(RUNTIME_INSTANCE_FILE_VAR)
+    if not isinstance(path, Path):
+        return {}
+    return _read_json(path)
 
 
 def prod_candidate_path() -> Path | None:
@@ -275,11 +300,53 @@ def read_prod_last_action() -> dict[str, Any]:
     return _read_json(path)
 
 
+def _prod_upgrade_request_is_stale(
+    request: dict[str, Any],
+    *,
+    last_action: dict[str, Any],
+    current_instance: dict[str, Any],
+) -> bool:
+    request_candidate = str(request.get("candidate_version") or "").strip()
+    if not request_candidate:
+        return True
+
+    requested_at = _parse_timestamp(request.get("requested_at"))
+    instance_started_at = _parse_timestamp(current_instance.get("started_at"))
+    if requested_at is not None and instance_started_at is not None and instance_started_at >= requested_at:
+        return True
+
+    action = str(last_action.get("action") or "").strip().lower()
+    status = str(last_action.get("status") or "").strip().lower()
+    finished_at = _parse_timestamp(last_action.get("finished_at"))
+    action_candidate = str(last_action.get("candidate_version") or "").strip()
+    if (
+        action == "upgrade"
+        and status in _RUNTIME_UPGRADE_TERMINAL_ACTION_STATUSES
+        and finished_at is not None
+        and requested_at is not None
+        and finished_at >= requested_at
+        and (not action_candidate or action_candidate == request_candidate)
+    ):
+        return True
+
+    return False
+
+
 def read_prod_upgrade_request() -> dict[str, Any]:
     path = prod_upgrade_request_path()
     if not isinstance(path, Path):
         return {}
-    return _read_json(path)
+    payload = _read_json(path)
+    if not payload:
+        return {}
+    if _prod_upgrade_request_is_stale(
+        payload,
+        last_action=read_prod_last_action(),
+        current_instance=current_runtime_instance(),
+    ):
+        _remove_file(path)
+        return {}
+    return payload
 
 
 def runtime_snapshot() -> dict[str, Any]:

@@ -1,0 +1,52 @@
+{
+  "role": "本地发布门禁探针助手",
+  "goal": "仅用于校验 workflow 页面和接口可用性。",
+  "responsibilities": {
+    "must": [
+      {
+        "text": "仅验证本地 API 和页面基础能力。",
+        "evidence": "## 职责边界（第9-11行）: \"- 仅验证本地 API 和页面基础能力。\"",
+        "source_title": "职责边界"
+      }
+    ],
+    "must_not": [
+      {
+        "text": "不调用任何外部 token 执行链路。",
+        "evidence": "## 职责边界（第9-10行）: \"- 不调用任何外部 token 执行链路。\"",
+        "source_title": "职责边界"
+      }
+    ],
+    "preconditions": []
+  },
+  "evidence": [
+    {
+      "field": "role",
+      "evidence": "## 角色定位（第3-4行）: \"你是本地发布门禁探针助手。\"",
+      "source_title": "角色定位"
+    },
+    {
+      "field": "goal",
+      "evidence": "## 会话目标（第6-7行）: \"仅用于校验 workflow 页面和接口可用性。\"",
+      "source_title": "会话目标"
+    },
+    {
+      "field": "responsibilities.must",
+      "evidence": "## 职责边界（第9-11行）: \"- 仅验证本地 API 和页面基础能力。\"",
+      "source_title": "职责边界"
+    },
+    {
+      "field": "responsibilities.must_not",
+      "evidence": "## 职责边界（第9-10行）: \"- 不调用任何外部 token 执行链路。\"",
+      "source_title": "职责边界"
+    }
+  ],
+  "parse_status": "incomplete",
+  "clarity_score": 90,
+  "clarity_gate": "auto",
+  "warnings": [
+    "responsibilities.preconditions_not_explicit_in_agents_md"
+  ],
+  "missing_fields": [
+    "responsibilities.preconditions"
+  ]
+}

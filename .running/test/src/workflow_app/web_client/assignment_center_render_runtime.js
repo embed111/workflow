@@ -42,6 +42,14 @@
     const blockings = Array.isArray(detail.blocking_reasons) ? detail.blocking_reasons : [];
     const artifactPaths = Array.isArray(selected.artifact_paths) ? selected.artifact_paths : [];
     const ticketId = selectedAssignmentTicketId();
+    const codexFailure =
+      detail && typeof detail === 'object' && detail.codex_failure
+        ? detail.codex_failure
+        : selected && typeof selected === 'object' && selected.codex_failure
+          ? selected.codex_failure
+          : detail && detail.execution_chain && detail.execution_chain.latest_run && typeof detail.execution_chain.latest_run === 'object'
+            ? detail.execution_chain.latest_run.codex_failure
+            : null;
     const rawStatus = safe(selected.status).trim().toLowerCase();
     let receiptActionHtml = '';
     let managementHtml = '';
@@ -155,6 +163,13 @@
         meta_html: overviewMetaHtml,
       }) +
       assignmentExecutionChainHtml() +
+      (codexFailureHasValue(codexFailure)
+        ? assignmentDetailSectionHtml('执行失败治理', "<div id='assignmentCodexFailureHost'></div>", {
+          open: true,
+          state_key: 'codex-failure',
+          meta_html: assignmentSectionMetaTextHtml('统一失败视图'),
+        })
+        : '') +
       assignmentDetailSectionHtml('回执信息', receiptInfoBody, {
         state_key: 'receipt-info',
         meta_html: assignmentSectionMetaTextHtml(safe(selected.result_ref).trim() ? '已附结果引用' : '暂无结果引用'),
@@ -206,6 +221,16 @@
           }
         )
         : '');
+    const failureHost = $('assignmentCodexFailureHost');
+    if (failureHost && codexFailureHasValue(codexFailure)) {
+      renderCodexFailureCard(failureHost, codexFailure, {
+        title: '节点执行失败',
+        context: {
+          ticketId: ticketId,
+          nodeId: safe(selected.node_id).trim(),
+        },
+      });
+    }
     bindAssignmentDetailToggleState(body);
     window.requestAnimationFrame(() => {
       restoreAssignmentExecutionScrollState(body);
@@ -466,8 +491,11 @@
   }
 
   function assignmentGraphsUrl() {
+    // Task center now binds to the canonical global graph only.
     return withTestDataQuery(
-      '/api/assignments?limit=24',
+      '/api/assignments?limit=1' +
+      '&source_workflow=' + encodeURIComponent(ASSIGNMENT_UI_SOURCE_WORKFLOW) +
+      '&external_request_id=' + encodeURIComponent(ASSIGNMENT_UI_GLOBAL_GRAPH_REQUEST_ID),
     );
   }
 
@@ -493,28 +521,10 @@
   function renderAssignmentGraphSelector() {
     const select = $('assignmentGraphSelect');
     if (!select) return;
-    if (!state.agentSearchRootReady) {
-      select.innerHTML = "<option value=''>任务中心已锁定</option>";
-      select.disabled = true;
-      return;
-    }
-    const selectedTicketId = selectedAssignmentTicketId();
-    const options = assignmentVisibleGraphs();
-    if (!options.length) {
-      select.innerHTML = "<option value=''>暂无任务图</option>";
-      select.disabled = true;
-      return;
-    }
-    select.innerHTML = options.map((item) => {
-      const ticketId = safe(item && item.ticket_id).trim();
-      return "<option value='" + escapeHtml(ticketId) + "'" +
-        (ticketId === selectedTicketId ? ' selected' : '') +
-        '>' + escapeHtml(assignmentGraphOptionLabel(item)) + '</option>';
-    }).join('');
-    select.disabled = false;
-    if (selectedTicketId) {
-      select.value = selectedTicketId;
-    }
+    select.disabled = true;
+    select.hidden = true;
+    select.setAttribute('aria-hidden', 'true');
+    select.style.display = 'none';
   }
 
   function assignmentDelay(ms) {
@@ -622,25 +632,6 @@
     const data = await getJSON(assignmentGraphsUrl());
     state.assignmentGraphs = Array.isArray(data.items) ? data.items : [];
     const visibleGraphs = assignmentVisibleGraphs();
-    const emptyPrototypeGraph = state.assignmentGraphs.find((item) => {
-      const metrics = item && item.metrics_summary && typeof item.metrics_summary === 'object'
-        ? item.metrics_summary
-        : {};
-      return !!(item && item.is_test_data) &&
-        safe(item && item.external_request_id).trim() === 'task-center-prototype-v1' &&
-        Number(metrics.total_nodes || 0) <= 0;
-    });
-    if (
-      !!state.showTestData &&
-      !opts.testBootstrapAttempted &&
-      (!visibleGraphs.length || (!!emptyPrototypeGraph && visibleGraphs.length === 1))
-    ) {
-      await ensureAssignmentPrototypeTestData();
-      return refreshAssignmentGraphs({
-        preserveSelection: !!opts.preserveSelection,
-        testBootstrapAttempted: true,
-      });
-    }
     const selectedExists = visibleGraphs.some((item) => safe(item && item.ticket_id).trim() === previous);
     const globalTicketId = globalAssignmentTicketId();
     const preferredTicketId = preferredAssignmentTicketId();

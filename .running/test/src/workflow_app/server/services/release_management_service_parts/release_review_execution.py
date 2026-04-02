@@ -1,4 +1,6 @@
 
+from workflow_app.server.services.codex_exec_monitor import resolve_codex_command, run_monitored_subprocess
+
 
 def _write_release_review_profile_assets(
     *,
@@ -226,13 +228,14 @@ def _run_codex_exec_for_release_review(
     _write_release_review_text(prompt_path, prompt_text)
 
     command_summary = "codex exec --json --skip-git-repo-check --sandbox workspace-write --add-dir <workspace_root> -C <workspace_root> -"
-    codex_bin = shutil.which("codex")
+    codex_bin = resolve_codex_command()
     stdout_text = ""
     stderr_text = ""
     codex_exit_code = None
     error_text = ""
     codex_events: list[dict[str, Any]] = []
     parsed_result: dict[str, Any] = {}
+    monitor_info: dict[str, Any] = {}
     started_ms = int(time.time() * 1000)
     finished_ms = started_ms
     if not codex_bin:
@@ -251,38 +254,49 @@ def _run_codex_exec_for_release_review(
             workspace_root.as_posix(),
             "-",
         ]
-        proc = None
         try:
-            proc = subprocess.Popen(
-                command,
-                cwd=workspace_root.as_posix(),
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
+            completion_state = {"ready": False}
+
+            def _observe_stdout(line: str) -> None:
+                cleaned = str(line or "").strip()
+                if not cleaned:
+                    return
+                try:
+                    event = json.loads(cleaned)
+                except Exception:
+                    return
+                if not isinstance(event, dict):
+                    return
+                event_type = str(event.get("type") or "").strip().lower()
+                if event_type == "turn.completed":
+                    completion_state["ready"] = True
+                    return
+                msg_text = _release_review_extract_codex_event_text(event)
+                if not msg_text:
+                    return
+                structured = _release_review_structured_result_candidates(
+                    _release_review_extract_json_objects(msg_text)
+                )
+                if structured:
+                    completion_state["ready"] = True
+
+            result = run_monitored_subprocess(
+                command=command,
+                cwd=workspace_root,
+                stdin_text=prompt_text,
+                on_stdout_line=_observe_stdout,
+                completion_checker=lambda: bool(completion_state["ready"]),
             )
-            stdout_text, stderr_text = proc.communicate(prompt_text + "\n", timeout=_release_review_codex_timeout_s())
-            codex_exit_code = int(proc.returncode or 0)
+            stdout_text = result.stdout_text
+            stderr_text = result.stderr_text
+            codex_exit_code = result.exit_code
+            monitor_info = dict(result.monitor or {})
+            started_ms = int(result.started_at_ms or started_ms)
+            finished_ms = int(result.finished_at_ms or finished_ms)
             if codex_exit_code != 0:
                 error_text = f"codex_exec_failed_exit_{codex_exit_code}"
-        except subprocess.TimeoutExpired:
-            if proc is not None:
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
-                try:
-                    stdout_text, stderr_text = proc.communicate(timeout=3)
-                except Exception:
-                    stdout_text, stderr_text = "", ""
-                codex_exit_code = int(proc.returncode or 124)
-            error_text = "codex_exec_timeout"
         except Exception as exc:
             error_text = f"codex_exec_exception:{exc}"
-        finally:
-            finished_ms = int(time.time() * 1000)
 
     _write_release_review_text(stdout_path, stdout_text)
     _write_release_review_text(stderr_path, stderr_text)
@@ -358,6 +372,7 @@ def _run_codex_exec_for_release_review(
             "exit_code": codex_exit_code,
             "event_count": len(codex_events),
             "duration_ms": max(0, finished_ms - started_ms),
+            "monitor": monitor_info,
         },
     }
     return {

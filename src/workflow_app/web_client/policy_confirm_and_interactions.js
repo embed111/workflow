@@ -236,6 +236,17 @@
         hint.textContent = safe(msg.run_hint);
         d.appendChild(hint);
       }
+      if (role === 'assistant' && codexFailureHasValue(msg.codex_failure)) {
+        const failureHost = document.createElement('div');
+        renderCodexFailureCard(failureHost, msg.codex_failure, {
+          title: '本轮失败原因',
+          compact: true,
+          context: {
+            sessionId: safe(session.session_id),
+          },
+        });
+        d.appendChild(failureHost);
+      }
       if (role === 'assistant' && safe(msg.task_id)) {
         const taskId = safe(msg.task_id);
         const actions = document.createElement('div');
@@ -392,6 +403,7 @@
     const phase = normalizeRuntimePhase(item.status);
     const active = taskRunIsActiveStatus(item.status);
     const summary = safe(item.summary).trim();
+    const codexFailure = normalizeCodexFailure(item.codex_failure);
     const fallbackContent = active
       ? recoveredTaskPlaceholderText(item.status)
       : phase === 'done'
@@ -401,7 +413,9 @@
       ? '检测到页面重连，正在恢复本轮执行...'
       : phase === 'done'
         ? ''
-        : '执行未完成，可点击“重试上一轮”再次尝试。';
+        : codexFailure
+          ? ''
+          : '执行未完成，可点击“重试上一轮”再次尝试。';
     let pendingIndex = sessionMessageIndexByTaskId(sid, taskId);
     if (pendingIndex < 0) {
       pendingIndex = appendSessionMessage(sid, 'assistant', fallbackContent, {
@@ -409,6 +423,7 @@
         run_state: phase,
         pending_placeholder: !!active,
         run_hint: fallbackHint,
+        codex_failure: codexFailure,
       });
     } else {
       const session = state.sessionsById[sid];
@@ -424,6 +439,7 @@
         run_state: phase,
         pending_placeholder: !!active,
         run_hint: fallbackHint,
+        codex_failure: codexFailure,
         content: nonPlaceholderAssistantContent(current) || fallbackContent,
       });
     }
@@ -877,13 +893,14 @@
           patchSessionMessage(sessionId, meta.pending_index, {
             run_state: 'failed',
             pending_placeholder: false,
-            run_hint: '执行出现异常，可点击“重试上一轮”再次尝试。',
+            run_hint: '',
             content: safe(payload.error || '执行异常'),
           });
         } else if (type === 'done') {
           finished = true;
           const st = safe(payload.status || 'failed');
           const phase = normalizeRuntimePhase(st);
+          const failure = normalizeCodexFailure(payload.codex_failure);
           const current = state.sessionsById[sessionId];
           const msgRow =
             current &&
@@ -896,12 +913,13 @@
           patchSessionMessage(sessionId, meta.pending_index, {
             run_state: phase,
             pending_placeholder: false,
-            run_hint: phase === 'done' ? '' : '执行未完成，可点击“重试上一轮”再次尝试。',
+            run_hint: phase === 'done' || failure ? '' : '执行未完成，可点击“重试上一轮”再次尝试。',
+            codex_failure: failure,
             content:
               existing ||
               (phase === 'done'
                 ? '（已完成，但未返回文本内容）'
-                : '执行结束：' + statusText(st) + '。可点击“重试上一轮”再次尝试。'),
+                : '执行结束：' + statusText(st) + '。'),
           });
           upsertSessionTaskRun(sessionId, {
             task_id: taskId,
@@ -910,6 +928,7 @@
             summary: safe(payload.summary || ''),
             duration_ms: Number(payload.duration_ms || 0),
             trace_available: true,
+            codex_failure: failure,
           });
         }
       }
@@ -932,6 +951,7 @@
         if (status === 'success' || status === 'failed' || status === 'interrupted') {
           finished = true;
           const phase = normalizeRuntimePhase(status);
+          const failure = normalizeCodexFailure(row.codex_failure);
           const current = state.sessionsById[sessionId];
           const msgRow =
             current &&
@@ -944,7 +964,8 @@
           patchSessionMessage(sessionId, meta.pending_index, {
             run_state: phase,
             pending_placeholder: false,
-            run_hint: phase === 'done' ? '' : '执行未完成，可点击“重试上一轮”再次尝试。',
+            run_hint: phase === 'done' || failure ? '' : '执行未完成，可点击“重试上一轮”再次尝试。',
+            codex_failure: failure,
             content:
               existing ||
               (phase === 'done'
@@ -1015,10 +1036,32 @@
     try {
       data = await postJSON('/api/tasks/execute', payload);
     } catch (err) {
+      const rawFailure = err && err.data && typeof err.data.codex_failure === 'object'
+        ? err.data.codex_failure
+        : {
+          feature_key: 'session_task_execution',
+          attempt_id: '',
+          attempt_count: 1,
+          failure_code: 'execution_exception',
+          failure_detail_code: safe(err && err.code).trim().toLowerCase() || 'execution_failed',
+          failure_stage: 'retry_dispatch',
+          failure_message: '请求失败：' + safe(err.message || String(err)),
+          retryable: true,
+          retry_action: {
+            kind: 'retry_session_round',
+            label: '重试上一轮',
+            retryable: true,
+            blocked_reason: '',
+            payload: { session_id: sessionId },
+          },
+          trace_refs: [],
+          failed_at: new Date().toISOString(),
+        };
       patchSessionMessage(sessionId, pendingIndex, {
         run_state: 'failed',
         pending_placeholder: false,
-        run_hint: '请求未成功，可点击“重试上一轮”再次尝试。',
+        run_hint: '',
+        codex_failure: rawFailure,
         content: '请求失败：' + safe(err.message || String(err)),
       });
       throw err;

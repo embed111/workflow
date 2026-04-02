@@ -336,6 +336,7 @@
     };
     $('tcEnterOpsBtn').onclick = () => {
       setTrainingCenterModule('ops');
+      enterTrainingLoopCreateMode();
     };
     $('tcLoopTaskSearchInput').addEventListener('input', () => {
       renderTrainingCenterQueue();

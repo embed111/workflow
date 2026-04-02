@@ -180,11 +180,21 @@ def _finalize_role_creation_message_processing_failure(
     batch_id: str,
     operator: str,
     error_text: str,
+    dialogue_error: str = "",
+    trace_ref: str = "",
+    dialogue_agent_name: str = "",
+    dialogue_agent_workspace_path: str = "",
+    dialogue_provider: str = "",
 ) -> None:
     session_key = safe_token(session_id, "", 160)
     if not session_key:
         return
     normalized_error = _normalize_text(error_text, max_len=2000) or "未知错误"
+    normalized_dialogue_error = _normalize_text(dialogue_error, max_len=200) or normalized_error
+    normalized_trace_ref = str(trace_ref or "").strip()
+    normalized_dialogue_agent_name = str(dialogue_agent_name or "").strip()
+    normalized_dialogue_agent_workspace_path = str(dialogue_agent_workspace_path or "").strip()
+    normalized_dialogue_provider = str(dialogue_provider or ROLE_CREATION_ANALYST_PROVIDER).strip() or ROLE_CREATION_ANALYST_PROVIDER
     now_text = _tc_now_text()
     conn = connect_db(cfg.root)
     try:
@@ -196,6 +206,21 @@ def _finalize_role_creation_message_processing_failure(
                 conn.rollback()
                 return
             raise
+        if (
+            normalized_trace_ref
+            or normalized_dialogue_agent_name
+            or normalized_dialogue_agent_workspace_path
+            or normalized_dialogue_provider
+        ):
+            _persist_role_creation_dialogue_fields(
+                conn,
+                session_id=session_key,
+                dialogue_agent_name=normalized_dialogue_agent_name,
+                dialogue_agent_workspace_path=normalized_dialogue_agent_workspace_path,
+                dialogue_provider=normalized_dialogue_provider,
+                trace_ref=normalized_trace_ref,
+                updated_at=now_text,
+            )
         _update_role_creation_user_message_processing_state(
             conn,
             session_id=session_key,
@@ -213,9 +238,14 @@ def _finalize_role_creation_message_processing_failure(
             attachments=[],
             message_type="chat",
             meta={
-                "dialogue_error": normalized_error,
+                "dialogue_error": normalized_dialogue_error,
+                "processing_error": normalized_error,
                 "processing_batch_id": batch_id,
                 "processing_failure": True,
+                "trace_ref": normalized_trace_ref,
+                "dialogue_agent_name": normalized_dialogue_agent_name,
+                "dialogue_agent_workspace_path": normalized_dialogue_agent_workspace_path,
+                "dialogue_provider": normalized_dialogue_provider,
             },
             created_at=now_text,
         )
@@ -329,6 +359,22 @@ def _process_role_creation_message_batch(
             latest_user_message=batch_text,
             operator=operator,
         )
+        dialogue_error = str(analyst_turn.get("error") or "").strip()
+        if dialogue_error:
+            _finalize_role_creation_message_processing_failure(
+                cfg,
+                session_id=session_key,
+                message_ids=[str(item.get("message_id") or "").strip() for item in batch_messages],
+                batch_id=batch_id,
+                operator=operator,
+                error_text=str(analyst_turn.get("assistant_reply") or "").strip() or dialogue_error,
+                dialogue_error=dialogue_error,
+                trace_ref=str(analyst_turn.get("trace_ref") or "").strip(),
+                dialogue_agent_name=str(analyst_turn.get("dialogue_agent_name") or "").strip(),
+                dialogue_agent_workspace_path=str(analyst_turn.get("dialogue_agent_workspace_path") or "").strip(),
+                dialogue_provider=str(analyst_turn.get("provider") or ROLE_CREATION_ANALYST_PROVIDER).strip(),
+            )
+            return False
         created_tasks = _create_role_creation_tasks_from_intents(
             cfg,
             session_summary=session_summary,
@@ -598,6 +644,39 @@ def _create_role_creation_assignment_nodes(
 ) -> list[dict[str, Any]]:
     created_nodes: list[dict[str, Any]] = []
     try:
+        batch_body = {
+            "operator": operator,
+            "nodes": [
+                {
+                    "node_id": str(item.get("node_id") or "").strip(),
+                    "node_name": str(item.get("node_name") or "").strip(),
+                    "assigned_agent_id": str(item.get("assigned_agent_id") or "").strip(),
+                    "node_goal": str(item.get("node_goal") or "").strip(),
+                    "expected_artifact": str(item.get("expected_artifact") or "").strip(),
+                    "priority": str(item.get("priority") or "P1").strip(),
+                    "upstream_node_ids": list(item.get("upstream_node_ids") or []),
+                    "allow_creating_agent": True,
+                }
+                for item in list(starter_nodes or [])
+            ],
+        }
+        create_batch_fn = getattr(assignment_service, "create_assignment_nodes_batch", None)
+        if callable(create_batch_fn) and batch_body["nodes"]:
+            batch_result = create_batch_fn(
+                cfg,
+                ticket_id,
+                batch_body,
+                include_test_data=True,
+            )
+            for item in list(batch_result.get("nodes") or []):
+                created_nodes.append(
+                    {
+                        "node_id": str(item.get("node_id") or "").strip(),
+                        "node_name": str(item.get("node_name") or item.get("task_name") or "").strip(),
+                    }
+                )
+            if created_nodes:
+                return created_nodes
         for item in list(starter_nodes or []):
             created = assignment_service.create_assignment_node(
                 cfg,

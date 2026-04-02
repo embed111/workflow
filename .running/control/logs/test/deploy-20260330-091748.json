@@ -1,0 +1,33 @@
+{
+    "test_gate":  {
+                      "status":  "passed",
+                      "evidence_path":  "C:\\work\\J-Agents\\workflow\\.running\\control\\reports\\test-gate-20260330-091748.json"
+                  },
+    "deploy_root":  "C:\\work\\J-Agents\\workflow\\.running\\test",
+    "finished_at":  "2026-03-30T01:17:48.3548934Z",
+    "runtime_root":  "C:\\work\\J-Agents\\workflow\\.running\\control\\runtime\\test",
+    "version":  "20260330-091748",
+    "prod_candidate":  {
+                           "version":  "20260330-091748",
+                           "test_batch_id":  "test-gate-20260330-091748",
+                           "candidate_meta_path":  "C:\\work\\J-Agents\\workflow\\.running\\control\\candidates\\20260330-091748\\candidate.json",
+                           "source_environment":  "test",
+                           "version_rank":  "20260330-091748",
+                           "evidence_path":  "C:\\work\\J-Agents\\workflow\\.running\\control\\reports\\test-gate-20260330-091748.json",
+                           "passed_at":  "2026-03-30T01:17:55.9947511Z",
+                           "candidate_app_root":  "C:\\work\\J-Agents\\workflow\\.running\\control\\candidates\\20260330-091748\\app"
+                       },
+    "deployment_metadata_path":  "C:\\work\\J-Agents\\workflow\\.running\\test\\.workflow-deployment.json",
+    "action":  "deploy",
+    "result":  "success",
+    "host":  "127.0.0.1",
+    "artifact_root":  "C:\\work\\J-Agents\\.output-test",
+    "started_at":  "2026-03-30T01:17:48.0696886Z",
+    "agent_search_root":  "D:\\code\\AI\\J-Agents",
+    "show_test_data":  true,
+    "source_root":  "C:\\work\\J-Agents\\workflow",
+    "environment":  "test",
+    "local_deployment_marker_path":  "C:\\work\\J-Agents\\workflow\\.running\\test\\.workflow-local-deployment.json",
+    "port":  8092,
+    "runtime_config_path":  "C:\\work\\J-Agents\\workflow\\.running\\control\\runtime\\test\\state\\runtime-config.json"
+}

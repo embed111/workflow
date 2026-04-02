@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from workflow_app.server.services.codex_failure_contract import (
+    build_codex_failure,
+    build_retry_action,
+    infer_codex_failure_detail_code,
+)
+
 from .work_record_store import (
     append_task_run_event_record,
     create_task_run_record,
@@ -17,6 +23,62 @@ from .work_record_store import (
 
 def bind_runtime_symbols(symbols: dict[str, object]) -> None:
     globals().update(symbols)
+
+
+def _task_run_failure_detail_code(summary: str, stderr_text: str) -> str:
+    stderr_value = str(stderr_text or "").strip()
+    stderr_lower = stderr_value.lower()
+    if "agent_policy_extract_failed:" in stderr_lower:
+        suffix = stderr_lower.split("agent_policy_extract_failed:", 1)[1].splitlines()[0].strip()
+        return suffix or "policy_extract_failed"
+    if "codex command not found in path" in stderr_lower:
+        return "codex_command_not_found"
+    if "codex returned no agent message" in stderr_lower:
+        return "codex_result_missing"
+    if "invalid agent_search_root" in stderr_lower:
+        return "workspace_missing"
+    if "no conversation context" in stderr_lower:
+        return "input_missing"
+    return infer_codex_failure_detail_code(stderr_value or summary, fallback="execution_failed")
+
+
+def _task_run_codex_failure(
+    root: Path,
+    *,
+    task_id_text: str,
+    session: dict[str, str],
+    status: str,
+    summary: str,
+    stderr_text: str,
+    failed_at: str,
+) -> dict[str, Any]:
+    if str(status or "").strip().lower() != "failed":
+        return {}
+    detail_code = _task_run_failure_detail_code(summary, stderr_text)
+    row = get_task_run_record(root, task_id_text) or {}
+    attempt_count = len(list_task_run_records(root, session_id=str(session.get("session_id") or ""), limit=2000))
+    trace_refs = {
+        "trace": str(row.get("trace_ref") or "").strip(),
+        "stdout": str(row.get("stdout_ref") or "").strip(),
+        "stderr": str(row.get("stderr_ref") or "").strip(),
+        "summary": str(row.get("ref") or "").strip(),
+    }
+    return build_codex_failure(
+        feature_key="session_task_execution",
+        attempt_id=task_id_text,
+        attempt_count=max(1, int(attempt_count or 0)),
+        failure_detail_code=detail_code,
+        failure_message=str(stderr_text or summary or "").strip(),
+        retry_action=build_retry_action(
+            "retry_session_round",
+            payload={
+                "session_id": str(session.get("session_id") or "").strip(),
+                "agent_name": str(session.get("agent_name") or "").strip(),
+            },
+        ),
+        trace_refs=trace_refs,
+        failed_at=failed_at,
+    )
 
 def _decref_session_lock(state: RuntimeState, session_id: str, lock: threading.Lock) -> None:
     with state.session_lock_guard:
@@ -218,13 +280,21 @@ def update_task_run_result(
     stderr_text: str,
     summary: str,
     ref: str,
+    trace_payload: dict[str, Any] | None = None,
+    codex_failure: dict[str, Any] | None = None,
 ) -> None:
+    next_trace_payload = dict(trace_payload or load_task_trace(root, task_id_text) or {})
+    failure_payload = codex_failure if isinstance(codex_failure, dict) else {}
+    if failure_payload:
+        next_trace_payload["codex_failure"] = failure_payload
+    else:
+        next_trace_payload.pop("codex_failure", None)
     update_task_run_result_files(
         root,
         task_id_text,
         stdout_text=stdout_text,
         stderr_text=stderr_text,
-        trace_payload=load_task_trace(root, task_id_text),
+        trace_payload=next_trace_payload,
     )
     update_task_run_record(
         root,
@@ -236,6 +306,7 @@ def update_task_run_result(
             "duration_ms": duration_ms,
             "summary": summary,
             "ref": ref,
+            "codex_failure": failure_payload,
             "updated_at": iso_ts(now_local()),
         },
     )
@@ -585,6 +656,18 @@ def execute_task_worker(
             stderr_text=stderr_text,
             summary=summary,
         )
+        codex_failure = _task_run_codex_failure(
+            cfg.root,
+            task_id_text=task_id_text,
+            session=session,
+            status=status,
+            summary=summary,
+            stderr_text=stderr_text,
+            failed_at=end_at,
+        )
+        trace_payload = dict(load_task_trace(cfg.root, task_id_text) or {})
+        if codex_failure:
+            trace_payload["codex_failure"] = codex_failure
         update_task_run_result(
             cfg.root,
             task_id_text,
@@ -596,6 +679,8 @@ def execute_task_worker(
             stderr_text=stderr_text,
             summary=summary,
             ref=ref,
+            trace_payload=trace_payload,
+            codex_failure=codex_failure,
         )
         append_task_event(
             cfg.root,
@@ -607,6 +692,7 @@ def execute_task_worker(
                 "summary": summary,
                 "duration_ms": duration_ms,
                 "ref": ref,
+                "codex_failure": codex_failure,
             },
         )
         persist_event(

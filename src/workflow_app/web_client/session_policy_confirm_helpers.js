@@ -434,6 +434,7 @@
         },
         ui_progress: analysisUiProgress,
       },
+      codex_failure: normalizeCodexFailure(payload.codex_failure),
     };
   }
 

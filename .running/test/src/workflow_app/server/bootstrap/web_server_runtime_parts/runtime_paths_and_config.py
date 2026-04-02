@@ -60,6 +60,7 @@ from ...runtime.training_center_runtime import (
     list_training_agents_overview,
     list_training_queue_items,
     post_role_creation_message,
+    retry_role_creation_session_analysis,
     rename_training_queue_item,
     remove_training_queue_item,
     rollback_training_queue_round_increment,

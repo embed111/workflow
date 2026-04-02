@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -353,7 +354,8 @@ def extract_agent_text(event: dict[str, Any]) -> str:
 
 
 def run_codex(prompt: str, agent_search_root: Path) -> int:
-    codex_bin = shutil.which("codex")
+    override = str(os.getenv("WORKFLOW_CODEX_BIN") or "").strip()
+    codex_bin = override or str(shutil.which("codex.cmd") or shutil.which("codex") or "").strip()
     if not codex_bin:
         print("codex command not found in PATH", file=sys.stderr)
         return 127

@@ -135,6 +135,8 @@ def create_assignment_graph(cfg: Any, body: dict[str, Any]) -> dict[str, Any]:
         reconcile_running=False,
     )
     _assignment_store_snapshot(cfg.root, task_record=task_record, node_records=node_records)
+    if _assignment_is_workflow_ui_global_graph_payload(graph_payload):
+        ticket_id = _assignment_bind_workflow_ui_global_graph_ticket(cfg.root, ticket_id) or ticket_id
     audit_id = _assignment_write_audit_entry(
         cfg.root,
         ticket_id=ticket_id,
@@ -195,6 +197,7 @@ def create_assignment_node(
         include_test_data=include_test_data,
         reconcile_running=True,
     )
+    ticket_id = str(snapshot["graph_row"].get("ticket_id") or ticket_id).strip()
     conn = connect_db(cfg.root)
     try:
         conn.execute("BEGIN")
@@ -336,6 +339,7 @@ def deliver_assignment_artifact(
         include_test_data=include_test_data,
         reconcile_running=True,
     )
+    ticket_id = str(snapshot["graph_row"].get("ticket_id") or ticket_id).strip()
     selected_node = snapshot["node_map_by_id"].get(node_id) or {}
     if not selected_node:
         raise AssignmentCenterError(404, "assignment node not found", "assignment_node_not_found")
@@ -406,6 +410,7 @@ def mark_assignment_node_success(
         include_test_data=include_test_data,
         reconcile_running=True,
     )
+    ticket_id = str(snapshot["graph_row"].get("ticket_id") or ticket_id).strip()
     task_record = dict(snapshot["graph_row"])
     node_records = [dict(item) for item in list(snapshot["all_nodes"] or [])]
     selected_node = next(
@@ -509,6 +514,7 @@ def mark_assignment_node_failed(
         include_test_data=include_test_data,
         reconcile_running=True,
     )
+    ticket_id = str(snapshot["graph_row"].get("ticket_id") or ticket_id).strip()
     task_record = dict(snapshot["graph_row"])
     node_records = [dict(item) for item in list(snapshot["all_nodes"] or [])]
     selected_node = next(
@@ -605,6 +611,7 @@ def rerun_assignment_node(
         include_test_data=include_test_data,
         reconcile_running=True,
     )
+    ticket_id = str(snapshot["graph_row"].get("ticket_id") or ticket_id).strip()
     task_record = dict(snapshot["graph_row"])
     node_records = [dict(item) for item in list(snapshot["all_nodes"] or [])]
     selected_node = next(
@@ -703,6 +710,7 @@ def override_assignment_node_status(
         include_test_data=include_test_data,
         reconcile_running=True,
     )
+    ticket_id = str(snapshot["graph_row"].get("ticket_id") or ticket_id).strip()
     task_record = dict(snapshot["graph_row"])
     node_records = [dict(item) for item in list(snapshot["all_nodes"] or [])]
     selected_node = next(
@@ -894,6 +902,7 @@ def delete_assignment_node(
         include_test_data=include_test_data,
         reconcile_running=True,
     )
+    ticket_id = str(snapshot["graph_row"].get("ticket_id") or ticket_id).strip()
     task_record = dict(snapshot["graph_row"])
     node_records = [dict(item) for item in list(snapshot["all_nodes"] or [])]
     deleted_node = next(

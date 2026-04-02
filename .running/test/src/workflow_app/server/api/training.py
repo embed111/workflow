@@ -344,6 +344,21 @@ def try_handle_post(handler, cfg, state, ctx: dict) -> bool:
             handler.send_json(exc.status_code, payload)
         return True
 
+    mrcsr = re.fullmatch(r"/api/training/role-creation/sessions/([0-9A-Za-z._:-]+)/retry-analysis", path)
+    if mrcsr:
+        try:
+            data = ws.retry_role_creation_session_analysis(
+                cfg,
+                ws.safe_token(mrcsr.group(1), "", 160),
+                body,
+            )
+            handler.send_json(200, {"ok": True, **data})
+        except ws.TrainingCenterError as exc:
+            payload = {"ok": False, "error": str(exc), "code": exc.code}
+            payload.update(exc.extra)
+            handler.send_json(exc.status_code, payload)
+        return True
+
     mrcss = re.fullmatch(r"/api/training/role-creation/sessions/([0-9A-Za-z._:-]+)/start", path)
     if mrcss:
         try:

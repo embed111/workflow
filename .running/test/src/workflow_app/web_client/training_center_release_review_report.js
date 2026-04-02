@@ -144,6 +144,7 @@
       next.release_review_state = progress.failed ? 'publish_failed' : 'publish_running';
       next.can_discard = false;
       if (progress.active) next.can_confirm = false;
+      if (progress.active) next.publish_codex_failure = null;
       if (progress.failed && !safe(next.publish_error).trim()) {
         next.publish_error = safe(progress.error_message).trim();
       }
@@ -160,6 +161,8 @@
       next.publish_version = '';
       next.publish_status = '';
       next.publish_error = '';
+      next.codex_failure = null;
+      next.publish_codex_failure = null;
       next.execution_logs = [];
       next.fallback = {};
       next.can_discard = false;
@@ -437,14 +440,25 @@
     return list;
   }
 
-  function renderTrainingCenterReleaseReport(host, effectiveReview, progress, reportFailure) {
+  function renderTrainingCenterReleaseReport(host, effectiveReview, progress, reportCodexFailure, reportFailure) {
     if (!host) return;
     host.innerHTML = '';
     const stack = document.createElement('div');
     stack.className = 'tc-release-report-stack';
     host.appendChild(stack);
+    let moduleCount = 0;
 
-    if (reportFailure) {
+    if (codexFailureHasValue(reportCodexFailure)) {
+      const failureHost = document.createElement('div');
+      stack.appendChild(failureHost);
+      renderCodexFailureCard(failureHost, reportCodexFailure, {
+        title: '发布报告失败',
+        context: {
+          agentId: safe(effectiveReview && effectiveReview.agent_id).trim(),
+        },
+      });
+      moduleCount += 1;
+    } else if (reportFailure) {
       const alert = document.createElement('section');
       alert.className = 'tc-release-report-alert danger';
       const titleNode = document.createElement('div');
@@ -461,12 +475,12 @@
           alert.appendChild(line);
         });
       stack.appendChild(alert);
+      moduleCount += 1;
     }
 
     const report = effectiveReview && effectiveReview.report && typeof effectiveReview.report === 'object'
       ? effectiveReview.report
       : {};
-    let moduleCount = 0;
     const coreEntries = [
       {
         label: '目标版本',
@@ -736,6 +750,6 @@
       refs.bodyNode.innerHTML = '';
       const host = document.createElement('div');
       refs.bodyNode.appendChild(host);
-      renderTrainingCenterReleaseReport(host, review, null, null);
+      renderTrainingCenterReleaseReport(host, review, null, null, null);
     }
   }

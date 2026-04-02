@@ -1,0 +1,107 @@
+{
+  "ok": true,
+  "schedule": {
+    "schedule_id": "sch-20260330-32a4f387",
+    "schedule_name": "定时任务单主图检查",
+    "enabled": true,
+    "assigned_agent_id": "agent_gen",
+    "assigned_agent_name": "agent_gen",
+    "launch_summary": "验证定时任务命中后是否仍追加到全局主图。",
+    "execution_checklist": "1. 检查任务中心节点是否创建。\\n2. 检查是否复用全局主图。",
+    "done_definition": "任务中心出现对应节点且不新增第三张活动图。",
+    "priority": "P1",
+    "priority_value": 1,
+    "expected_artifact": "定时任务执行记录.html",
+    "delivery_mode": "none",
+    "delivery_receiver_agent_id": "",
+    "delivery_receiver_agent_name": "",
+    "rule_sets": [
+      {
+        "rule_type": "once",
+        "date_times": [
+          "2026-03-30T09:43:00+08:00"
+        ]
+      }
+    ],
+    "rule_labels": [
+      "定时 2026-03-30 09:43"
+    ],
+    "editor_rule_inputs": {
+      "monthly": {
+        "enabled": false,
+        "days_text": "",
+        "times_text": ""
+      },
+      "weekly": {
+        "enabled": false,
+        "weekdays": [],
+        "times_text": ""
+      },
+      "daily": {
+        "enabled": false,
+        "times_text": ""
+      },
+      "once": {
+        "enabled": true,
+        "date_times_text": "2026-03-30 09:43"
+      }
+    },
+    "timezone": "Asia/Shanghai",
+    "next_trigger_at": "",
+    "last_trigger_at": "2026-03-30T09:43:00+08:00",
+    "last_result_status": "queued",
+    "last_result_status_text": "已建单待调度",
+    "last_result_ticket_id": "asg-20260326-122459-a50c6f",
+    "last_result_node_id": "node-20260330-094413-974fb0",
+    "created_at": "2026-03-30T09:43:45+08:00",
+    "updated_at": "2026-03-30T09:43:45+08:00",
+    "deleted_at": "",
+    "next_trigger_text": ""
+  },
+  "future_triggers": [],
+  "recent_triggers": [
+    {
+      "trigger_instance_id": "sti-20260330-82a65f8c",
+      "schedule_id": "sch-20260330-32a4f387",
+      "planned_trigger_at": "2026-03-30T09:43:00+08:00",
+      "trigger_rule_summary": "定时 2026-03-30 09:43",
+      "trigger_rule_keys": [
+        "once:2026-03-30T09:43:00+08:00"
+      ],
+      "merged_rule_count": 1,
+      "trigger_status": "queued",
+      "trigger_message": "resume_scheduler_requested",
+      "assignment_ticket_id": "asg-20260326-122459-a50c6f",
+      "assignment_node_id": "node-20260330-094413-974fb0",
+      "schedule_name_snapshot": "定时任务单主图检查",
+      "assigned_agent_id_snapshot": "agent_gen",
+      "launch_summary_snapshot": "验证定时任务命中后是否仍追加到全局主图。",
+      "execution_checklist_snapshot": "1. 检查任务中心节点是否创建。\\n2. 检查是否复用全局主图。",
+      "done_definition_snapshot": "任务中心出现对应节点且不新增第三张活动图。",
+      "expected_artifact_snapshot": "定时任务执行记录.html",
+      "delivery_mode_snapshot": "none",
+      "delivery_receiver_agent_id_snapshot": "",
+      "created_at": "2026-03-30T09:43:45+08:00",
+      "updated_at": "2026-03-30T09:44:25+08:00",
+      "result_status": "queued",
+      "result_status_text": "已建单待调度",
+      "assignment_status": "ready",
+      "assignment_status_text": "待开始",
+      "assignment_graph_name": "",
+      "assignment_node_name": "定时任务单主图检查 / 2026-03-30 09:43:00"
+    }
+  ],
+  "related_task_refs": [
+    {
+      "trigger_instance_id": "sti-20260330-82a65f8c",
+      "assignment_ticket_id": "asg-20260326-122459-a50c6f",
+      "assignment_node_id": "node-20260330-094413-974fb0",
+      "result_status": "queued",
+      "result_status_text": "已建单待调度",
+      "assignment_graph_name": "",
+      "assignment_node_name": "定时任务单主图检查 / 2026-03-30 09:43:00",
+      "planned_trigger_at": "2026-03-30T09:43:00+08:00"
+    }
+  ],
+  "timezone": "Asia/Shanghai"
+}

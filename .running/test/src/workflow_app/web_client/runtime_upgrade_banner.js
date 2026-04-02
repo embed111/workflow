@@ -163,6 +163,7 @@
 
     node._runtimeUpgradeRefs = {
       wrap,
+      body,
       meta,
       statusChip,
       versions,
@@ -282,7 +283,16 @@
   function runtimeUpgradeRecentSuccessVisible() {
     const ackKey = runtimeUpgradeSuccessReviewKey();
     if (!ackKey) return false;
-    return readRuntimeUpgradeAckKey() !== ackKey;
+    return runtimeUpgradeRecentTerminalVisible(['success']) && readRuntimeUpgradeAckKey() !== ackKey;
+  }
+
+  function runtimeUpgradePassiveVisible() {
+    const info = state.runtimeUpgrade || {};
+    return !!info.can_upgrade &&
+      !info.request_pending &&
+      !info.reconnecting &&
+      !runtimeUpgradeRecentSuccessVisible() &&
+      !runtimeUpgradeRecentFailureVisible();
   }
 
   function runtimeUpgradePollDelayMs() {
@@ -535,16 +545,32 @@
     }
     if (runtimeUpgradeRecentFailureVisible()) {
       if (lastStatus === 'rollback_success') {
-        return '新版本健康检查失败，系统已自动回滚到上一版本。';
+        return runtimeUpgradeFailureReasonText() || '新版本健康检查失败，系统已自动回滚到上一版本。';
       }
       if (lastStatus === 'failed') {
-        return safe(runtimeUpgradeLastAction().reason).trim() || '正式环境升级失败。';
+        return runtimeUpgradeFailureReasonText() || '正式环境升级失败。';
       }
     }
     if (safe(info.blocking_reason).trim()) {
       return safe(info.blocking_reason).trim();
     }
     return '当前无运行中任务，可升级到已通过 test 门禁的新版本。';
+  }
+
+  function runtimeUpgradeFailureReasonText() {
+    const last = runtimeUpgradeLastAction();
+    const reason = safe(last.reason).trim().toLowerCase();
+    const timeoutSeconds = Math.max(0, Number(last.health_timeout_seconds || 0) || 0);
+    if (!reason) return '';
+    if (reason === 'health_timeout') {
+      return timeoutSeconds > 0
+        ? ('新版本在 ' + timeoutSeconds + ' 秒内未完成健康启动，系统已自动回滚到上一版本。')
+        : '新版本在健康检查窗口内未启动成功，系统已自动回滚到上一版本。';
+    }
+    if (reason === 'launcher_exited') {
+      return '新版本启动进程异常退出，系统已自动回滚到上一版本。';
+    }
+    return safe(last.reason).trim();
   }
 
   function runtimeUpgradeMetaText(progressInfo) {
@@ -683,8 +709,18 @@
     node.classList.remove('hidden');
     const progressInfo = runtimeUpgradeProgressModel();
     const successReviewActive = runtimeUpgradeSuccessReviewActive();
-    refs.versions.style.display = 'none';
-    refs.versions.setAttribute('aria-hidden', 'true');
+    const passiveMode = runtimeUpgradePassiveVisible();
+    const versionInfo = runtimeUpgradeDisplayVersions();
+    node.classList.toggle('is-passive', passiveMode);
+    refs.wrap.classList.toggle('is-passive', passiveMode);
+    refs.currentLabel.textContent = safe(versionInfo.leftLabel).trim() || '当前版本';
+    refs.currentValue.textContent = safe(versionInfo.leftValue).trim() || '未读取';
+    refs.candidateLabel.textContent = safe(versionInfo.rightLabel).trim() || '候选版本';
+    refs.candidateValue.textContent = safe(versionInfo.rightValue).trim() || '暂无候选';
+    refs.versions.style.display = 'grid';
+    refs.versions.setAttribute('aria-hidden', 'false');
+    refs.body.style.display = passiveMode ? 'none' : 'grid';
+    refs.body.setAttribute('aria-hidden', passiveMode ? 'true' : 'false');
     refs.meta.textContent = runtimeUpgradeMetaText(progressInfo);
     const chip = runtimeUpgradeStatusChip(progressInfo);
     refs.statusChip.className = 'runtime-upgrade-status-chip is-' + safe(chip.tone).trim();
@@ -753,21 +789,33 @@
     const prev = state.runtimeUpgrade || {};
     const nextLastAction = data.last_action && typeof data.last_action === 'object' ? data.last_action : {};
     const nextLastStatus = safe(nextLastAction.status).trim().toLowerCase();
+    const nextRequestPending = !!data.request_pending;
+    const nextRequestCandidateVersion = safe(
+      data.request_candidate_version || data.candidate_version || prev.request_candidate_version
+    ).trim();
+    const nextRequestRequestedAt = safe(
+      data.request_requested_at || (nextLastAction && nextLastAction.requested_at) || prev.request_requested_at
+    ).trim();
+    const nextCurrentVersion = safe(data.current_version).trim();
     const isTerminalStatus = nextLastStatus === 'success' || nextLastStatus === 'rollback_success' || nextLastStatus === 'failed';
+    const switchingStatus = nextLastStatus === 'requested' || nextLastStatus === 'switching';
+    const hasSwitchIdentity = !!nextRequestCandidateVersion || !!nextRequestRequestedAt;
+    const switchApplied = !!nextRequestCandidateVersion && !!nextCurrentVersion && nextCurrentVersion === nextRequestCandidateVersion;
+    const reconnecting = !isTerminalStatus && !switchApplied && (nextRequestPending || (switchingStatus && hasSwitchIdentity));
     state.runtimeUpgrade = Object.assign({}, prev, {
       environment: safe(data.environment).trim(),
-      current_version: safe(data.current_version).trim(),
+      current_version: nextCurrentVersion,
       candidate_version: safe(data.candidate_version).trim(),
-      request_candidate_version: safe(data.request_candidate_version || data.candidate_version || prev.request_candidate_version).trim(),
-      request_requested_at: safe(data.request_requested_at || (nextLastAction && nextLastAction.requested_at) || prev.request_requested_at).trim(),
+      request_candidate_version: nextRequestCandidateVersion,
+      request_requested_at: nextRequestRequestedAt,
       banner_visible: !!data.banner_visible,
       can_upgrade: !!data.can_upgrade,
-      request_pending: !!data.request_pending,
+      request_pending: nextRequestPending,
       blocking_reason: safe(data.blocking_reason).trim(),
       last_action: nextLastAction,
       upgrade_highlights: Array.isArray(data.upgrade_highlights) ? data.upgrade_highlights.slice(0, 8) : [],
-      reconnecting: isTerminalStatus ? false : !!prev.reconnecting,
-      offline_seen: isTerminalStatus ? false : !!prev.offline_seen,
+      reconnecting: reconnecting,
+      offline_seen: reconnecting ? !!prev.offline_seen : false,
       status_error: '',
     });
     syncRuntimeUpgradeSuccessHold();

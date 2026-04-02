@@ -152,6 +152,112 @@ def post_role_creation_message(cfg: Any, session_id: str, body: dict[str, Any]) 
     return get_role_creation_session_detail(cfg.root, session_key)
 
 
+def retry_role_creation_session_analysis(cfg: Any, session_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    _ensure_role_creation_tables(cfg.root)
+    session_key = safe_token(str(session_id or ""), "", 160)
+    if not session_key:
+        raise TrainingCenterError(400, "session_id required", "role_creation_session_id_required")
+    operator = str(body.get("operator") or "web-user")
+    current_detail = get_role_creation_session_detail(cfg.root, session_key)
+    session_summary = dict(current_detail.get("session") or {})
+    queue_status = _normalize_role_creation_queue_state(
+        session_summary.get("message_processing_status"),
+        default="idle",
+    )
+    if queue_status in {"pending", "running"}:
+        return current_detail
+    if _normalize_session_status(session_summary.get("status")) == "completed":
+        raise TrainingCenterError(
+            409,
+            "当前角色创建已完成，不能再重试本轮分析",
+            "role_creation_session_completed",
+            {"session_id": session_key},
+        )
+    now_text = _tc_now_text()
+    retry_message_ids: list[str] = []
+    conn = connect_db(cfg.root)
+    try:
+        conn.execute("BEGIN")
+        _fetch_session_row(conn, session_key)
+        messages = _list_session_messages(conn, session_key)
+        retry_message_ids = [
+            str(message.get("message_id") or "").strip()
+            for message in list(messages or [])
+            if str(message.get("role") or "").strip().lower() == "user"
+            and _normalize_message_type(message.get("message_type")) == "chat"
+            and _normalize_role_creation_user_message_state(
+                message.get("processing_state") or (message.get("meta") or {}).get("processing_state"),
+                default="processed",
+            ) in {"failed", "pending"}
+        ]
+        if not retry_message_ids:
+            raise TrainingCenterError(
+                409,
+                "当前没有失败或待处理消息可重试",
+                "role_creation_retry_no_pending_messages",
+                {
+                    "session_id": session_key,
+                    "message_processing_status": queue_status,
+                    "unhandled_user_message_count": int(session_summary.get("unhandled_user_message_count") or 0),
+                },
+            )
+        _update_role_creation_user_message_processing_state(
+            conn,
+            session_id=session_key,
+            message_ids=retry_message_ids,
+            processing_state="pending",
+        )
+        updated_messages = _list_session_messages(conn, session_key)
+        _update_role_creation_message_queue_state(
+            conn,
+            session_id=session_key,
+            queue_status="pending",
+            queue_error="",
+            batch_id="",
+            updated_at=now_text,
+            messages=updated_messages,
+        )
+        _append_message(
+            conn,
+            session_id=session_key,
+            role="system",
+            content="已手动触发本轮分析重试。",
+            attachments=[],
+            message_type="system_task_update",
+            meta={
+                "retry_analysis": True,
+                "retry_message_ids": list(retry_message_ids),
+            },
+            created_at=now_text,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    worker_started = _ensure_role_creation_message_worker(
+        cfg,
+        session_id=session_key,
+        operator=operator,
+    )
+    append_training_center_audit(
+        cfg.root,
+        action="role_creation_analysis_retry_requested",
+        operator=operator,
+        target_id=session_key,
+        detail={
+            "session_id": session_key,
+            "retry_message_ids": list(retry_message_ids),
+            "worker_started": bool(worker_started),
+        },
+    )
+    detail = get_role_creation_session_detail(cfg.root, session_key)
+    detail["retry_requested"] = {
+        "message_count": len(retry_message_ids),
+        "worker_started": bool(worker_started),
+        "requested_at": now_text,
+    }
+    return detail
+
+
 def start_role_creation_session(cfg: Any, session_id: str, body: dict[str, Any]) -> dict[str, Any]:
     _ensure_role_creation_tables(cfg.root)
     session_key = safe_token(str(session_id or ""), "", 160)
@@ -162,6 +268,7 @@ def start_role_creation_session(cfg: Any, session_id: str, body: dict[str, Any])
     session_summary = dict(current_detail.get("session") or {})
     role_spec = dict(current_detail.get("role_spec") or {})
     missing_fields = list((current_detail.get("profile") or {}).get("missing_fields") or [])
+    start_gate = dict(role_spec.get("start_gate") or {})
     status = _normalize_session_status(session_summary.get("status"))
     if status == "completed":
         raise TrainingCenterError(409, "当前角色创建已完成，不能再次启动", "role_creation_session_completed")
@@ -182,7 +289,11 @@ def start_role_creation_session(cfg: Any, session_id: str, body: dict[str, Any])
             409,
             "当前草案信息不足，不能开始创建",
             "role_creation_spec_incomplete",
-            {"missing_fields": missing_fields, "missing_labels": _missing_field_labels(missing_fields)},
+            {
+                "missing_fields": missing_fields,
+                "missing_labels": _missing_field_labels(missing_fields),
+                "start_gate_blockers": [str(item).strip() for item in list(start_gate.get("blockers") or []) if str(item).strip()],
+            },
         )
     dialogue_agent = _resolve_role_creation_dialogue_agent(cfg)
     workspace_result = _initialize_role_workspace(

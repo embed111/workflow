@@ -48,6 +48,7 @@
     const opts = options && typeof options === 'object' ? options : {};
     state.tcLoopMode = 'create';
     if (!opts.preserveTab) state.tcLoopCreateTab = 'basic';
+    if (!opts.preserveRightTab) state.tcLoopRightTab = 'tasks';
     renderTrainingLoop();
     renderTrainingCenterQueue();
     scrollTrainingLoopCenterToTop();

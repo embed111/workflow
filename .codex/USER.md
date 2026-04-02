@@ -1,12 +1,12 @@
-# Workflow User Context
+﻿# 工作区用户上下文
 
-## Stable Preferences
-- Prefer direct execution over long upfront discussion.
-- Prefer concise delivery with concrete evidence paths and minimal validation steps.
-- Prefer stable UI behavior, controllable information density, and visible workflow progress.
-- Prefer strict `AGENTS.md` governance and clean separation between runtime data and memory data.
-- Prefer no extra persistent dependencies unless clearly required.
+## 稳定偏好
+- 偏好直接执行，而不是前置长讨论。
+- 偏好简洁交付，并附上明确证据路径和最小验证步骤。
+- 偏好 UI 行为稳定、信息密度可控、workflow 进度可见。
+- 偏好严格遵守 `AGENTS.md` 治理，并保持运行态数据与记忆数据彻底分离。
+- 除非明确需要，否则不增加额外的持久依赖。
 
-## Collaboration Notes
-- Use the current workspace as the only writable scope for this turn.
-- Provide traceable proof for memory read/write and minimal regression after structural changes.
+## 协作说明
+- 本轮仅把当前工作区作为可写范围。
+- 对记忆读写和结构调整后的最小回归，提供可追溯证据。

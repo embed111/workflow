@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "queue": {
+    "enabled": false,
+    "updated_at": "2026-03-30T09:41:43+08:00",
+    "candidate_total": 1,
+    "active_slot_busy": true,
+    "head_report_id": "dr-20260330-c4255b98ed",
+    "active_report_id": "dr-20260330-c4255b98ed",
+    "active_display_id": "DTS-00001",
+    "active_summary": "角色创建任务映射缺失",
+    "active_task_priority": "P0",
+    "next_report_id": "",
+    "next_display_id": "",
+    "next_summary": "",
+    "next_task_priority": "",
+    "next_reported_at": ""
+  }
+}

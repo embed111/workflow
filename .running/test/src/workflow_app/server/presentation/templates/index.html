@@ -66,7 +66,7 @@
     <div class='tabs'>
       <button class='tab active' data-tab='chat'>对话</button>
       <button class='tab' data-tab='training'>工作记录与训练</button>
-      <button class='tab' data-tab='training-center'>训练中心</button>
+      <button class='tab' data-tab='training-center'>角色中心</button>
       <button class='tab' data-tab='task-center'>任务中心</button>
       <button class='tab' data-tab='schedule-center'>定时任务</button>
       <button class='tab' data-tab='requirement-bug'>需求与缺陷</button>
@@ -221,14 +221,14 @@
     <section id='pane-training-center' class='pane'>
       <div class='panel training-center-wrap'>
         <div class='row between'>
-          <div class='card-title tc-page-title'>训练中心</div>
-          <div id='tcRootMeta' class='hint'>训练对象是角色工作区能力，独立于会话流程</div>
+          <div class='card-title tc-page-title'>角色中心</div>
+          <div id='tcRootMeta' class='hint'>围绕角色资产、创建角色和训练优化统一运营，独立于普通会话流程</div>
         </div>
         <div class='tc-toolbar'>
           <div class='tc-module-tabs'>
             <button id='tcTabAgentsBtn' class='active' type='button'>角色资产与版本</button>
             <button id='tcTabCreateRoleBtn' type='button'>创建角色</button>
-            <button id='tcTabOpsBtn' type='button'>训练闭环</button>
+            <button id='tcTabOpsBtn' type='button'>训练优化</button>
           </div>
           <span id='tcSelectedAgentMeta' class='hint'>未选择角色</span>
         </div>
@@ -411,6 +411,7 @@
                   <div class='rc-chat-head-main'>
                     <div id='rcSessionTitle' class='card-title'>创建角色</div>
                     <div id='rcSessionMeta' class='hint'>先创建草稿，再通过对话补齐角色目标、能力边界和场景</div>
+                    <div id='rcFailureCardHost'></div>
                   </div>
                   <div class='rc-chat-actions'>
                     <button id='rcStartSessionBtn' type='button'>开始创建</button>
@@ -470,8 +471,8 @@
               <aside class='tc-side tc-loop-side'>
                 <div class='tc-loop-side-head'>
                   <div class='tc-loop-side-heading'>
-                    <div class='tc-loop-side-title'>训练任务</div>
-                    <div id='tcLoopQueueSummary' class='tc-loop-side-summary'>按状态筛选并查看当前闭环</div>
+                    <div class='tc-loop-side-title'>优化会话</div>
+                    <div id='tcLoopQueueSummary' class='tc-loop-side-summary'>按状态筛选并查看当前优化会话</div>
                   </div>
                   <div class='tc-loop-side-actions'>
                     <button id='tcDispatchNextBtn' class='alt' type='button'>调度下一个</button>
@@ -479,7 +480,7 @@
                 </div>
 
                 <div class='tc-loop-task-toolbar'>
-                  <input id='tcLoopTaskSearchInput' type='text' placeholder='搜索任务 / 能力目标'/>
+                  <input id='tcLoopTaskSearchInput' type='text' placeholder='搜索会话 / 能力目标'/>
                   <button id='tcRefreshQueueBtn' class='alt' type='button'>刷新</button>
                 </div>
 
@@ -513,7 +514,7 @@
 
             <div class='tc-loop-form-cache' aria-hidden='true'>
               <select id='tcPlanTargetAgentSelect'></select>
-              <input id='tcPlanGoalInput' type='text'/>
+              <textarea id='tcPlanGoalInput' rows='4'></textarea>
               <textarea id='tcPlanTasksInput' rows='5'></textarea>
               <textarea id='tcPlanAcceptanceInput' rows='4'></textarea>
               <select id='tcPlanPrioritySelect'>

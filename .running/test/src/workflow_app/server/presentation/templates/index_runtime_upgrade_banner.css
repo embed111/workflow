@@ -1,9 +1,13 @@
 .runtime-upgrade-banner {
   position: fixed;
-  top: 16px;
-  right: 18px;
+  top: 14px;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translateX(-50%);
   z-index: 2200;
-  width: min(400px, calc(100vw - 24px));
+  width: min(560px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
   box-sizing: border-box;
   --runtime-upgrade-accent: #3370ff;
   --runtime-upgrade-accent-strong: #245bdb;
@@ -32,7 +36,22 @@
   padding: 14px;
   width: 100%;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: auto;
+}
+
+.runtime-upgrade-banner.is-passive {
+  width: min(420px, calc(100vw - 24px));
+}
+
+.runtime-upgrade-shell.is-passive {
+  gap: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 10px 24px rgba(31, 35, 41, 0.1);
+}
+
+.runtime-upgrade-shell.is-passive .runtime-upgrade-footer {
+  padding-top: 0;
+  border-top: none;
 }
 
 .runtime-upgrade-head,
@@ -339,7 +358,9 @@
     left: 12px;
     right: 12px;
     top: 12px;
+    bottom: auto;
     width: auto;
+    transform: none;
   }
 
   .runtime-upgrade-shell {

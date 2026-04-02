@@ -8,7 +8,7 @@
         : processing.text;
     }
     if (processing.failed && processing.unhandledCount > 0) {
-      return '有 ' + String(processing.unhandledCount) + ' 条消息处理失败，继续发送会自动重试';
+      return '有 ' + String(processing.unhandledCount) + ' 条消息处理失败，请点击“重试本轮分析”';
     }
     const preview = safe(summary.last_message_preview).trim();
     if (preview) return preview;
@@ -93,6 +93,7 @@
     const createdAgent = roleCreationCurrentCreatedAgent();
     const dialogueAgent = roleCreationCurrentDialogueAgent();
     const processing = roleCreationCurrentProcessingInfo();
+    const failureHost = $('rcFailureCardHost');
     const mainGraphTicketId = roleCreationMainGraphTicketId(session, detail);
     const draftMeta = $('rcDraftMeta');
     const sessionTitle = $('rcSessionTitle');
@@ -170,12 +171,21 @@
           ? (processing.text + ' · 当前累计待处理 ' + String(processing.unhandledCount) + ' 条，可继续追加消息')
           : (processing.text + ' · 可继续追加消息');
       } else if (processing.failed && processing.unhandledCount > 0) {
-        composerMeta.textContent = '上一轮处理失败，继续发送会自动重试未处理消息';
+        composerMeta.textContent = '上一轮处理失败，请先点击“重试本轮分析”';
       } else {
         composerMeta.textContent = count > 0
           ? '当前消息已挂载 ' + String(count) + ' 张图片'
           : '同一条消息可同时发送图片和文字';
       }
+    }
+    if (failureHost) {
+      renderCodexFailureCard(failureHost, detail.codex_failure || session.codex_failure, {
+        title: '分析失败原因',
+        compact: true,
+        context: {
+          sessionId: safe(session.session_id).trim(),
+        },
+      });
     }
     const canStart = !!profile.can_start
       && safe(session.status).trim().toLowerCase() === 'draft'

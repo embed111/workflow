@@ -132,6 +132,7 @@
       duration_ms: Number(item.duration_ms || 0),
       command: command,
       trace_available: !!item.trace_available,
+      codex_failure: normalizeCodexFailure(item.codex_failure),
     };
   }
 

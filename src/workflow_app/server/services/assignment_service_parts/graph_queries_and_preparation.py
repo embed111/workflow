@@ -1,6 +1,7 @@
 
 
 def create_assignment_graph(cfg: Any, body: dict[str, Any]) -> dict[str, Any]:
+    _ensure_assignment_support_tables(cfg.root)
     operator = _default_assignment_operator(body.get("operator"))
     now_text = iso_ts(now_local())
     explicit_nodes = body.get("nodes")
@@ -589,6 +590,7 @@ def create_assignment_node(
     *,
     include_test_data: bool = True,
 ) -> dict[str, Any]:
+    _ensure_assignment_support_tables(cfg.root)
     ticket_id = safe_token(str(ticket_id_text or ""), "", 160)
     if not ticket_id:
         raise AssignmentCenterError(400, "ticket_id required", "ticket_id_required")
@@ -664,6 +666,115 @@ def create_assignment_node(
             scheduler_state_payload=snapshot["scheduler"],
         ),
         "audit_id": audit_id,
+    }
+
+
+def create_assignment_nodes_batch(
+    cfg: Any,
+    ticket_id_text: str,
+    body: dict[str, Any],
+    *,
+    include_test_data: bool = True,
+) -> dict[str, Any]:
+    _ensure_assignment_support_tables(cfg.root)
+    ticket_id = safe_token(str(ticket_id_text or ""), "", 160)
+    if not ticket_id:
+        raise AssignmentCenterError(400, "ticket_id required", "ticket_id_required")
+    operator = _default_assignment_operator((body or {}).get("operator"))
+    raw_nodes = (body or {}).get("nodes")
+    if not isinstance(raw_nodes, list) or not raw_nodes:
+        raise AssignmentCenterError(400, "nodes required", "assignment_nodes_required")
+    now_text = iso_ts(now_local())
+    conn = connect_db(cfg.root)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        _ensure_graph_row_visible(conn, ticket_id, include_test_data=include_test_data)
+        node_payloads = [
+            _normalize_node_payload(conn, cfg, raw if isinstance(raw, dict) else {}, node_id="")
+            for raw in raw_nodes
+        ]
+        existing_nodes = _load_nodes(conn, ticket_id)
+        existing_node_ids = {str(node["node_id"]) for node in existing_nodes}
+        requested_node_ids = [str(node["node_id"]) for node in node_payloads]
+        if len(set(requested_node_ids)) != len(requested_node_ids):
+            raise AssignmentCenterError(409, "node_id duplicated", "node_id_duplicated")
+        duplicated_node_ids = sorted(node_id for node_id in requested_node_ids if node_id in existing_node_ids)
+        if duplicated_node_ids:
+            raise AssignmentCenterError(
+                409,
+                "node_id duplicated",
+                "node_id_duplicated",
+                {"node_ids": duplicated_node_ids},
+            )
+        existing_edges = [
+            (
+                str(edge.get("from_node_id") or "").strip(),
+                str(edge.get("to_node_id") or "").strip(),
+            )
+            for edge in _load_edges(conn, ticket_id)
+        ]
+        new_edges = _collect_edges_from_request(node_payloads=node_payloads, explicit_edges=[])
+        all_node_ids = existing_node_ids | set(requested_node_ids)
+        _validate_node_ids_exist(
+            all_node_ids=all_node_ids,
+            upstream_node_ids=[from_id for from_id, _to_id in new_edges],
+            downstream_node_ids=[to_id for _from_id, to_id in new_edges],
+        )
+        _assert_no_cycles(all_node_ids, existing_edges + new_edges)
+        _insert_graph_nodes(conn, ticket_id=ticket_id, node_payloads=node_payloads, created_at=now_text)
+        _insert_edges(conn, ticket_id=ticket_id, edges=new_edges, created_at=now_text)
+        _recompute_graph_statuses(conn, ticket_id)
+        audit_ids: list[str] = []
+        for node_payload in node_payloads:
+            audit_ids.append(
+                _write_assignment_audit(
+                    conn,
+                    ticket_id=ticket_id,
+                    node_id=str(node_payload["node_id"]),
+                    action="create_node",
+                    operator=operator,
+                    reason="create assignment node",
+                    target_status="pending",
+                    detail={
+                        "node_name": node_payload["node_name"],
+                        "assigned_agent_id": node_payload["assigned_agent_id"],
+                        "priority": int(node_payload["priority"]),
+                        "priority_label": assignment_priority_label(node_payload["priority"]),
+                        "upstream_node_ids": list(node_payload["upstream_node_ids"]),
+                        "downstream_node_ids": list(node_payload["downstream_node_ids"]),
+                        "expected_artifact": node_payload["expected_artifact"],
+                        "delivery_mode": node_payload["delivery_mode"],
+                        "delivery_receiver_agent_id": node_payload["delivery_receiver_agent_id"],
+                        "workspace_root": str(_assignment_workspace_root(cfg.root)),
+                        "created_via": "batch",
+                    },
+                    created_at=now_text,
+                )
+            )
+        snapshot = _current_assignment_snapshot(conn, ticket_id)
+        conn.commit()
+    finally:
+        conn.close()
+    _sync_assignment_workspace_snapshot(cfg.root, snapshot)
+    created_node_map = {
+        str(node.get("node_id") or "").strip(): dict(node)
+        for node in list(snapshot.get("serialized_nodes") or [])
+        if str(node.get("node_id") or "").strip()
+    }
+    created_nodes = [
+        created_node_map.get(node_id, {})
+        for node_id in requested_node_ids
+        if created_node_map.get(node_id, {})
+    ]
+    return {
+        "ticket_id": ticket_id,
+        "nodes": created_nodes,
+        "graph_overview": _graph_overview_payload(
+            snapshot["graph_row"],
+            metrics_summary=snapshot["metrics_summary"],
+            scheduler_state_payload=snapshot["scheduler"],
+        ),
+        "audit_ids": audit_ids,
     }
 
 

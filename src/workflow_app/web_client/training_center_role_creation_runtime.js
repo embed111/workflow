@@ -97,6 +97,33 @@
     return detail.profile && typeof detail.profile === 'object' ? detail.profile : {};
   }
 
+  function roleCreationCurrentStructuredSpecs() {
+    const detail = roleCreationCurrentDetail();
+    return detail.structured_specs && typeof detail.structured_specs === 'object'
+      ? detail.structured_specs
+      : {};
+  }
+
+  function roleCreationCurrentStartGate() {
+    const detail = roleCreationCurrentDetail();
+    if (detail.start_gate && typeof detail.start_gate === 'object') {
+      return detail.start_gate;
+    }
+    const profile = roleCreationCurrentProfile();
+    return profile.start_gate && typeof profile.start_gate === 'object' ? profile.start_gate : {};
+  }
+
+  function roleCreationCurrentAnalysisProgress() {
+    const detail = roleCreationCurrentDetail();
+    if (detail.analysis_progress && typeof detail.analysis_progress === 'object') {
+      return detail.analysis_progress;
+    }
+    const session = roleCreationCurrentSession();
+    return session.analysis_progress && typeof session.analysis_progress === 'object'
+      ? session.analysis_progress
+      : {};
+  }
+
   function roleCreationCurrentStages() {
     const detail = roleCreationCurrentDetail();
     return Array.isArray(detail.stages) ? detail.stages : [];
@@ -214,7 +241,10 @@
     } else if (status === 'idle' && totalUnhandled > 0) {
       status = 'pending';
     }
-    let text = safe(summary.message_processing_status_text).trim();
+    const progress = summary.analysis_progress && typeof summary.analysis_progress === 'object'
+      ? summary.analysis_progress
+      : {};
+    let text = safe(progress.status_text || summary.message_processing_status_text).trim();
     if (!text) {
       if (status === 'running') text = '分析中';
       else if (status === 'pending') text = '待分析';
@@ -228,6 +258,8 @@
       failed: status === 'failed',
       unhandledCount: totalUnhandled,
       error: safe(summary.message_processing_error).trim(),
+      stepLabel: safe(progress.current_step_label).trim(),
+      progress: progress,
     };
   }
 
@@ -250,11 +282,13 @@
       return safe(a && (a.message_id || a.client_message_id)).localeCompare(safe(b && (b.message_id || b.client_message_id)));
     });
     const processing = roleCreationCurrentProcessingInfo();
+    const progress = roleCreationCurrentAnalysisProgress();
     if (safe(session.session_id).trim() && processing.active) {
       merged.push({
         message_id: 'local-processing-placeholder',
         role: 'assistant',
-        content: processing.status === 'pending' ? '已收到，正在合并本轮消息…' : '分析中…',
+        content: safe(progress.placeholder_text || processing.text).trim()
+          || (processing.status === 'pending' ? '已收到，正在合并本轮消息…' : '分析中…'),
         attachments: [],
         message_type: 'chat',
         created_at: new Date().toISOString(),

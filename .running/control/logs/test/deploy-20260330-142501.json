@@ -1,0 +1,33 @@
+{
+    "test_gate":  {
+                      "status":  "passed",
+                      "evidence_path":  "C:\\work\\J-Agents\\workflow\\.running\\control\\reports\\test-gate-20260330-142501.json"
+                  },
+    "deploy_root":  "C:\\work\\J-Agents\\workflow\\.running\\test",
+    "finished_at":  "2026-03-30T06:25:01.6980443Z",
+    "runtime_root":  "C:\\work\\J-Agents\\workflow\\.running\\control\\runtime\\test",
+    "version":  "20260330-142501",
+    "prod_candidate":  {
+                           "version":  "20260330-142501",
+                           "test_batch_id":  "test-gate-20260330-142501",
+                           "candidate_meta_path":  "C:\\work\\J-Agents\\workflow\\.running\\control\\candidates\\20260330-142501\\candidate.json",
+                           "source_environment":  "test",
+                           "version_rank":  "20260330-142501",
+                           "evidence_path":  "C:\\work\\J-Agents\\workflow\\.running\\control\\reports\\test-gate-20260330-142501.json",
+                           "passed_at":  "2026-03-30T06:25:18.3868086Z",
+                           "candidate_app_root":  "C:\\work\\J-Agents\\workflow\\.running\\control\\candidates\\20260330-142501\\app"
+                       },
+    "deployment_metadata_path":  "C:\\work\\J-Agents\\workflow\\.running\\test\\.workflow-deployment.json",
+    "action":  "deploy",
+    "result":  "success",
+    "host":  "127.0.0.1",
+    "artifact_root":  "C:\\work\\J-Agents\\workflow\\.test\\evidence\\role-creation-async-delete-20260330-141322\\task-output",
+    "started_at":  "2026-03-30T06:25:01.3526359Z",
+    "agent_search_root":  "C:\\work\\J-Agents\\workflow\\.test\\runtime\\agent-release-review-ar09-ar15\\workspace-root",
+    "show_test_data":  true,
+    "source_root":  "C:\\work\\J-Agents\\workflow",
+    "environment":  "test",
+    "local_deployment_marker_path":  "C:\\work\\J-Agents\\workflow\\.running\\test\\.workflow-local-deployment.json",
+    "port":  8098,
+    "runtime_config_path":  "C:\\work\\J-Agents\\workflow\\.running\\control\\runtime\\test\\state\\runtime-config.json"
+}

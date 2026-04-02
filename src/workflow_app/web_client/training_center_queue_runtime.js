@@ -53,13 +53,13 @@
     const counts = trainingLoopQueueCounts(rows);
     const summaryNode = $('tcLoopQueueSummary');
     if (summaryNode) {
-      const parts = ['共 ' + safe(counts.all) + ' 个任务'];
+      const parts = ['共 ' + safe(counts.all) + ' 个优化会话'];
       if (filterKey !== 'all') {
         parts.push(trainingLoopQueueFilterLabel(filterKey) + ' ' + safe(filtered.length) + ' 个');
       } else if (keyword) {
         parts.push('匹配 ' + safe(filtered.length) + ' 个');
       } else {
-        parts.push('支持重命名与二次确认移除');
+        parts.push('支持重命名、回看和二次确认移除');
       }
       summaryNode.textContent = parts.join(' · ');
     }
@@ -126,13 +126,13 @@
     createItem.innerHTML =
       "<div class='tc-loop-task-top'>" +
       "<div class='tc-loop-task-head'>" +
-      "<div class='tc-loop-task-target'>训练闭环入口</div>" +
-      "<div class='tc-loop-task-name'>新建训练任务</div>" +
-      "<div class='tc-loop-task-id'>按基础信息、首轮工作集、启动确认三步创建</div>" +
+      "<div class='tc-loop-task-target'>训练优化对话入口</div>" +
+      "<div class='tc-loop-task-name'>发起新优化会话</div>" +
+      "<div class='tc-loop-task-id'>保持单聊天壳，在中部直接收敛目标、能力和验收标准</div>" +
       '</div>' +
-      "<div class='tc-loop-task-ops'><span class='tc-loop-chip green'>创建</span></div>" +
+      "<div class='tc-loop-task-ops'><span class='tc-loop-chip green'>对话式</span></div>" +
       '</div>' +
-      "<div class='tc-loop-task-caption'>先定义训练目标、首轮工作集和启动确认，再决定保存草稿或直接启动首轮。</div>";
+      "<div class='tc-loop-task-caption'>默认进入训练优化对话工作台；目标收敛、能力对象草案和启动动作都在同一界面完成。</div>";
     createItem.onclick = () => {
       enterTrainingLoopCreateMode();
     };
@@ -141,7 +141,7 @@
     if (!filtered.length) {
       const empty = document.createElement('div');
       empty.className = 'tc-empty';
-      empty.textContent = keyword ? '没有匹配的训练任务' : '训练任务列表为空';
+      empty.textContent = keyword ? '没有匹配的优化会话' : '优化会话列表为空';
       box.appendChild(empty);
       return;
     }
@@ -217,7 +217,7 @@
       removeBtn.onclick = (event) => {
         if (event) event.stopPropagation();
         const confirmed = window.confirm(
-          ['确认移除该训练任务？', '任务：' + rowTitle, '目标角色：' + targetText, '移除后如需恢复，请重新创建或重新入队。'].join(
+          ['确认移除该优化会话？', '会话：' + rowTitle, '目标角色：' + targetText, '移除后如需恢复，请重新创建或重新入队。'].join(
             '\n'
           )
         );

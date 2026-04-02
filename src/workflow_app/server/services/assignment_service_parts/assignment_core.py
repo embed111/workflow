@@ -703,6 +703,180 @@ def _ensure_assignment_support_tables(root: Path) -> None:
         root,
         default_agents_root=root.resolve(strict=False).as_posix(),
     )
+    conn = connect_db(root)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS assignment_graphs (
+                ticket_id TEXT PRIMARY KEY,
+                graph_name TEXT NOT NULL DEFAULT '',
+                source_workflow TEXT NOT NULL DEFAULT '',
+                summary TEXT NOT NULL DEFAULT '',
+                review_mode TEXT NOT NULL DEFAULT 'none',
+                global_concurrency_limit INTEGER NOT NULL DEFAULT 5,
+                is_test_data INTEGER NOT NULL DEFAULT 0,
+                external_request_id TEXT NOT NULL DEFAULT '',
+                scheduler_state TEXT NOT NULL DEFAULT 'idle',
+                pause_note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_assignment_graphs_source_request
+            ON assignment_graphs(source_workflow,external_request_id)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_assignment_graphs_scheduler
+            ON assignment_graphs(scheduler_state,updated_at DESC)
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS assignment_nodes (
+                node_id TEXT NOT NULL,
+                ticket_id TEXT NOT NULL,
+                node_name TEXT NOT NULL DEFAULT '',
+                assigned_agent_id TEXT NOT NULL DEFAULT '',
+                node_goal TEXT NOT NULL DEFAULT '',
+                expected_artifact TEXT NOT NULL DEFAULT '',
+                delivery_mode TEXT NOT NULL DEFAULT 'none',
+                delivery_receiver_agent_id TEXT NOT NULL DEFAULT '',
+                artifact_delivery_status TEXT NOT NULL DEFAULT 'pending',
+                artifact_delivered_at TEXT NOT NULL DEFAULT '',
+                artifact_paths_json TEXT NOT NULL DEFAULT '[]',
+                status TEXT NOT NULL DEFAULT 'pending',
+                priority INTEGER NOT NULL DEFAULT 1,
+                completed_at TEXT NOT NULL DEFAULT '',
+                success_reason TEXT NOT NULL DEFAULT '',
+                result_ref TEXT NOT NULL DEFAULT '',
+                failure_reason TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT '',
+                PRIMARY KEY (ticket_id,node_id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_assignment_nodes_ticket_created
+            ON assignment_nodes(ticket_id,created_at,node_id)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_assignment_nodes_ticket_status
+            ON assignment_nodes(ticket_id,status,updated_at DESC)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_assignment_nodes_status
+            ON assignment_nodes(status,updated_at DESC)
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS assignment_edges (
+                edge_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_id TEXT NOT NULL,
+                from_node_id TEXT NOT NULL,
+                to_node_id TEXT NOT NULL,
+                edge_kind TEXT NOT NULL DEFAULT 'depends_on',
+                created_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_assignment_edges_unique
+            ON assignment_edges(ticket_id,from_node_id,to_node_id,edge_kind)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_assignment_edges_ticket_to
+            ON assignment_edges(ticket_id,to_node_id,from_node_id)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_assignment_edges_ticket_from
+            ON assignment_edges(ticket_id,from_node_id,to_node_id)
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS assignment_audit_log (
+                audit_id TEXT PRIMARY KEY,
+                ticket_id TEXT NOT NULL DEFAULT '',
+                node_id TEXT NOT NULL DEFAULT '',
+                action TEXT NOT NULL DEFAULT '',
+                operator TEXT NOT NULL DEFAULT '',
+                reason TEXT NOT NULL DEFAULT '',
+                target_status TEXT NOT NULL DEFAULT '',
+                detail_json TEXT NOT NULL DEFAULT '{}',
+                ref TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_assignment_audit_ticket_time
+            ON assignment_audit_log(ticket_id,created_at DESC)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_assignment_audit_ticket_node_time
+            ON assignment_audit_log(ticket_id,node_id,created_at DESC)
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS assignment_execution_runs (
+                run_id TEXT PRIMARY KEY,
+                ticket_id TEXT NOT NULL DEFAULT '',
+                node_id TEXT NOT NULL DEFAULT '',
+                provider TEXT NOT NULL DEFAULT '',
+                workspace_path TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'starting',
+                command_summary TEXT NOT NULL DEFAULT '',
+                prompt_ref TEXT NOT NULL DEFAULT '',
+                stdout_ref TEXT NOT NULL DEFAULT '',
+                stderr_ref TEXT NOT NULL DEFAULT '',
+                result_ref TEXT NOT NULL DEFAULT '',
+                latest_event TEXT NOT NULL DEFAULT '',
+                latest_event_at TEXT NOT NULL DEFAULT '',
+                exit_code INTEGER NOT NULL DEFAULT 0,
+                started_at TEXT NOT NULL DEFAULT '',
+                finished_at TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT '',
+                provider_pid INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_assignment_runs_ticket_node_created
+            ON assignment_execution_runs(ticket_id,node_id,created_at DESC)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_assignment_runs_status_created
+            ON assignment_execution_runs(status,created_at DESC)
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def get_assignment_concurrency_settings(root: Path) -> dict[str, Any]:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .defect_service_prejudge import prejudge_defect_report
 from .defect_service import (
     DEFECT_ALL_STATUSES,
     DEFECT_STATUS_CLOSED,
@@ -16,7 +17,6 @@ from .defect_service import (
     _defect_report_id,
     _derive_summary,
     _ensure_defect_tables,
-    _fallback_prejudge,
     _formalize_report_if_needed,
     _json_dumps,
     _load_report_row,
@@ -51,7 +51,7 @@ def create_defect_report(cfg: Any, body: dict[str, Any]) -> dict[str, Any]:
     is_test_data = _bool_flag(body.get("is_test_data") or body.get("isTestData"))
     now_text = _now_text()
     report_id = _defect_report_id()
-    decision = _fallback_prejudge(report_text, images)
+    decision = prejudge_defect_report(summary, report_text, images)
     status = DEFECT_STATUS_UNRESOLVED if decision["decision"] == "defect" else DEFECT_STATUS_NOT_FORMAL
     is_formal = decision["decision"] == "defect"
     task_priority, task_priority_source = _resolve_task_priority_truth(

@@ -187,6 +187,8 @@ def main() -> int:
                 sys.executable,
                 "-m",
                 "py_compile",
+                "src/workflow_app/server/services/defect_service_prejudge.py",
+                "src/workflow_app/server/services/defect_service_record_commands.py",
                 "src/workflow_app/server/services/defect_service_task_commands.py",
             ],
             cwd=str(ctx.repo_root),
@@ -198,7 +200,7 @@ def main() -> int:
 
         index_html = ctx.api("GET", "/")
         ctx.dump_text("index.html", index_html)
-        ensure("assignmentGraphSelect" in str(index_html), "task center graph selector should still exist in page html")
+        ensure("assignmentGraphMeta" in str(index_html), "task center graph meta anchor should exist in page html")
 
         agents = ctx.api("GET", "/api/training/agents")
         ctx.dump_json("training-agents.json", agents)
@@ -259,6 +261,21 @@ def main() -> int:
         manual_display_id = str(manual_report.get("display_id") or "").strip()
         manual_base_name = f"{manual_display_id} 启动页双窗口异常"
         ensure(manual_report_id != "", "manual report id should not be empty")
+
+        short_create = ctx.api(
+            "POST",
+            "/api/defects",
+            {
+                "report_text": "角色名错了",
+                "operator": "web-user",
+            },
+        )
+        ctx.dump_json("defect-short-create.json", short_create)
+        short_report = dict((short_create or {}).get("report") or {})
+        ensure(str(short_report.get("report_id") or "").strip() != "", "short report id should not be empty")
+        ensure(bool(short_report.get("is_formal")), "one-line issue report should still enter formal defect flow")
+        ensure(str(short_report.get("status") or "").strip() == "unresolved", "one-line issue report should be unresolved")
+        ensure(str(short_report.get("display_id") or "").strip().startswith("DTS-"), "formal one-line issue report should allocate DTS id")
 
         process_first = ctx.api(
             "POST",
@@ -328,6 +345,11 @@ def main() -> int:
         ctx.dump_json("assignments-before-extra.json", assignments_before_extra)
         assignments_before_extra_items = list((assignments_before_extra or {}).get("items") or [])
         assignments_before_extra_ids = [str(item.get("ticket_id") or "").strip() for item in assignments_before_extra_items]
+        workflow_ui_graph_ids_before_extra = [
+            str(item.get("ticket_id") or "").strip()
+            for item in assignments_before_extra_items
+            if str(item.get("source_workflow") or "").strip() == "workflow-ui"
+        ]
         legacy_active_graphs_before_extra = [
             {
                 "ticket_id": str(item.get("ticket_id") or "").strip(),
@@ -351,22 +373,28 @@ def main() -> int:
             "/api/assignments",
             {
                 "graph_name": "临时独立任务图",
-                "summary": "用于验证当前后端仍允许创建第二张活动图",
+                "summary": "用于验证 workflow-ui 建图请求会被归一到全局主图",
                 "source_workflow": "workflow-ui",
                 "operator": "web-user",
             },
         )
         ctx.dump_json("assignment-extra-graph.json", extra_graph)
         extra_ticket_id = str((extra_graph or {}).get("ticket_id") or "").strip()
-        ensure(extra_ticket_id != "" and extra_ticket_id != global_ticket_id, "extra graph should create a different ticket id")
+        ensure(extra_ticket_id == global_ticket_id, "workflow-ui extra graph request should reuse the global ticket id")
 
         assignments_after_extra = ctx.api("GET", "/api/assignments", params={"limit": "200"})
         ctx.dump_json("assignments-after-extra.json", assignments_after_extra)
         active_graph_ids = [str(item.get("ticket_id") or "").strip() for item in list((assignments_after_extra or {}).get("items") or [])]
-        ensure(global_ticket_id in active_graph_ids and extra_ticket_id in active_graph_ids, "both global and extra graph should remain active")
+        ensure(global_ticket_id in active_graph_ids, "unfiltered assignment list should still include the global graph")
+        workflow_ui_graph_ids_after_extra = [
+            str(item.get("ticket_id") or "").strip()
+            for item in list((assignments_after_extra or {}).get("items") or [])
+            if str(item.get("source_workflow") or "").strip() == "workflow-ui"
+        ]
+        ensure(len(set(workflow_ui_graph_ids_after_extra)) == 1, "assignment list should expose exactly one workflow-ui graph")
         ensure(
-            len(set(active_graph_ids)) >= len(set(assignments_before_extra_ids)) + 1,
-            "creating extra graph should add a new active graph to the unfiltered list",
+            len(set(active_graph_ids)) == len(set(assignments_before_extra_ids)),
+            "workflow-ui extra graph request should not add a new active graph",
         )
 
         bj_now = datetime.now(BEIJING_TZ).replace(second=0, microsecond=0)
@@ -410,6 +438,12 @@ def main() -> int:
         assignments_after_schedule = ctx.api("GET", "/api/assignments", params={"limit": "200"})
         ctx.dump_json("assignments-after-schedule.json", assignments_after_schedule)
         active_graph_ids_after_schedule = [str(item.get("ticket_id") or "").strip() for item in list((assignments_after_schedule or {}).get("items") or [])]
+        workflow_ui_graph_ids_after_schedule = [
+            str(item.get("ticket_id") or "").strip()
+            for item in list((assignments_after_schedule or {}).get("items") or [])
+            if str(item.get("source_workflow") or "").strip() == "workflow-ui"
+        ]
+        ensure(len(set(workflow_ui_graph_ids_after_schedule)) == 1, "schedule trigger should still expose only one workflow-ui graph")
         ensure(
             sorted(set(active_graph_ids_after_schedule)) == sorted(set(active_graph_ids)),
             "schedule trigger should not create an additional active graph",
@@ -421,6 +455,12 @@ def main() -> int:
         assignments_after_restart = ctx.api("GET", "/api/assignments", params={"limit": "200"})
         ctx.dump_json("assignments-after-restart.json", assignments_after_restart)
         restart_graph_ids = [str(item.get("ticket_id") or "").strip() for item in list((assignments_after_restart or {}).get("items") or [])]
+        workflow_ui_graph_ids_after_restart = [
+            str(item.get("ticket_id") or "").strip()
+            for item in list((assignments_after_restart or {}).get("items") or [])
+            if str(item.get("source_workflow") or "").strip() == "workflow-ui"
+        ]
+        ensure(len(set(workflow_ui_graph_ids_after_restart)) == 1, "restart should recover a single workflow-ui graph")
         ensure(sorted(set(restart_graph_ids)) == sorted(set(active_graph_ids)), "restart should recover the same active graph set")
 
         summary = {
@@ -432,12 +472,16 @@ def main() -> int:
             "review_titles_first": review_titles_first,
             "review_titles_second": review_titles_second,
             "active_graph_ids_before_extra": assignments_before_extra_ids,
+            "workflow_ui_graph_ids_before_extra": workflow_ui_graph_ids_before_extra,
             "legacy_active_graphs_before_extra": legacy_active_graphs_before_extra,
             "active_graph_ids_after_extra": active_graph_ids,
+            "workflow_ui_graph_ids_after_extra": workflow_ui_graph_ids_after_extra,
             "active_graph_ids_after_schedule": active_graph_ids_after_schedule,
+            "workflow_ui_graph_ids_after_schedule": workflow_ui_graph_ids_after_schedule,
             "active_graph_ids_after_restart": restart_graph_ids,
+            "workflow_ui_graph_ids_after_restart": workflow_ui_graph_ids_after_restart,
             "schedule_ticket_id": schedule_ticket_id,
-            "page_has_graph_selector": "assignmentGraphSelect" in str(index_html),
+            "page_has_graph_meta_anchor": "assignmentGraphMeta" in str(index_html),
         }
         ctx.dump_json("summary.json", summary)
         print(json.dumps(summary, ensure_ascii=False, indent=2))

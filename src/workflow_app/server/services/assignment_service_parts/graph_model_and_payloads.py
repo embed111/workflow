@@ -1,5 +1,11 @@
 
 
+ASSIGNMENT_GLOBAL_GRAPH_NAME = "任务中心全局主图"
+ASSIGNMENT_GLOBAL_GRAPH_SOURCE_WORKFLOW = "workflow-ui"
+ASSIGNMENT_GLOBAL_GRAPH_REQUEST_ID = "workflow-ui-global-graph-v1"
+ASSIGNMENT_GLOBAL_GRAPH_SUMMARY = "任务中心手动创建（全局主图）"
+
+
 def _node_blocking_reasons(
     node_id: str,
     *,
@@ -212,21 +218,22 @@ def _assert_no_cycles(node_ids: set[str], edges: list[tuple[str, str]]) -> None:
 
 def _normalize_graph_header(conn: sqlite3.Connection, body: dict[str, Any]) -> dict[str, Any]:
     system_limit, _updated_at = _get_global_concurrency_limit(conn)
+    is_test_data = _normalize_assignment_test_flag(body.get("is_test_data"), default=False)
     review_mode = _normalize_review_mode(body.get("review_mode"))
     graph_name = _normalize_text(
-        body.get("graph_name") or "任务中心主图",
+        body.get("graph_name") or ASSIGNMENT_GLOBAL_GRAPH_NAME,
         field="graph_name",
         required=True,
         max_len=120,
     )
     source_workflow = _normalize_text(
-        body.get("source_workflow") or "workflow-ui",
+        body.get("source_workflow") or ASSIGNMENT_GLOBAL_GRAPH_SOURCE_WORKFLOW,
         field="source_workflow",
         required=True,
         max_len=120,
     )
     summary = _normalize_text(
-        body.get("summary") or "任务中心手动创建",
+        body.get("summary") or ASSIGNMENT_GLOBAL_GRAPH_SUMMARY,
         field="summary",
         required=False,
         max_len=500,
@@ -237,6 +244,10 @@ def _normalize_graph_header(conn: sqlite3.Connection, body: dict[str, Any]) -> d
         required=False,
         max_len=160,
     )
+    if (not is_test_data) and source_workflow == ASSIGNMENT_GLOBAL_GRAPH_SOURCE_WORKFLOW:
+        graph_name = ASSIGNMENT_GLOBAL_GRAPH_NAME
+        summary = ASSIGNMENT_GLOBAL_GRAPH_SUMMARY
+        external_request_id = ASSIGNMENT_GLOBAL_GRAPH_REQUEST_ID
     graph_limit = _normalize_positive_int(
         body.get("global_concurrency_limit"),
         field="global_concurrency_limit",
@@ -251,7 +262,7 @@ def _normalize_graph_header(conn: sqlite3.Connection, body: dict[str, Any]) -> d
         "review_mode": review_mode,
         "external_request_id": external_request_id,
         "global_concurrency_limit": graph_limit,
-        "is_test_data": _normalize_assignment_test_flag(body.get("is_test_data"), default=False),
+        "is_test_data": is_test_data,
     }
 
 

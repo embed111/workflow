@@ -16,6 +16,7 @@ def read_assignment_artifact_preview(
         include_test_data=include_test_data,
         reconcile_running=True,
     )
+    ticket_id = str(snapshot["graph_row"].get("ticket_id") or ticket_id).strip()
     selected_node = snapshot["node_map_by_id"].get(node_id) or {}
     if not selected_node:
         raise AssignmentCenterError(404, "assignment node not found", "assignment_node_not_found")
@@ -72,6 +73,7 @@ def _get_assignment_runtime_metrics_from_files(
     now_dt = now_local()
     running_node_count = 0
     running_agents: set[str] = set()
+    canonical_workflow_ui_ticket = _assignment_ensure_workflow_ui_global_graph_ticket(root)
     for ticket_id in [
         str(path.name or "").strip()
         for path in sorted(tasks_root.iterdir(), key=lambda item: item.name.lower())
@@ -84,6 +86,13 @@ def _get_assignment_runtime_metrics_from_files(
             except AssignmentCenterError:
                 continue
         if not _assignment_task_visible(task_record, include_test_data=include_test_data):
+            continue
+        if _assignment_is_hidden_workflow_ui_graph_ticket(
+            root,
+            ticket_id,
+            ticket_record=task_record,
+            canonical_ticket_id=canonical_workflow_ui_ticket,
+        ):
             continue
         nodes_root = _assignment_ticket_workspace_dir(root, ticket_id) / "nodes"
         node_lookup: dict[str, dict[str, Any]] = {}

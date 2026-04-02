@@ -432,6 +432,48 @@ def main() -> int:
             raise RuntimeError("no available agents after restore")
         agent_name = str(agents[0]["agent_name"])
 
+        defect_short_status, defect_short_payload = call(
+            base,
+            "POST",
+            "/api/defects",
+            {"report_text": "角色名错了", "operator": "gate-user"},
+        )
+        defect_demand_status, defect_demand_payload = call(
+            base,
+            "POST",
+            "/api/defects",
+            {"report_text": "希望新增筛选功能", "operator": "gate-user"},
+        )
+        defect_short_report = dict(defect_short_payload.get("report") or {})
+        defect_demand_report = dict(defect_demand_payload.get("report") or {})
+        defect_short_decision = dict(defect_short_report.get("current_decision") or {})
+        defect_demand_decision = dict(defect_demand_report.get("current_decision") or {})
+        defect_prejudge_ok = (
+            defect_short_status == 200
+            and bool(defect_short_report.get("is_formal"))
+            and str(defect_short_report.get("status") or "").strip() == "unresolved"
+            and str(defect_short_report.get("display_id") or "").strip().startswith("DTS-")
+            and str(defect_short_decision.get("decision") or "").strip() == "defect"
+            and defect_demand_status == 200
+            and not bool(defect_demand_report.get("is_formal"))
+            and str(defect_demand_report.get("status") or "").strip() == "not_formal"
+            and str(defect_demand_decision.get("decision") or "").strip() == "not_defect"
+        )
+        results.append(
+            (
+                "defect_prejudge_short_report",
+                defect_prejudge_ok,
+                {
+                    "short_status": defect_short_status,
+                    "short_report": defect_short_report,
+                    "short_decision": defect_short_decision,
+                    "demand_status": defect_demand_status,
+                    "demand_report": defect_demand_report,
+                    "demand_decision": defect_demand_decision,
+                },
+            )
+        )
+
         tasks: list[dict] = []
         for idx in range(5):
             sess, create_mode = create_session_with_fallback(

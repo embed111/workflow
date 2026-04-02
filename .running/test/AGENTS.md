@@ -10,16 +10,17 @@
 
 ## 启动读取顺序
 1. 顶层治理入口固定先读 `AGENTS.md`。
-2. 默认会话按以下顺序继续读取：
+2. 每轮正式工作前先读 `.codex/experience/index.md`，并按其中“必读经验”顺序补充读取必读经验文件。
+3. 默认会话按以下顺序继续读取：
    - `.codex/SOUL.md`
    - `.codex/USER.md`
    - `.codex/MEMORY.md`
    - `.codex/memory/全局记忆总览.md`
    - `.codex/memory/YYYY-MM/记忆总览.md`
    - `.codex/memory/YYYY-MM/YYYY-MM-DD.md`
-3. 当日日记缺失时，先在对应 `YYYY-MM/` 目录创建当日日记，再进入正式工作。
-4. 工作日切后的首轮工作，先检查“昨日记忆”是否已归档到对应 `.codex/memory/YYYY-MM/记忆总览.md`。
-5. 工作月切后的首轮工作，先检查“上月记忆总览”是否已归档到 `.codex/memory/全局记忆总览.md`。
+4. 当日日记缺失时，先在对应 `YYYY-MM/` 目录创建当日日记，再进入正式工作。
+5. 工作日切后的首轮工作，先检查“昨日记忆”是否已归档到对应 `.codex/memory/YYYY-MM/记忆总览.md`。
+6. 工作月切后的首轮工作，先检查“上月记忆总览”是否已归档到 `.codex/memory/全局记忆总览.md`。
 
 ## 三层职责边界
 - `.codex/`：agent 工作记忆、内部工作文档、本地技能入口（如 `.codex/skills/*/SKILL.md`）。
@@ -82,6 +83,7 @@
 
 ## PM Continuous Maintenance
 - 仅当 `DIALOGUE_RETRO_SWITCH: ON` 时，才自动写入每轮复盘增量；`OFF` 时只读不写，除非用户明确要求更新。
+- `.codex/experience/` 用于沉淀可复用经验与踩坑规避；每轮开始先读 `index.md` 与其中 `required_reads` 标记的经验文件，每轮结束若出现可复用经验或新坑位，更新索引并补充经验卡。
 - 用户偏好与需求假设统一维护在 `state/user-preferences.md`（单一事实源）。
 - 每次更新执行快照（如 `state/session-snapshot.md`、`logs/runs/*.md`）时，不重复粘贴全文，只追加引用：`preference_ref: state/user-preferences.md` 与本次增量观察。
 - `User Preferences` 只记录可观察偏好，例如：响应风格、交付粒度、容错策略、优先级倾向；避免记录无关隐私。

@@ -19,6 +19,62 @@
     return Array.from(document.querySelectorAll('#rcStageFlow .archive-pocket'));
   }
 
+  function collectTrainingLoopLayoutProbe(output) {
+    if (safe(state.tcModule).trim() !== 'ops') return;
+    const moduleOps = $('tcModuleOps');
+    const centerPane = $('tcLoopCenterPane');
+    const detailBody = $('tcLoopDetailBody');
+    const chatShell = detailBody ? detailBody.querySelector('.tc-loop-chat-shell') : null;
+    const chatStream = detailBody ? detailBody.querySelector('.tc-loop-chat-stream') : null;
+    const composer = detailBody ? detailBody.querySelector('.tc-loop-create-composer') : null;
+    const rightColumn = $('tcLoopRightColumn');
+    const rightPane = $('tcLoopRightPane');
+    const activeRightPane = rightPane ? rightPane.querySelector('.tc-loop-right-pane-shell.active') : null;
+    const runPanel = rightColumn ? rightColumn.querySelector('.tc-loop-run-panel') : null;
+
+    function metrics(node) {
+      if (!node) return null;
+      const rect = node.getBoundingClientRect();
+      const style = window.getComputedStyle(node);
+      return {
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        height: Math.round(rect.height),
+        client_height: Math.round(node.clientHeight || 0),
+        scroll_height: Math.round(node.scrollHeight || 0),
+        overflow_y: safe(style.overflowY).trim().toLowerCase(),
+        display: safe(style.display).trim().toLowerCase(),
+      };
+    }
+
+    const detailMetrics = metrics(detailBody);
+    const composerMetrics = metrics(composer);
+    const rightMetrics = metrics(rightColumn);
+    const runMetrics = metrics(runPanel);
+
+    output.loop_layout = {
+      window_inner_height: Math.round(window.innerHeight || 0),
+      document_client_height: Math.round(document.documentElement ? document.documentElement.clientHeight || 0 : 0),
+      document_scroll_height: Math.round(document.documentElement ? document.documentElement.scrollHeight || 0 : 0),
+      body_scroll_height: Math.round(document.body ? document.body.scrollHeight || 0 : 0),
+      module_ops: metrics(moduleOps),
+      center_pane: metrics(centerPane),
+      detail_body: detailMetrics,
+      chat_shell: metrics(chatShell),
+      chat_stream: metrics(chatStream),
+      composer: composerMetrics,
+      right_column: rightMetrics,
+      right_pane: metrics(rightPane),
+      active_right_pane: metrics(activeRightPane),
+      run_panel: runMetrics,
+      page_overflowing: Math.round(document.documentElement ? document.documentElement.scrollHeight || 0 : 0) > Math.round(window.innerHeight || 0) + 8,
+      composer_bottom_gap:
+        detailMetrics && composerMetrics ? Math.round(detailMetrics.bottom - composerMetrics.bottom) : null,
+      right_bottom_gap:
+        rightMetrics && runMetrics ? Math.round(rightMetrics.bottom - runMetrics.bottom) : null,
+    };
+  }
+
   async function prepareRoleCreationProbe(caseId, output) {
     const probeCase = safe(caseId).trim().toLowerCase();
     if (!probeCase.startsWith('rc_')) return;
@@ -689,6 +745,7 @@
       output.avatar_trigger_count = document.querySelectorAll('#tcPortraitCard .tc-avatar-trigger').length;
       output.avatar_file_input_count = document.querySelectorAll('#tcPortraitCard .tc-avatar-file-input').length;
       collectRoleCreationProbeState(output);
+      collectTrainingLoopLayoutProbe(output);
       if ((probeCase === 'ac_ar_rr_12' || probeCase === 'ac_ar_rr_19') && output.release_report_button_count >= 1) {
         const requestedReleaseVersion = safe(queryParam('tc_probe_release_version')).trim();
         const releaseReportBtn = Array.from(document.querySelectorAll('#tcReleaseList button'))

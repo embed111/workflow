@@ -4,6 +4,11 @@
     const box = $('tcLoopProcessCard');
     if (!box) return;
     const view = normalizeTrainingLoopMode(mode);
+    box.style.display = view === 'create' ? 'none' : '';
+    if (view === 'create') {
+      box.innerHTML = '';
+      return;
+    }
     const snapshot = trainingLoopPlanSnapshot();
     const loopCtx = trainingLoopSelectedNodeContext(loopData);
     const stageIndex = trainingLoopStageIndex(view, queueRow);
@@ -15,7 +20,7 @@
     const stageTitle = safe(TC_LOOP_STAGES[stageIndex - 1] && TC_LOOP_STAGES[stageIndex - 1].title).trim();
     const currentRoundIndex = Number(loopCtx.selectedNode && loopCtx.selectedNode.round_index ? loopCtx.selectedNode.round_index : 0);
 
-    const taskTitle = view === 'create' ? '创建训练任务' : goal || agentName || '训练任务';
+    const taskTitle = view === 'create' ? '创建优化会话' : goal || agentName || '训练任务';
     const subLine =
       view === 'create'
         ? '当前正在准备首轮训练目标、工作集与启动条件。'
@@ -149,6 +154,10 @@
   }
 
   function renderTrainingLoopCreateBody() {
+    if (typeof renderTrainingLoopCreateDialogueBody === 'function') {
+      renderTrainingLoopCreateDialogueBody();
+      return;
+    }
     const box = $('tcLoopDetailBody');
     if (!box) return;
     const activeTab = normalizeTrainingLoopCreateTab(state.tcLoopCreateTab);
@@ -162,7 +171,7 @@
           '首轮工作集',
           '定义首轮要补强的任务项；保存后这些条目会成为当前任务的首轮工作集。',
           "<div class='tc-form-grid'>" +
-            "<div class='full'><label class='hint' for='tcPlanTasksInput'>训练任务（每行一项）</label><div id='tcLoopFieldMountTasks'></div></div>" +
+            "<div class='full'><label class='hint' for='tcPlanTasksInput'>本轮要补的能力（每行一项）</label><div id='tcLoopFieldMountTasks'></div></div>" +
             '</div>' +
             renderTrainingLoopSection(
               '工作集预览',
@@ -193,7 +202,7 @@
         state.agentSearchRootReady &&
         !snapshot.frozen;
       const statusLine = !state.agentSearchRootReady
-        ? '当前工作区未就绪，暂不能提交训练任务。'
+        ? '当前工作区未就绪，暂不能提交训练优化。'
         : snapshot.frozen
           ? '当前角色已禁训，请切回可训练版本后再提交。'
           : allReady
@@ -602,33 +611,8 @@
     const activeTab = isCreate
       ? normalizeTrainingLoopCreateTab(state.tcLoopCreateTab)
       : normalizeTrainingLoopStatusTab(state.tcLoopStatusTab);
-    head.style.display = isCreate ? '' : 'none';
-    head.innerHTML = isCreate
-      ? "<div class='tc-loop-detail-head'>" +
-        '<div>' +
-        "<div class='tc-loop-detail-title'>创建任务</div>" +
-        "<div class='tc-loop-detail-desc'>按基础信息、首轮工作集、启动确认三步补齐创建内容。</div>" +
-        '</div>' +
-        '</div>' +
-        "<div class='tc-loop-detail-tabs' role='tablist' aria-label='创建任务页签'>" +
-        tabs
-          .map((tabItem) => {
-            const active = tabItem.key === activeTab;
-            return (
-              "<button class='tc-loop-tab" +
-              (active ? ' active' : '') +
-              "' type='button' role='tab' aria-selected='" +
-              (active ? 'true' : 'false') +
-              "' data-create-tab='" +
-              safe(tabItem.key) +
-              "'>" +
-              safe(tabItem.label) +
-              '</button>'
-            );
-          })
-          .join('') +
-        '</div>'
-      : '';
+    head.style.display = 'none';
+    head.innerHTML = '';
     head.onclick = (event) => {
       if (!isCreate) return;
       const target = event && event.target ? event.target : null;
@@ -654,9 +638,13 @@
     const box = $('tcLoopRightPane');
     if (!box) return;
     const view = normalizeTrainingLoopMode(mode);
+    box.classList.toggle('tc-loop-right-shell', view === 'create');
     if (view === 'create') {
+      if (typeof renderTrainingLoopCreateRightPane === 'function') {
+        renderTrainingLoopCreateRightPane();
+        return;
+      }
       box.innerHTML = '';
-      box.onclick = null;
       return;
     }
 
@@ -997,8 +985,8 @@
     if (moduleOps) moduleOps.setAttribute('data-loop-mode', view);
     const rightColumn = $('tcLoopRightColumn');
     if (rightColumn) {
-      rightColumn.classList.toggle('active', view === 'status');
-      rightColumn.setAttribute('aria-hidden', view === 'status' ? 'false' : 'true');
+      rightColumn.classList.add('active');
+      rightColumn.setAttribute('aria-hidden', 'false');
     }
     ensureTrainingLoopRightWheelBinding();
   }
@@ -1073,7 +1061,11 @@
       }
       const forcedTab = safe(queryParam('tc_loop_tab')).toLowerCase();
       if (normalizeTrainingLoopMode(state.tcLoopMode) === 'create') {
-        state.tcLoopCreateTab = normalizeTrainingLoopCreateTab(forcedTab);
+        if (forcedTab === 'tasks' || forcedTab === 'baseline') {
+          state.tcLoopRightTab = normalizeTrainingLoopRightTab(forcedTab);
+        } else {
+          state.tcLoopCreateTab = normalizeTrainingLoopCreateTab(forcedTab);
+        }
       } else {
         if (forcedTab === 'tasks' || forcedTab === 'baseline') {
           state.tcLoopRightTab = normalizeTrainingLoopRightTab(forcedTab);

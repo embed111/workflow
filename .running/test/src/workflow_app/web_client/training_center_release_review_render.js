@@ -28,6 +28,22 @@
     const localError = currentTrainingCenterReleaseReviewError(key);
     const progressMode = progress ? safe(progress.mode).trim().toLowerCase() : '';
     const effectiveReview = applyTrainingCenterReleaseReviewProgress(review, progress);
+    const localErrorData = localError && localError.error_data && typeof localError.error_data === 'object'
+      ? localError.error_data
+      : {};
+    const localErrorReview = localErrorData.review && typeof localErrorData.review === 'object'
+      ? localErrorData.review
+      : {};
+    const reportCodexFailure = normalizeCodexFailure(
+      effectiveReview.codex_failure ||
+      localErrorData.codex_failure ||
+      localErrorReview.codex_failure
+    );
+    const publishCodexFailure = normalizeCodexFailure(
+      effectiveReview.publish_codex_failure ||
+      localErrorData.publish_codex_failure ||
+      localErrorReview.publish_codex_failure
+    );
     const reportFailure = describeTrainingCenterReleaseReportFailure(effectiveReview, localError);
     const publishFailure = describeTrainingCenterReleasePublishFailure(effectiveReview, localError);
     const hasAgent = !!key;
@@ -190,7 +206,7 @@
       return;
     }
 
-    renderTrainingCenterReleaseReport(reportNode, effectiveReview, progress, reportFailure);
+    renderTrainingCenterReleaseReport(reportNode, effectiveReview, progress, reportCodexFailure, reportFailure);
 
     if (chainNode) {
       chainNode.innerHTML = '';
@@ -295,7 +311,17 @@
     if (logsNode) {
       logsNode.innerHTML = '';
       const logs = Array.isArray(effectiveReview.execution_logs) ? effectiveReview.execution_logs : [];
-      if (publishFailure) {
+      if (codexFailureHasValue(publishCodexFailure)) {
+        const failureHost = document.createElement('div');
+        logsNode.appendChild(failureHost);
+        renderCodexFailureCard(failureHost, publishCodexFailure, {
+          title: '确认发布失败',
+          compact: true,
+          context: {
+            agentId: key,
+          },
+        });
+      } else if (publishFailure) {
         const errorNode = document.createElement('div');
         errorNode.className = 'tc-release-review-note danger';
         errorNode.textContent = publishFailure.summary;

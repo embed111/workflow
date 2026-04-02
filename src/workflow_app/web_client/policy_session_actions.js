@@ -537,6 +537,7 @@
         : {},
       analysis_chain: baseAnalysisChain,
       policy_error: safe(agent.policy_error),
+      codex_failure: normalizeCodexFailure(agent.codex_failure),
     };
   }
 

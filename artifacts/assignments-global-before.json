@@ -1,0 +1,45 @@
+{
+  "ok": true,
+  "include_test_data": false,
+  "environment": "source",
+  "show_test_data": false,
+  "show_test_data_source": "environment_policy",
+  "items": [
+    {
+      "ticket_id": "asg-20260326-122459-a50c6f",
+      "graph_name": "任务中心全局主图",
+      "source_workflow": "workflow-ui",
+      "summary": "任务中心手动创建（全局主图）",
+      "review_mode": "none",
+      "global_concurrency_limit": 5,
+      "is_test_data": false,
+      "external_request_id": "workflow-ui-global-graph-v1",
+      "scheduler_state": "running",
+      "scheduler_state_text": "运行中",
+      "pause_note": "schedule auto resume",
+      "created_at": "2026-03-26T12:24:41+08:00",
+      "updated_at": "2026-03-30T09:44:18+08:00",
+      "metrics_summary": {
+        "total_nodes": 8,
+        "pending_nodes": 4,
+        "ready_nodes": 4,
+        "running_nodes": 0,
+        "failed_nodes": 0,
+        "blocked_nodes": 0,
+        "executed_count": 0,
+        "unexecuted_count": 8
+      }
+    }
+  ],
+  "pagination": {
+    "offset": 0,
+    "limit": 24,
+    "returned": 1,
+    "total_items": 1,
+    "has_more": false
+  },
+  "settings": {
+    "global_concurrency_limit": 5,
+    "updated_at": "2026-03-30T09:48:28+08:00"
+  }
+}

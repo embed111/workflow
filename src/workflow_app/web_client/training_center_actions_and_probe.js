@@ -19,6 +19,62 @@
     return Array.from(document.querySelectorAll('#rcStageFlow .archive-pocket'));
   }
 
+  function collectTrainingLoopLayoutProbe(output) {
+    if (safe(state.tcModule).trim() !== 'ops') return;
+    const moduleOps = $('tcModuleOps');
+    const centerPane = $('tcLoopCenterPane');
+    const detailBody = $('tcLoopDetailBody');
+    const chatShell = detailBody ? detailBody.querySelector('.tc-loop-chat-shell') : null;
+    const chatStream = detailBody ? detailBody.querySelector('.tc-loop-chat-stream') : null;
+    const composer = detailBody ? detailBody.querySelector('.tc-loop-create-composer') : null;
+    const rightColumn = $('tcLoopRightColumn');
+    const rightPane = $('tcLoopRightPane');
+    const activeRightPane = rightPane ? rightPane.querySelector('.tc-loop-right-pane-shell.active') : null;
+    const runPanel = rightColumn ? rightColumn.querySelector('.tc-loop-run-panel') : null;
+
+    function metrics(node) {
+      if (!node) return null;
+      const rect = node.getBoundingClientRect();
+      const style = window.getComputedStyle(node);
+      return {
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        height: Math.round(rect.height),
+        client_height: Math.round(node.clientHeight || 0),
+        scroll_height: Math.round(node.scrollHeight || 0),
+        overflow_y: safe(style.overflowY).trim().toLowerCase(),
+        display: safe(style.display).trim().toLowerCase(),
+      };
+    }
+
+    const detailMetrics = metrics(detailBody);
+    const composerMetrics = metrics(composer);
+    const rightMetrics = metrics(rightColumn);
+    const runMetrics = metrics(runPanel);
+
+    output.loop_layout = {
+      window_inner_height: Math.round(window.innerHeight || 0),
+      document_client_height: Math.round(document.documentElement ? document.documentElement.clientHeight || 0 : 0),
+      document_scroll_height: Math.round(document.documentElement ? document.documentElement.scrollHeight || 0 : 0),
+      body_scroll_height: Math.round(document.body ? document.body.scrollHeight || 0 : 0),
+      module_ops: metrics(moduleOps),
+      center_pane: metrics(centerPane),
+      detail_body: detailMetrics,
+      chat_shell: metrics(chatShell),
+      chat_stream: metrics(chatStream),
+      composer: composerMetrics,
+      right_column: rightMetrics,
+      right_pane: metrics(rightPane),
+      active_right_pane: metrics(activeRightPane),
+      run_panel: runMetrics,
+      page_overflowing: Math.round(document.documentElement ? document.documentElement.scrollHeight || 0 : 0) > Math.round(window.innerHeight || 0) + 8,
+      composer_bottom_gap:
+        detailMetrics && composerMetrics ? Math.round(detailMetrics.bottom - composerMetrics.bottom) : null,
+      right_bottom_gap:
+        rightMetrics && runMetrics ? Math.round(rightMetrics.bottom - runMetrics.bottom) : null,
+    };
+  }
+
   async function prepareRoleCreationProbe(caseId, output) {
     const probeCase = safe(caseId).trim().toLowerCase();
     if (!probeCase.startsWith('rc_')) return;
@@ -33,7 +89,11 @@
       throw new Error('role creation probe session missing');
     }
     await selectRoleCreationSession(sessionId, { force: true, skipRender: true });
-    setRoleCreationDetailTab(probeCase === 'rc_profile_tab' ? 'profile' : 'evolution');
+    setRoleCreationDetailTab(
+      probeCase === 'rc_profile_tab' || probeCase === 'rc_failure'
+        ? 'profile'
+        : 'evolution'
+    );
     if (typeof clearRoleCreationTaskPreview === 'function') {
       clearRoleCreationTaskPreview();
     }
@@ -99,6 +159,8 @@
     output.rc_role_goal = safe(profile.role_goal).trim();
     output.rc_core_capability_count = Array.isArray(profile.core_capabilities) ? profile.core_capabilities.length : 0;
     output.rc_missing_field_count = Array.isArray(profile.missing_fields) ? profile.missing_fields.length : 0;
+    output.rc_start_gate_blocker_count = Array.isArray(profile.start_gate_blockers) ? profile.start_gate_blockers.length : 0;
+    output.rc_can_start = !!profile.can_start;
     output.rc_stage_count = stages.length;
     output.rc_message_count = messages.length;
     output.rc_message_attachment_count = messages.reduce((total, message) => {
@@ -118,23 +180,19 @@
     output.rc_profile_section_titles = Array.from(document.querySelectorAll('#rcDetailPaneProfile [data-rc-profile-title]'))
       .map((node) => safe(node.getAttribute('data-rc-profile-title')).trim())
       .filter(Boolean);
+    output.rc_structured_section_titles = Array.from(document.querySelectorAll('#rcDetailPaneProfile [data-rc-structured-section]'))
+      .map((node) => safe(node.getAttribute('data-rc-structured-section')).trim())
+      .filter(Boolean);
     output.rc_profile_summary_exists = !!document.querySelector("#rcDetailPaneProfile [data-rc-profile-kind='summary']");
-    output.rc_profile_single_column =
-      document.querySelectorAll('#rcDetailPaneProfile .rc-profile-card').length <= 1 ||
-      Array.from(document.querySelectorAll('#rcDetailPaneProfile .rc-profile-card'))
-        .every((node) => Math.round(node.getBoundingClientRect().left) === Math.round(document.querySelector('#rcDetailPaneProfile .rc-profile-card').getBoundingClientRect().left));
-    output.rc_profile_runtime_meta_visible = !!document.querySelector(
-      "#rcDetailPaneProfile [data-rc-profile-title='对话分析师'], " +
-      "#rcDetailPaneProfile [data-rc-profile-title='对话工作区'], " +
-      "#rcDetailPaneProfile [data-rc-profile-title='对话 Provider'], " +
-      "#rcDetailPaneProfile [data-rc-profile-title='工作区路径'], " +
-      "#rcDetailPaneProfile [data-rc-profile-title='运行态'], " +
-      "#rcDetailPaneProfile [data-rc-profile-title='适用场景'], " +
-      "#rcDetailPaneProfile [data-rc-profile-title='示例资产'], " +
-      "#rcDetailPaneProfile [data-rc-profile-title='缺失信息'], " +
-      "#rcDetailPaneProfile [data-rc-profile-title='角色名称'], " +
-      "#rcDetailPaneProfile [data-rc-profile-title='能力边界']"
-    );
+    output.rc_progress_step_count = document.querySelectorAll('#rcDetailPaneProfile [data-rc-progress-step]').length;
+    output.rc_recent_change_count = document.querySelectorAll('#rcDetailPaneProfile [data-rc-recent-change]').length;
+    output.rc_pending_question_count = document.querySelectorAll('#rcDetailPaneProfile [data-rc-pending-question]').length;
+    output.rc_seed_capability_count = document.querySelectorAll('#rcDetailPaneProfile [data-rc-seed-capability]').length;
+    output.rc_seed_task_count = document.querySelectorAll('#rcDetailPaneProfile [data-rc-seed-task]').length;
+    output.rc_knowledge_asset_count = document.querySelectorAll('#rcDetailPaneProfile [data-rc-knowledge-asset]').length;
+    output.rc_failure_visible = !!document.querySelector('#rcFailureCardHost .codex-failure-card');
+    output.rc_failure_retry_visible = !!Array.from(document.querySelectorAll('#rcFailureCardHost button'))
+      .find((node) => safe(node && node.textContent).trim() === '重试本轮分析');
     output.rc_message_image_count = document.querySelectorAll('#rcMessages .rc-message-asset img').length;
     output.rc_task_card_count = taskCards.length;
     output.rc_task_card_ids = taskCards.map((node) => safe(node.getAttribute('data-node-id')).trim()).filter(Boolean);
@@ -234,6 +292,8 @@
       rc_role_goal: '',
       rc_core_capability_count: 0,
       rc_missing_field_count: 0,
+      rc_start_gate_blocker_count: 0,
+      rc_can_start: false,
       rc_stage_count: 0,
       rc_message_count: 0,
       rc_message_attachment_count: 0,
@@ -241,6 +301,16 @@
       rc_system_task_update_count: 0,
       rc_profile_card_count: 0,
       rc_profile_visible: false,
+      rc_profile_section_titles: [],
+      rc_structured_section_titles: [],
+      rc_progress_step_count: 0,
+      rc_recent_change_count: 0,
+      rc_pending_question_count: 0,
+      rc_seed_capability_count: 0,
+      rc_seed_task_count: 0,
+      rc_knowledge_asset_count: 0,
+      rc_failure_visible: false,
+      rc_failure_retry_visible: false,
       rc_message_image_count: 0,
       rc_task_card_count: 0,
       rc_task_card_ids: [],
@@ -689,6 +759,7 @@
       output.avatar_trigger_count = document.querySelectorAll('#tcPortraitCard .tc-avatar-trigger').length;
       output.avatar_file_input_count = document.querySelectorAll('#tcPortraitCard .tc-avatar-file-input').length;
       collectRoleCreationProbeState(output);
+      collectTrainingLoopLayoutProbe(output);
       if ((probeCase === 'ac_ar_rr_12' || probeCase === 'ac_ar_rr_19') && output.release_report_button_count >= 1) {
         const requestedReleaseVersion = safe(queryParam('tc_probe_release_version')).trim();
         const releaseReportBtn = Array.from(document.querySelectorAll('#tcReleaseList button'))
@@ -747,18 +818,19 @@
                               output.rc_profile_visible &&
                               output.rc_profile_card_count >= 7 &&
                               output.rc_profile_summary_exists &&
-                              output.rc_profile_single_column &&
-                              !output.rc_profile_runtime_meta_visible &&
-                              JSON.stringify(output.rc_profile_section_titles) === JSON.stringify([
-                                'summary',
-                                '角色名',
-                                '角色目标',
-                                '核心能力',
-                                '边界',
-                                '协作方式',
-                                '附件与引用',
-                              ]) &&
+                              output.rc_progress_step_count >= 4 &&
+                              output.rc_recent_change_count >= 1 &&
+                              output.rc_seed_capability_count >= 1 &&
+                              output.rc_seed_task_count >= 1 &&
+                              output.rc_knowledge_asset_count >= 1 &&
+                              ['角色画像', '能力包', '知识沉淀', '首批任务'].every((title) => output.rc_structured_section_titles.includes(title)) &&
                               !!output.rc_role_name
+                            : probeCase === 'rc_failure'
+                              ? output.rc_module === 'create-role' &&
+                                output.rc_detail_tab === 'profile' &&
+                                output.rc_profile_visible &&
+                                output.rc_failure_visible &&
+                                output.rc_failure_retry_visible
                             : probeCase === 'rc_task_hover'
                               ? output.rc_module === 'create-role' &&
                                 output.rc_preview_visible &&

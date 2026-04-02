@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from workflow_app.server.services.codex_failure_contract import build_codex_failure, build_retry_action
+from workflow_app.server.services.codex_exec_monitor import resolve_codex_command, run_monitored_subprocess
+
 def bind_runtime_symbols(symbols: dict[str, object]) -> None:
     globals().update(symbols)
 
@@ -252,7 +255,7 @@ def _recommend_agent_policy_via_codex(
     if not workspace_ok:
         warnings.append(f"codex_workspace_invalid:{workspace_error}")
         return {}, warnings
-    codex_bin = shutil.which("codex")
+    codex_bin = resolve_codex_command()
     if not codex_bin:
         warnings.append("codex_command_not_found")
         return {}, warnings
@@ -278,33 +281,43 @@ def _recommend_agent_policy_via_codex(
     ]
     stdout_text = ""
     stderr_text = ""
-    proc: subprocess.Popen[str] | None = None
     try:
-        proc = subprocess.Popen(
-            command,
-            cwd=root.as_posix(),
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
+        completion_state = {"ready": False}
+
+        def _observe_stdout(line: str) -> None:
+            cleaned = str(line or "").strip()
+            if not cleaned:
+                return
+            try:
+                event = json.loads(cleaned)
+            except Exception:
+                return
+            if not isinstance(event, dict):
+                return
+            if str(event.get("type") or "").strip() == "turn.completed":
+                completion_state["ready"] = True
+                return
+            msg_text = _extract_codex_event_text(event)
+            if msg_text and _extract_json_objects(msg_text):
+                completion_state["ready"] = True
+
+        result = run_monitored_subprocess(
+            command=command,
+            cwd=root,
+            stdin_text=prompt_text,
+            on_stdout_line=_observe_stdout,
+            completion_checker=lambda: bool(completion_state["ready"]),
         )
-        stdout_text, stderr_text = proc.communicate(prompt_text + "\n", timeout=max(10, int(POLICY_CODEX_TIMEOUT_S)))
-        exit_code = int(proc.returncode or 0)
+        stdout_text = result.stdout_text
+        stderr_text = result.stderr_text
+        exit_code = int(result.exit_code or 0)
+        if result.forced_exit_after_result:
+            warnings.append("codex_recommend_grace_terminated")
         if exit_code != 0:
             warnings.append(f"codex_recommend_exec_failed_exit_{exit_code}")
             if stderr_text.strip():
                 warnings.append(policy_text_compact(f"codex_stderr:{stderr_text}", max_chars=160))
             return {}, warnings
-    except subprocess.TimeoutExpired:
-        if proc is not None:
-            try:
-                proc.kill()
-            except Exception:
-                pass
-        warnings.append("codex_recommend_timeout")
-        return {}, warnings
     except Exception as exc:
         warnings.append(f"codex_recommend_exception:{exc}")
         return {}, warnings
@@ -669,6 +682,47 @@ def normalize_duty_constraints_input(raw: Any) -> list[str]:
     return values
 
 
+def _policy_codex_failure_payload(
+    item: dict[str, Any],
+    *,
+    policy_error: str,
+    analysis_chain: dict[str, Any],
+) -> dict[str, Any]:
+    node = item if isinstance(item, dict) else {}
+    chain = analysis_chain if isinstance(analysis_chain, dict) else {}
+    detail_code = str(policy_error or node.get("policy_error") or "").strip().lower()
+    parse_status = str(node.get("parse_status") or "").strip().lower()
+    contract_status = str(node.get("policy_contract_status") or "").strip().lower()
+    if not detail_code and parse_status == "failed":
+        detail_code = "policy_contract_invalid" if contract_status == "failed" else "policy_extract_failed"
+    if not detail_code:
+        return {}
+    files = chain.get("files") if isinstance(chain.get("files"), dict) else {}
+    return build_codex_failure(
+        feature_key="policy_analysis",
+        attempt_id=str(files.get("trace_dir") or node.get("agents_hash") or "").strip(),
+        attempt_count=1,
+        failure_detail_code=detail_code,
+        failure_message=str(
+            policy_error
+            or node.get("policy_gate_reason")
+            or node.get("clarity_gate_reason")
+            or node.get("policy_error")
+            or ""
+        ).strip(),
+        failure_stage="contract_validate" if detail_code == "policy_contract_invalid" else "",
+        retry_action=build_retry_action(
+            "retry_policy_analysis",
+            payload={
+                "agent_name": str(node.get("agent_name") or "").strip(),
+                "agents_path": str(node.get("agents_md_path") or "").strip(),
+            },
+        ),
+        trace_refs=files,
+        failed_at=str(node.get("policy_cache_cached_at") or "").strip(),
+    )
+
+
 def agent_policy_gate_payload(
     item: dict[str, Any],
     *,
@@ -710,6 +764,11 @@ def agent_policy_gate_payload(
     clarity_score = int(item.get("clarity_score") or 0)
     manual_fallback_allowed = bool(allow_manual_policy_input)
     analysis_chain = item.get("analysis_chain") if isinstance(item.get("analysis_chain"), dict) else {}
+    codex_failure = _policy_codex_failure_payload(
+        item,
+        policy_error=str(policy_error or "").strip(),
+        analysis_chain=analysis_chain,
+    )
     return {
         "agent_name": str(item.get("agent_name") or ""),
         "agents_hash": str(item.get("agents_hash") or ""),
@@ -779,6 +838,7 @@ def agent_policy_gate_payload(
             if isinstance(step, dict)
         ],
         "policy_error": str(policy_error or ""),
+        "codex_failure": codex_failure,
     }
 
 

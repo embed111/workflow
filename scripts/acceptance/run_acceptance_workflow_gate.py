@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -13,6 +14,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from policy_cache_seed import upsert_policy_cache
+from run_acceptance_agent_call_monitoring import write_acceptance_codex_stub
 
 
 def call(base_url: str, method: str, path: str, payload: dict | None = None) -> tuple[int, dict]:
@@ -306,6 +308,8 @@ def main() -> int:
         shutil.rmtree(runtime_root, ignore_errors=True)
     runtime_root.mkdir(parents=True, exist_ok=True)
     fixture_root = write_agents_fixture(runtime_root)
+    stub_bin = (runtime_root / "stub-bin").resolve()
+    stub_cmd = write_acceptance_codex_stub(stub_bin)
     upsert_policy_cache(
         runtime_root=runtime_root,
         workspace_root=fixture_root,
@@ -367,6 +371,11 @@ def main() -> int:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env={
+            **os.environ,
+            "PATH": str(stub_bin) + os.pathsep + str(os.environ.get("PATH") or ""),
+            "WORKFLOW_CODEX_BIN": stub_cmd.as_posix(),
+        },
     )
 
     try:
@@ -431,6 +440,126 @@ def main() -> int:
         if not agents:
             raise RuntimeError("no available agents after restore")
         agent_name = str(agents[0]["agent_name"])
+
+        rc_create_status, rc_create_payload = call(
+            base,
+            "POST",
+            "/api/training/role-creation/sessions",
+            {"session_title": "gate role creation", "operator": "gate-user"},
+        )
+        if rc_create_status != 200 or not rc_create_payload.get("ok"):
+            raise RuntimeError(f"role creation session create failed: {rc_create_status} {rc_create_payload}")
+        rc_session = dict(rc_create_payload.get("session") or {})
+        rc_session_id = str(rc_session.get("session_id") or "").strip()
+        rc_first_status, rc_first_payload = call(
+            base,
+            "POST",
+            f"/api/training/role-creation/sessions/{rc_session_id}/messages",
+            {
+                "operator": "gate-user",
+                "content": (
+                    "角色名是Gate角色创建验收。"
+                    "角色目标是把复杂问题收口成结构化诊断。"
+                    "核心能力有问题拆解、方法沉淀、模板生成。"
+                    "能力模块：问题拆解 / 模板生成 / 结果校对。"
+                    "知识沉淀：方法说明、模板、最小示例、验收清单。"
+                    "边界是不写代码。"
+                    "适用场景是流程诊断。"
+                    "协作方式是输出结构化结论。"
+                ),
+            },
+        )
+        rc_second_status, rc_second_payload = call(
+            base,
+            "POST",
+            f"/api/training/role-creation/sessions/{rc_session_id}/messages",
+            {
+                "operator": "gate-user",
+                "content": (
+                    "默认交付策略：默认先给结构化摘要，再补细节。"
+                    "格式边界：HTML 为主，Markdown / JSON 为辅。"
+                    "首批优先顺序：先模板生成，再整理验收清单。"
+                ),
+            },
+        )
+        rc_first_start_gate = dict(rc_first_payload.get("start_gate") or {})
+        rc_second_start_gate = dict(rc_second_payload.get("start_gate") or {})
+        rc_second_specs = dict(rc_second_payload.get("structured_specs") or {})
+        rc_second_capability = dict(rc_second_specs.get("capability_package_spec") or {})
+        rc_second_knowledge = dict(rc_second_specs.get("knowledge_asset_plan") or {})
+        rc_second_seed = dict(rc_second_specs.get("seed_delivery_plan") or {})
+        role_creation_contract_ok = (
+            rc_first_status == 200
+            and rc_second_status == 200
+            and rc_first_payload.get("ok")
+            and rc_second_payload.get("ok")
+            and not bool(rc_first_start_gate.get("can_start"))
+            and bool(rc_second_start_gate.get("can_start"))
+            and len(list(rc_second_capability.get("capability_modules") or [])) >= 1
+            and len(list(rc_second_knowledge.get("assets") or [])) >= 1
+            and len(list(rc_second_seed.get("task_suggestions") or [])) >= 1
+            and bool((rc_second_payload.get("analysis_progress") or {}).get("steps"))
+        )
+        results.append(
+            (
+                "role_creation_structured_contract",
+                role_creation_contract_ok,
+                {
+                    "session_id": rc_session_id,
+                    "create_status": rc_create_status,
+                    "first_status": rc_first_status,
+                    "second_status": rc_second_status,
+                    "first_start_gate": rc_first_start_gate,
+                    "second_start_gate": rc_second_start_gate,
+                    "capability_module_count": len(list(rc_second_capability.get("capability_modules") or [])),
+                    "knowledge_asset_count": len(list(rc_second_knowledge.get("assets") or [])),
+                    "seed_task_count": len(list(rc_second_seed.get("task_suggestions") or [])),
+                    "analysis_progress": rc_second_payload.get("analysis_progress") or {},
+                },
+            )
+        )
+
+        defect_short_status, defect_short_payload = call(
+            base,
+            "POST",
+            "/api/defects",
+            {"report_text": "角色名错了", "operator": "gate-user"},
+        )
+        defect_demand_status, defect_demand_payload = call(
+            base,
+            "POST",
+            "/api/defects",
+            {"report_text": "希望新增筛选功能", "operator": "gate-user"},
+        )
+        defect_short_report = dict(defect_short_payload.get("report") or {})
+        defect_demand_report = dict(defect_demand_payload.get("report") or {})
+        defect_short_decision = dict(defect_short_report.get("current_decision") or {})
+        defect_demand_decision = dict(defect_demand_report.get("current_decision") or {})
+        defect_prejudge_ok = (
+            defect_short_status == 200
+            and bool(defect_short_report.get("is_formal"))
+            and str(defect_short_report.get("status") or "").strip() == "unresolved"
+            and str(defect_short_report.get("display_id") or "").strip().startswith("DTS-")
+            and str(defect_short_decision.get("decision") or "").strip() == "defect"
+            and defect_demand_status == 200
+            and not bool(defect_demand_report.get("is_formal"))
+            and str(defect_demand_report.get("status") or "").strip() == "not_formal"
+            and str(defect_demand_decision.get("decision") or "").strip() == "not_defect"
+        )
+        results.append(
+            (
+                "defect_prejudge_short_report",
+                defect_prejudge_ok,
+                {
+                    "short_status": defect_short_status,
+                    "short_report": defect_short_report,
+                    "short_decision": defect_short_decision,
+                    "demand_status": defect_demand_status,
+                    "demand_report": defect_demand_report,
+                    "demand_decision": defect_demand_decision,
+                },
+            )
+        )
 
         tasks: list[dict] = []
         for idx in range(5):

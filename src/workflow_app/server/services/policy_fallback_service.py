@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from workflow_app.server.services.codex_exec_monitor import resolve_codex_command, run_monitored_subprocess
+
 def bind_runtime_symbols(symbols: dict[str, object]) -> None:
     if not isinstance(symbols, dict):
         return
@@ -458,6 +460,7 @@ def build_agent_policy_payload_via_codex(
     codex_exit_code: int | None = None
     parse_warnings: list[str] = []
     policy_error = ""
+    monitor_info: dict[str, Any] = {}
     scope_hint = (
         f"workspace_root={workspace_root.as_posix()} ; target_agents_path={agents_path.as_posix()} ; "
         "expect target path under workspace root and workspace root contains workflow/."
@@ -473,7 +476,7 @@ def build_agent_policy_payload_via_codex(
 
     command: list[str] = []
     command_summary = "codex exec --json --skip-git-repo-check --sandbox workspace-write --add-dir <workspace_root> -C <workspace_root> -"
-    codex_bin = shutil.which("codex")
+    codex_bin = resolve_codex_command()
     if not policy_error and not codex_bin:
         policy_error = "codex_command_not_found"
     if codex_bin:
@@ -492,41 +495,45 @@ def build_agent_policy_payload_via_codex(
         ]
 
     if not policy_error and command:
-        proc: subprocess.Popen[str] | None = None
-        running_started_ms = int(time.time() * 1000)
         try:
-            proc = subprocess.Popen(
-                command,
-                cwd=workspace_root.as_posix(),
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
+            completion_state = {"ready": False}
+
+            def _observe_stdout(line: str) -> None:
+                cleaned = str(line or "").strip()
+                if not cleaned:
+                    return
+                try:
+                    event = json.loads(cleaned)
+                except Exception:
+                    return
+                if not isinstance(event, dict):
+                    return
+                if str(event.get("type") or "").strip() == "turn.completed":
+                    completion_state["ready"] = True
+                    return
+                msg_text = _extract_codex_event_text(event)
+                if msg_text and _extract_json_objects(msg_text):
+                    completion_state["ready"] = True
+
+            result = run_monitored_subprocess(
+                command=command,
+                cwd=workspace_root,
+                stdin_text=prompt_text,
+                on_stdout_line=_observe_stdout,
+                completion_checker=lambda: bool(completion_state["ready"]),
             )
-            stdout_text, stderr_text = proc.communicate(prompt_text + "\n", timeout=POLICY_CODEX_TIMEOUT_S)
-            codex_exit_code = int(proc.returncode or 0)
+            running_started_ms = int(result.started_at_ms or 0)
+            running_finished_ms = int(result.finished_at_ms or 0)
+            stdout_text = result.stdout_text
+            stderr_text = result.stderr_text
+            codex_exit_code = result.exit_code
+            monitor_info = dict(result.monitor or {})
+            if result.forced_exit_after_result:
+                parse_warnings.append("codex_exec_grace_terminated")
             if codex_exit_code != 0:
                 policy_error = f"codex_exec_failed_exit_{codex_exit_code}"
-        except subprocess.TimeoutExpired:
-            if proc is not None:
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
-                try:
-                    out_tmp, err_tmp = proc.communicate(timeout=3)
-                except Exception:
-                    out_tmp, err_tmp = "", ""
-                stdout_text = out_tmp
-                stderr_text = err_tmp
-                codex_exit_code = int(proc.returncode or 124)
-            policy_error = "codex_exec_timeout"
         except Exception as exc:
             policy_error = f"codex_exec_exception:{exc}"
-        finally:
-            running_finished_ms = int(time.time() * 1000)
     _write_text_file(stdout_path, stdout_text)
     _write_text_file(stderr_path, stderr_text)
 
@@ -683,6 +690,7 @@ def build_agent_policy_payload_via_codex(
         "command_summary": command_summary,
         "command": command,
         "codex_exit_code": codex_exit_code,
+        "monitor": monitor_info,
         "contract_status": str(contract_info.get("contract_status") or "failed"),
         "contract_missing_fields": [
             str(item).strip()

@@ -1,3 +1,91 @@
+from pathlib import Path
+
+from workflow_app.server.services.codex_failure_contract import (
+    build_codex_failure,
+    build_retry_action,
+    infer_codex_failure_detail_code,
+)
+
+
+def _role_creation_trace_refs(root: Path, trace_ref: str) -> dict[str, str]:
+    trace_text = str(trace_ref or "").strip()
+    if not trace_text:
+        return {}
+    refs = {"trace_dir": trace_text}
+    trace_dir = Path(trace_text)
+    if not trace_dir.is_absolute():
+        trace_dir = (Path(root).resolve(strict=False) / trace_text).resolve(strict=False)
+    if not trace_dir.exists() or not trace_dir.is_dir():
+        return refs
+    runtime_root = Path(root).resolve(strict=False)
+    for file_name, label in (
+        ("prompt.txt", "prompt"),
+        ("stdout.txt", "stdout"),
+        ("stderr.txt", "stderr"),
+        ("result.json", "result"),
+    ):
+        file_path = trace_dir / file_name
+        if not file_path.exists() or not file_path.is_file():
+            continue
+        refs[label] = relative_to_root(runtime_root, file_path.resolve(strict=False))
+    return refs
+
+
+def _role_creation_session_codex_failure(
+    root: Path,
+    *,
+    session_summary: dict[str, Any],
+    messages: list[dict[str, Any]],
+) -> dict[str, Any]:
+    queue_status = str(session_summary.get("message_processing_status") or "").strip().lower()
+    if queue_status != "failed":
+        return {}
+    trace_ref = str(session_summary.get("last_dialogue_trace_ref") or "").strip()
+    detail_code = ""
+    fallback_message = str(session_summary.get("message_processing_error") or "").strip()
+    attempt_keys: list[str] = []
+    failed_at = str(session_summary.get("message_processing_updated_at") or "").strip()
+    for message in reversed(list(messages or [])):
+        meta = message.get("meta") if isinstance(message.get("meta"), dict) else {}
+        message_trace_ref = str(meta.get("trace_ref") or "").strip()
+        if message_trace_ref and not trace_ref:
+            trace_ref = message_trace_ref
+        if message_trace_ref:
+            attempt_keys.append(message_trace_ref)
+        batch_id = str(meta.get("processing_batch_id") or message.get("processing_batch_id") or "").strip()
+        if batch_id:
+            attempt_keys.append(batch_id)
+        dialogue_error = str(meta.get("dialogue_error") or "").strip().lower()
+        if dialogue_error and not detail_code:
+            detail_code = dialogue_error
+        processing_error = str(meta.get("processing_error") or "").strip()
+        if processing_error and not fallback_message:
+            fallback_message = processing_error
+        if str(message.get("created_at") or "").strip() and not failed_at:
+            failed_at = str(message.get("created_at") or "").strip()
+    if not detail_code:
+        detail_code = infer_codex_failure_detail_code(
+            fallback_message,
+            fallback="role_creation_analysis_failed",
+        )
+    if not detail_code:
+        return {}
+    attempt_count = len({str(item or "").strip() for item in attempt_keys if str(item or "").strip()})
+    return build_codex_failure(
+        feature_key="role_creation_analysis",
+        attempt_id=str(session_summary.get("message_processing_batch_id") or trace_ref or session_summary.get("session_id") or "").strip(),
+        attempt_count=max(1, int(attempt_count or 0)),
+        failure_detail_code=detail_code,
+        failure_message=fallback_message,
+        retry_action=build_retry_action(
+            "retry_role_creation_analysis",
+            payload={"session_id": str(session_summary.get("session_id") or "").strip()},
+        ),
+        trace_refs=_role_creation_trace_refs(root, trace_ref),
+        failed_at=failed_at,
+    )
+
+
 def list_role_creation_sessions(root: Path) -> dict[str, Any]:
     _ensure_role_creation_tables(root)
     conn = connect_db(root)
@@ -148,12 +236,18 @@ def get_role_creation_session_detail(root: Path, session_id: str) -> dict[str, A
         "provider": str(session_summary.get("dialogue_provider") or "").strip(),
         "trace_ref": str(session_summary.get("last_dialogue_trace_ref") or "").strip(),
     }
+    codex_failure = _role_creation_session_codex_failure(
+        root,
+        session_summary=session_summary,
+        messages=messages,
+    )
     return {
         "session": {
             **session_summary,
             "current_stage_key": current_stage_key,
             "current_stage_index": current_stage_index,
             "current_stage_title": str(stage_meta.get("current_stage_title") or ""),
+            "codex_failure": codex_failure,
         },
         "messages": messages,
         "role_spec": role_spec,
@@ -164,6 +258,7 @@ def get_role_creation_session_detail(root: Path, session_id: str) -> dict[str, A
         "assignment_graph": assignment_graph,
         "created_agent": created_agent,
         "dialogue_agent": dialogue_agent,
+        "codex_failure": codex_failure,
     }
 
 
