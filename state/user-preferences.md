@@ -220,6 +220,11 @@
   - evidence: 最新明确提出“代码仓不需要 run_workflow.bat，本工作区顶层需要一个，这样我不用去找”
   - action: 后续将 `./run_workflow.bat` 固定放在 `../workflow/` PM 仓顶层，作为便捷启动入口；正式代码仓不再保留同名脚本
   - confidence: high
+- pref_44:
+  - label: 最终回复显式确认记忆已更新
+  - evidence: 最新直接追问“另外这几轮你怎么没有更新记忆”“怎么保证你之后不会漏”
+  - action: 当 `DIALOGUE_RETRO_SWITCH: ON` 时，最终回复必须显式带出本轮 `memory_ref`；若本轮新增稳定经验，也同步带出 `experience_ref`
+  - confidence: high
 
 ## Need Hypotheses
 - h_01:
@@ -285,3 +290,4 @@
 - 2026-04-03: 新增“PM 仓不保留代码副本”偏好，`workflow` 默认收为治理壳仓，不再跟踪 `src/`、`scripts/`、`run_workflow.bat` 等正式代码副本。
 - 2026-04-03: 新增“当前单人阶段由你承载开发测试部署”偏好，默认由我负责代码同步、开发验证、`test` 部署与 `prod` 候选刷新。
 - 2026-04-03: 更新“生产入口”偏好，`./run_workflow.bat` 固定放在 `workflow` PM 顶层作为便捷入口，代码仓不再保留同名脚本。
+- 2026-04-03: 新增“最终回复显式确认记忆已更新”偏好，后续 `DIALOGUE_RETRO_SWITCH: ON` 时必须在最终回复中带出 `memory_ref`，避免再次漏写。
