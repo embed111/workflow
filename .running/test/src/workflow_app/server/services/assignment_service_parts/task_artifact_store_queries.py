@@ -1017,6 +1017,7 @@ def get_assignment_graph(
     history_loaded: Any = 0,
     history_batch_size: Any = 12,
     include_test_data: bool = True,
+    focus_node_ids: Any = None,
 ) -> dict[str, Any]:
     ticket_id = safe_token(str(ticket_id_text or ""), "", 160)
     if not ticket_id:
@@ -1045,7 +1046,16 @@ def get_assignment_graph(
         include_serialized_nodes=False,
     )
     ticket_id = str(snapshot["graph_row"].get("ticket_id") or ticket_id).strip()
-    raw_nodes = list(snapshot["nodes"] or [])
+    focus_node_id_set = {
+        safe_token(str(item or ""), "", 160)
+        for item in list(focus_node_ids or [])
+        if safe_token(str(item or ""), "", 160)
+    }
+    raw_nodes = [
+        dict(row)
+        for row in list(snapshot["nodes"] or [])
+        if not focus_node_id_set or str((row or {}).get("node_id") or "").strip() in focus_node_id_set
+    ]
     completed_rows = _assignment_sort_completed_rows(
         [
             row

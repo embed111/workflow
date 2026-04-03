@@ -202,6 +202,68 @@ def write_agents_fixture(runtime_root: Path) -> Path:
     return workspace_root
 
 
+def init_code_root_fixture(workspace_root: Path) -> dict[str, str]:
+    code_root = workspace_root / "workflow_code"
+    code_root.mkdir(parents=True, exist_ok=True)
+    (code_root / "README.md").write_text("# workflow_code fixture\n", encoding="utf-8")
+    git_bin = shutil.which("git")
+    if not git_bin:
+        raise RuntimeError("git not found in PATH")
+    subprocess.run([git_bin, "init"], cwd=str(code_root), check=True, capture_output=True, text=True)
+    subprocess.run([git_bin, "config", "user.email", "gate@example.com"], cwd=str(code_root), check=True, capture_output=True, text=True)
+    subprocess.run([git_bin, "config", "user.name", "workflow-gate"], cwd=str(code_root), check=True, capture_output=True, text=True)
+    subprocess.run([git_bin, "add", "README.md"], cwd=str(code_root), check=True, capture_output=True, text=True)
+    subprocess.run(
+        [git_bin, "commit", "-m", "chore: init workflow_code fixture"],
+        cwd=str(code_root),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    branch = subprocess.run(
+        [git_bin, "branch", "--show-current"],
+        cwd=str(code_root),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    commit = subprocess.run(
+        [git_bin, "rev-parse", "HEAD"],
+        cwd=str(code_root),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    return {
+        "code_root": code_root.as_posix(),
+        "default_branch": branch,
+        "head_commit": commit,
+    }
+
+
+def write_runtime_config_fixture(runtime_root: Path, workspace_root: Path) -> Path:
+    artifact_root = (runtime_root / "artifact-root").resolve()
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    path = runtime_root / "state" / "runtime-config.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "agent_search_root": workspace_root.as_posix(),
+                "artifact_root": artifact_root.as_posix(),
+                "development_workspace_root": (artifact_root / "development-workspaces").as_posix(),
+                "agent_runtime_root": (artifact_root / "agent-runtime").as_posix(),
+                "show_test_data": False,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def run_workspace_line_budget_gate(repo_root: Path) -> tuple[bool, dict[str, object]]:
     checker = (repo_root / "scripts" / "quality" / "check_workspace_line_budget.py").resolve()
     report_path = (repo_root / ".test" / "reports" / "WORKSPACE_LINE_BUDGET_REPORT.md").resolve()
@@ -308,6 +370,8 @@ def main() -> int:
         shutil.rmtree(runtime_root, ignore_errors=True)
     runtime_root.mkdir(parents=True, exist_ok=True)
     fixture_root = write_agents_fixture(runtime_root)
+    code_root_fixture = init_code_root_fixture(fixture_root)
+    runtime_config_path = write_runtime_config_fixture(runtime_root, fixture_root)
     stub_bin = (runtime_root / "stub-bin").resolve()
     stub_cmd = write_acceptance_codex_stub(stub_bin)
     upsert_policy_cache(
@@ -402,6 +466,156 @@ def main() -> int:
         if not agents:
             raise RuntimeError("no available agents after fixture restore")
         default_root = str(agents_data.get("agent_search_root") or fixture_root.as_posix())
+
+        boundary_status, boundary_payload = call(base, "GET", "/api/config/developer-workspaces")
+        boundary_ok = (
+            boundary_status == 200
+            and boundary_payload.get("ok")
+            and str(boundary_payload.get("pm_workspace_path") or "").strip() == (fixture_root / "workflow").as_posix()
+            and str(boundary_payload.get("code_root_path") or "").strip() == str(code_root_fixture.get("code_root") or "")
+            and bool(boundary_payload.get("code_root_ready"))
+            and bool(str(boundary_payload.get("development_workspace_root") or "").strip())
+        )
+        results.append(
+            (
+                "developer_workspace_boundary_visible",
+                boundary_ok,
+                {
+                    "status": boundary_status,
+                    "payload": boundary_payload,
+                    "runtime_config_path": runtime_config_path.as_posix(),
+                },
+            )
+        )
+
+        git_bin = shutil.which("git")
+        if not git_bin:
+            raise RuntimeError("git not found in PATH")
+        bootstrap_cmd = [
+            sys.executable,
+            str((repo_root / "scripts" / "manage_developer_workspace.py").resolve()),
+            "--root",
+            runtime_root.as_posix(),
+            "bootstrap",
+            "--developer-id",
+            "pm-gate",
+        ]
+        bootstrap_proc = subprocess.run(
+            bootstrap_cmd,
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        bootstrap_stdout = str(bootstrap_proc.stdout or "").strip()
+        try:
+            bootstrap_payload = json.loads(bootstrap_stdout) if bootstrap_stdout else {}
+        except Exception:
+            bootstrap_payload = {"raw": bootstrap_stdout}
+        workspace_path = Path(str(bootstrap_payload.get("workspace_path") or "")).resolve() if bootstrap_payload.get("workspace_path") else None
+        workspace_remote = ""
+        workspace_branch = ""
+        workspace_commit = ""
+        pushed_commit = ""
+        if bootstrap_proc.returncode == 0 and isinstance(workspace_path, Path):
+            workspace_remote = subprocess.run(
+                [git_bin, "-C", workspace_path.as_posix(), "remote", "-v"],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            ).stdout.strip()
+            workspace_branch = subprocess.run(
+                [git_bin, "-C", workspace_path.as_posix(), "branch", "--show-current"],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            ).stdout.strip()
+            workspace_commit = subprocess.run(
+                [git_bin, "-C", workspace_path.as_posix(), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            ).stdout.strip()
+            subprocess.run(
+                [git_bin, "-C", workspace_path.as_posix(), "config", "user.email", "gate@example.com"],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            subprocess.run(
+                [git_bin, "-C", workspace_path.as_posix(), "config", "user.name", "workflow-gate"],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            marker_path = workspace_path / "gate-push.txt"
+            marker_path.write_text("workflow gate bootstrap push\n", encoding="utf-8")
+            subprocess.run(
+                [git_bin, "-C", workspace_path.as_posix(), "add", "gate-push.txt"],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            subprocess.run(
+                [git_bin, "-C", workspace_path.as_posix(), "commit", "-m", "test: workflow gate bootstrap push"],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            subprocess.run(
+                [git_bin, "-C", workspace_path.as_posix(), "push", "-u", "origin", workspace_branch],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            workspace_commit = subprocess.run(
+                [git_bin, "-C", workspace_path.as_posix(), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            ).stdout.strip()
+            pushed_commit = subprocess.run(
+                [git_bin, "-C", str(code_root_fixture.get("code_root") or ""), "rev-parse", f"refs/heads/{workspace_branch}"],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            ).stdout.strip()
+        bootstrap_ok = (
+            bootstrap_proc.returncode == 0
+            and bool(bootstrap_payload.get("ok"))
+            and str(code_root_fixture.get("code_root") or "") in workspace_remote
+            and bool(workspace_branch)
+            and workspace_branch == str(bootstrap_payload.get("current_branch") or "")
+            and bool(workspace_commit)
+            and bool(pushed_commit)
+        )
+        results.append(
+            (
+                "developer_workspace_bootstrap",
+                bootstrap_ok,
+                {
+                    "command": " ".join(bootstrap_cmd),
+                    "returncode": bootstrap_proc.returncode,
+                    "payload": bootstrap_payload,
+                    "git_remote_v": workspace_remote,
+                    "current_branch": workspace_branch,
+                    "workspace_commit": workspace_commit,
+                    "pushed_commit": pushed_commit,
+                    "code_root_fixture": code_root_fixture,
+                    "stderr": str(bootstrap_proc.stderr or "").strip(),
+                },
+            )
+        )
 
         empty_root = runtime_root / "state" / "empty-agent-root"
         empty_root.mkdir(parents=True, exist_ok=True)

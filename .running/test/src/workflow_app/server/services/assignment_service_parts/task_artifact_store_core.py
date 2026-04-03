@@ -749,6 +749,7 @@ def _assignment_write_audit_entry(
     target_status: str,
     detail: dict[str, Any] | None,
     created_at: str,
+    sync_index: bool = True,
 ) -> str:
     audit_id = assignment_audit_id()
     payload = {
@@ -766,7 +767,8 @@ def _assignment_write_audit_entry(
         "created_at": str(created_at or "").strip(),
     }
     _assignment_append_jsonl(_assignment_audit_log_path(root, ticket_id), payload)
-    sync_assignment_task_bundle_index(root, ticket_id)
+    if sync_index:
+        sync_assignment_task_bundle_index(root, ticket_id)
     return audit_id
 
 
@@ -799,12 +801,19 @@ def _assignment_load_run_record(root: Path, *, ticket_id: str, run_id: str) -> d
     return _assignment_read_json(_assignment_run_file_paths(root, ticket_id, run_id)["meta"])
 
 
-def _assignment_write_run_record(root: Path, *, ticket_id: str, run_record: dict[str, Any]) -> None:
+def _assignment_write_run_record(
+    root: Path,
+    *,
+    ticket_id: str,
+    run_record: dict[str, Any],
+    sync_index: bool = True,
+) -> None:
     run_id = str(run_record.get("run_id") or "").strip()
     if not run_id:
         raise AssignmentCenterError(400, "run_id required", "assignment_run_id_required")
     _assignment_write_json(_assignment_run_file_paths(root, ticket_id, run_id)["meta"], run_record)
-    sync_assignment_task_bundle_index(root, ticket_id)
+    if sync_index:
+        sync_assignment_task_bundle_index(root, ticket_id)
     _assignment_publish_runtime_event(
         ticket_id=ticket_id,
         kind="run",

@@ -7,6 +7,30 @@ from workflow_app.server.services.codex_failure_contract import (
 )
 
 
+ROLE_CREATION_ANALYSIS_STEPS = (
+    {
+        "step_key": "extract_role_profile",
+        "label": "抽取角色画像",
+        "description": "识别角色名、目标、核心能力、边界和适用场景。",
+    },
+    {
+        "step_key": "capability_modules",
+        "label": "拆解能力模块",
+        "description": "整理能力模块、默认交付策略、格式边界和优先场景。",
+    },
+    {
+        "step_key": "knowledge_assets",
+        "label": "整理知识资产",
+        "description": "归拢方法文档、模板、示例、反例和验收清单。",
+    },
+    {
+        "step_key": "seed_tasks",
+        "label": "生成首批任务建议",
+        "description": "形成首批能力对象、任务建议和优先顺序。",
+    },
+)
+
+
 def _role_creation_trace_refs(root: Path, trace_ref: str) -> dict[str, str]:
     trace_text = str(trace_ref or "").strip()
     if not trace_text:
@@ -86,6 +110,96 @@ def _role_creation_session_codex_failure(
     )
 
 
+def _role_creation_structured_specs(role_spec: dict[str, Any]) -> dict[str, Any]:
+    spec = dict(role_spec or {})
+    return {
+        "role_profile_spec": dict(spec.get("role_profile_spec") or {}),
+        "capability_package_spec": dict(spec.get("capability_package_spec") or {}),
+        "knowledge_asset_plan": dict(spec.get("knowledge_asset_plan") or {}),
+        "seed_delivery_plan": dict(spec.get("seed_delivery_plan") or {}),
+    }
+
+
+def _role_creation_analysis_progress(role_spec: dict[str, Any], session_summary: dict[str, Any]) -> dict[str, Any]:
+    role_profile_spec = dict((role_spec or {}).get("role_profile_spec") or {})
+    capability_package_spec = dict((role_spec or {}).get("capability_package_spec") or {})
+    knowledge_asset_plan = dict((role_spec or {}).get("knowledge_asset_plan") or {})
+    seed_delivery_plan = dict((role_spec or {}).get("seed_delivery_plan") or {})
+    queue_status = _normalize_role_creation_queue_state(
+        (session_summary or {}).get("message_processing_status"),
+        default="idle",
+    )
+    completed_map = {
+        "extract_role_profile": int(role_profile_spec.get("current_value_count") or 0) >= 1,
+        "capability_modules": bool(list(capability_package_spec.get("capability_modules") or []))
+        or bool((capability_package_spec.get("default_delivery_policy") or {}).get("summary"))
+        or bool((capability_package_spec.get("format_strategy") or {}).get("summary"))
+        or bool(list((capability_package_spec.get("format_strategy") or {}).get("allowed_formats") or [])),
+        "knowledge_assets": bool(list(knowledge_asset_plan.get("assets") or [])),
+        "seed_tasks": bool(list(seed_delivery_plan.get("capability_objects") or []))
+        or bool(list(seed_delivery_plan.get("task_suggestions") or [])),
+    }
+    first_incomplete_key = ""
+    completed_count = 0
+    steps: list[dict[str, Any]] = []
+    for step in ROLE_CREATION_ANALYSIS_STEPS:
+        step_key = str(step["step_key"])
+        is_completed = bool(completed_map.get(step_key))
+        if is_completed:
+            completed_count += 1
+        elif not first_incomplete_key:
+            first_incomplete_key = step_key
+        steps.append(
+            {
+                "step_key": step_key,
+                "label": str(step["label"]),
+                "description": str(step["description"]),
+                "state": "completed" if is_completed else "pending",
+                "completed": is_completed,
+            }
+        )
+    current_step_key = first_incomplete_key or str(ROLE_CREATION_ANALYSIS_STEPS[-1]["step_key"])
+    current_step_label = next(
+        (str(step.get("label") or "") for step in steps if str(step.get("step_key") or "") == current_step_key),
+        "",
+    )
+    if queue_status in {"pending", "running", "failed"}:
+        for step in steps:
+            if str(step.get("step_key") or "") != current_step_key:
+                continue
+            step["state"] = "failed" if queue_status == "failed" else "current"
+            break
+    if queue_status == "failed":
+        status_text = f"分析失败：{current_step_label or '等待重试'}"
+    elif queue_status == "running":
+        status_text = f"分析中：{current_step_label or '处理中'}"
+    elif queue_status == "pending":
+        status_text = f"待分析：{current_step_label or '等待分析'}"
+    elif completed_count >= len(ROLE_CREATION_ANALYSIS_STEPS):
+        status_text = "结构化草稿已完成"
+    elif completed_count > 0:
+        status_text = f"已完成 {completed_count}/{len(ROLE_CREATION_ANALYSIS_STEPS)} 个结构步骤"
+    else:
+        status_text = "等待分析"
+    placeholder_text = ""
+    if queue_status in {"pending", "running"}:
+        placeholder_text = ("正在" if queue_status == "running" else "准备") + (current_step_label or "处理本轮消息") + "…"
+    elif queue_status == "failed":
+        placeholder_text = (current_step_label or "本轮分析") + "失败，请点击“重试本轮分析”。"
+    return {
+        "status": queue_status,
+        "active": queue_status in {"pending", "running"},
+        "failed": queue_status == "failed",
+        "status_text": status_text,
+        "current_step_key": current_step_key,
+        "current_step_label": current_step_label,
+        "completed_step_count": completed_count,
+        "step_count": len(ROLE_CREATION_ANALYSIS_STEPS),
+        "placeholder_text": placeholder_text,
+        "steps": steps,
+    }
+
+
 def list_role_creation_sessions(root: Path) -> dict[str, Any]:
     _ensure_role_creation_tables(root)
     conn = connect_db(root)
@@ -118,6 +232,10 @@ def list_role_creation_sessions(root: Path) -> dict[str, Any]:
                 )
                 summary["session_title"] = sync_payload["session_title"]
                 summary["missing_fields"] = list(sync_payload["missing_fields"])
+            summary["start_gate"] = dict((sync_payload["role_spec"] or {}).get("start_gate") or {})
+            summary["analysis_progress"] = _role_creation_analysis_progress(sync_payload["role_spec"], summary)
+            if summary["analysis_progress"].get("active") or summary["analysis_progress"].get("failed"):
+                summary["message_processing_status_text"] = str(summary["analysis_progress"].get("status_text") or "").strip()
             summary.update(_role_creation_delete_state(root, summary))
             items.append(summary)
         conn.commit()
@@ -183,6 +301,11 @@ def get_role_creation_session_detail(root: Path, session_id: str) -> dict[str, A
     role_spec = dict(sync_payload["role_spec"])
     missing_fields = list(sync_payload["missing_fields"])
     assignment_graph = {}
+    assignment_focus_node_ids = [
+        str(item.get("node_id") or "").strip()
+        for item in list(task_refs or [])
+        if str(item.get("node_id") or "").strip()
+    ]
     if session_summary.get("assignment_ticket_id"):
         try:
             assignment_graph = assignment_service.get_assignment_graph(
@@ -193,6 +316,7 @@ def get_role_creation_session_detail(root: Path, session_id: str) -> dict[str, A
                 history_loaded=400,
                 history_batch_size=50,
                 include_test_data=True,
+                focus_node_ids=assignment_focus_node_ids,
             )
         except Exception:
             assignment_graph = {}
@@ -236,6 +360,13 @@ def get_role_creation_session_detail(root: Path, session_id: str) -> dict[str, A
         "provider": str(session_summary.get("dialogue_provider") or "").strip(),
         "trace_ref": str(session_summary.get("last_dialogue_trace_ref") or "").strip(),
     }
+    structured_specs = _role_creation_structured_specs(role_spec)
+    start_gate = dict(role_spec.get("start_gate") or {})
+    analysis_progress = _role_creation_analysis_progress(role_spec, session_summary)
+    if analysis_progress.get("active") or analysis_progress.get("failed"):
+        session_summary["message_processing_status_text"] = str(analysis_progress.get("status_text") or "").strip()
+    session_summary["analysis_progress"] = analysis_progress
+    session_summary["start_gate"] = start_gate
     codex_failure = _role_creation_session_codex_failure(
         root,
         session_summary=session_summary,
@@ -251,6 +382,11 @@ def get_role_creation_session_detail(root: Path, session_id: str) -> dict[str, A
         },
         "messages": messages,
         "role_spec": role_spec,
+        "structured_specs": structured_specs,
+        "start_gate": start_gate,
+        "analysis_progress": analysis_progress,
+        "recent_changes": list(role_spec.get("recent_changes") or []),
+        "pending_questions": list(role_spec.get("pending_questions") or []),
         "profile": _role_profile_payload(role_spec, missing_fields, session_summary),
         "stages": stages,
         "stage_meta": stage_meta,
@@ -327,6 +463,11 @@ def _role_creation_delete_state(
             history_loaded=0,
             history_batch_size=12,
             include_test_data=True,
+            focus_node_ids=[
+                str(item.get("node_id") or "").strip()
+                for item in list(task_ref_rows or [])
+                if str(item.get("node_id") or "").strip()
+            ],
         )
     except Exception as exc:
         code = str(getattr(exc, "code", "") or "").strip()

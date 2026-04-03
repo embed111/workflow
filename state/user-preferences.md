@@ -1,7 +1,7 @@
 # User Preferences & Need Hypotheses
 
 - owner: project-user
-- last_updated: 2026-03-31
+- last_updated: 2026-04-03
 - source_of_truth: this file
 
 ## User Preferences
@@ -195,6 +195,11 @@
   - evidence: 最新明确要求“在 .codex 目录下维护经验目录，用 index.md 管理引用，每轮先读取经验，遇到经验与踩坑要累积”
   - action: 每轮先读 `.codex/experience/index.md` 与必读经验卡；出现可复用做法或踩坑复盘时，优先更新经验目录而不是只留在当日日记
   - confidence: high
+- pref_39:
+  - label: 双仓改造分批收口
+  - evidence: 最新提示词明确要求“本轮只做第一批，范围严格收口”，只先固定 `workflow / workflow_code` 边界、bootstrap 与留痕地基
+  - action: 后续涉及代码与 agent 分离治理时，先按批次落地边界和最小基础设施，不把运行态外置、集成门禁、角色新增一次性混做
+  - confidence: high
 
 ## Need Hypotheses
 - h_01:
@@ -255,3 +260,4 @@
 - 2026-03-29: 新增“触达文件超限先重构”偏好，后续默认先跑 `scripts/quality/check_workspace_line_budget.py --root .`；若本轮触达文件命中行数门槛，则先做职责拆分/设计模式重构再发布。
 - 2026-03-30: 新增“缺陷判定先分析不因描述短驳回”偏好，后续缺陷提报即使只有一句话，也先分析是否构成 bug，再决定是否按缺陷流转。
 - 2026-03-31: 新增“经验目录先读并持续沉淀”偏好，后续每轮先读 `.codex/experience/index.md`，并把稳定经验与踩坑规避沉淀到经验卡。
+- 2026-04-03: 新增“双仓改造分批收口”偏好，后续处理 `workflow / workflow_code` 分离时默认先固定边界、bootstrap、留痕与 fail-closed，再逐批推进运行态外置与集成门禁。

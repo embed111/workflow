@@ -31,7 +31,7 @@ def _assignment_touch_run_latest_event(
     run_record["latest_event"] = _short_assignment_text(latest_event, 1000) or "执行中"
     run_record["latest_event_at"] = latest_event_at
     run_record["updated_at"] = latest_event_at
-    _assignment_write_run_record(root, ticket_id=ticket_id, run_record=run_record)
+    _assignment_write_run_record(root, ticket_id=ticket_id, run_record=run_record, sync_index=False)
 
 
 def _assignment_execution_codex_failure(
@@ -841,46 +841,49 @@ def _assignment_execution_worker(
     def read_stream(name: str, pipe: Any, collector: list[str]) -> None:
         if pipe is None:
             return
-        for line in iter(pipe.readline, ""):
-            if line == "":
-                break
-            collector.append(line)
-            _append_assignment_run_text(files[name], line)
-            message_text = line.rstrip("\n")
-            detail: dict[str, Any] = {}
-            event_type = name
-            if name == "stdout":
-                try:
-                    event = json.loads(message_text)
-                except Exception:
-                    event = None
-                if isinstance(event, dict):
-                    event_type = str(event.get("type") or "stdout_event").strip() or "stdout_event"
-                    agent_message_text = _assignment_extract_agent_message_text(event)
-                    message_text = agent_message_text or str(event.get("message") or message_text)
-                    if message_text and agent_message_text:
-                        agent_messages.append(message_text)
-                        payload_candidates = _assignment_extract_json_objects(message_text)
-                        if payload_candidates:
-                            record_observed_result(payload_candidates[-1])
-                    if event_type == "turn.completed":
-                        mark_observed_turn_completed()
-                    detail = event
-            created_at = iso_ts(now_local())
-            _append_assignment_run_event(
-                files["events"],
-                event_type=event_type,
-                message=message_text or f"{name} 输出",
-                created_at=created_at,
-                detail=detail,
-            )
-            _assignment_touch_run_latest_event(
-                root,
-                ticket_id=ticket_id,
-                run_id=run_id,
-                latest_event=message_text or f"{name} 输出",
-                latest_event_at=created_at,
-            )
+        try:
+            for line in iter(pipe.readline, ""):
+                if line == "":
+                    break
+                collector.append(line)
+                _append_assignment_run_text(files[name], line)
+                message_text = line.rstrip("\n")
+                detail: dict[str, Any] = {}
+                event_type = name
+                if name == "stdout":
+                    try:
+                        event = json.loads(message_text)
+                    except Exception:
+                        event = None
+                    if isinstance(event, dict):
+                        event_type = str(event.get("type") or "stdout_event").strip() or "stdout_event"
+                        agent_message_text = _assignment_extract_agent_message_text(event)
+                        message_text = agent_message_text or str(event.get("message") or message_text)
+                        if message_text and agent_message_text:
+                            agent_messages.append(message_text)
+                            payload_candidates = _assignment_extract_json_objects(message_text)
+                            if payload_candidates:
+                                record_observed_result(payload_candidates[-1])
+                        if event_type == "turn.completed":
+                            mark_observed_turn_completed()
+                        detail = event
+                created_at = iso_ts(now_local())
+                _append_assignment_run_event(
+                    files["events"],
+                    event_type=event_type,
+                    message=message_text or f"{name} 输出",
+                    created_at=created_at,
+                    detail=detail,
+                )
+                _assignment_touch_run_latest_event(
+                    root,
+                    ticket_id=ticket_id,
+                    run_id=run_id,
+                    latest_event=message_text or f"{name} 输出",
+                    latest_event_at=created_at,
+                )
+        except (OSError, ValueError):
+            return
 
     run_record = _assignment_load_run_record(root, ticket_id=ticket_id, run_id=run_id)
     if run_record:

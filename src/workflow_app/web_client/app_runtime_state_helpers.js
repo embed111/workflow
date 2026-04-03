@@ -519,6 +519,56 @@
     }
   }
 
+  function applyDeveloperWorkspaceSettingsPayload(payload) {
+    const data = payload && typeof payload === 'object' ? payload : {};
+    const boundary = data.workspace_boundary && typeof data.workspace_boundary === 'object'
+      ? data.workspace_boundary
+      : {};
+    state.pmWorkspacePath = safe(data.pm_workspace_path || boundary.pm_root).trim();
+    state.pmWorkspaceExists = !!(data.pm_workspace_exists !== undefined ? data.pm_workspace_exists : boundary.pm_root_exists);
+    state.codeRootPath = safe(data.code_root_path || boundary.code_root).trim();
+    state.codeRootReady = !!(data.code_root_ready !== undefined ? data.code_root_ready : boundary.code_root_ready);
+    state.codeRootError = safe(data.code_root_error || boundary.code_root_error).trim();
+    state.codeRootIsGitRepo = !!(data.code_root_is_git_repo !== undefined ? data.code_root_is_git_repo : boundary.code_root_is_git_repo);
+    state.developmentWorkspaceRoot = safe(data.development_workspace_root || boundary.development_workspace_root).trim();
+    state.agentRuntimeRoot = safe(data.agent_runtime_root || boundary.agent_runtime_root).trim();
+    state.workspaceBoundaryReady = !!(data.workspace_boundary_ready !== undefined ? data.workspace_boundary_ready : boundary.workspace_boundary_ready);
+    state.workspaceBoundaryError = safe(
+      data.workspace_boundary_error || boundary.code_root_error || boundary.workspace_root_error,
+    ).trim();
+    state.developerWorkspaceRegistryPath = safe(data.developer_workspace_registry_path).trim();
+    state.developerWorkspaceCount = Math.max(0, Number(data.developer_workspace_count || 0));
+    state.developerWorkspaces = Array.isArray(data.developer_workspaces) ? data.developer_workspaces : [];
+    updateDeveloperWorkspaceMeta();
+    return {
+      pm_workspace_path: state.pmWorkspacePath,
+      code_root_path: state.codeRootPath,
+      development_workspace_root: state.developmentWorkspaceRoot,
+      code_root_ready: state.codeRootReady,
+      workspace_boundary_ready: state.workspaceBoundaryReady,
+    };
+  }
+
+  function updateDeveloperWorkspaceMeta() {
+    const pmNode = $('pmWorkspacePath');
+    if (pmNode) pmNode.textContent = safe(state.pmWorkspacePath).trim() || '-';
+    const codeNode = $('codeRootPath');
+    if (codeNode) codeNode.textContent = safe(state.codeRootPath).trim() || '-';
+    const devNode = $('developmentWorkspaceRootPath');
+    if (devNode) devNode.textContent = safe(state.developmentWorkspaceRoot).trim() || '-';
+    const statusNode = $('developerWorkspaceStatusMeta');
+    if (statusNode) {
+      const ready = !!state.codeRootReady && !!state.workspaceBoundaryReady;
+      const countText = '已记录开发工作区 ' + String(Math.max(0, Number(state.developerWorkspaceCount || 0))) + ' 个';
+      const registry = safe(state.developerWorkspaceRegistryPath).trim();
+      const registryText = registry ? ' · 留痕=' + registry : '';
+      const errorText = safe(state.codeRootError || state.workspaceBoundaryError).trim();
+      statusNode.textContent = ready
+        ? ('双仓边界已固定 · ' + countText + registryText)
+        : ('代码根仓未就绪：' + (errorText || '未配置') + ' · ' + countText + registryText);
+    }
+  }
+
   function applyAssignmentExecutionSettingsPayload(payload) {
     const data = payload && typeof payload === 'object' ? payload : {};
     state.assignmentExecutionSettings = {

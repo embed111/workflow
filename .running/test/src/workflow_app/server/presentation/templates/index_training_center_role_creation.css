@@ -559,11 +559,32 @@
   border-radius: 12px;
   background: #fff;
   padding: 10px 12px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
 .rc-composer-box.dragging {
   border-color: #b7cdfc;
   background: #f7faff;
+}
+
+.rc-composer-box.is-ready {
+  border-color: #b7cdfc;
+  box-shadow: 0 0 0 3px rgba(36, 91, 219, 0.08);
+}
+
+.rc-composer-box.is-processing {
+  border-color: #ffd591;
+  background: #fffaf0;
+}
+
+.rc-composer-box.is-failed {
+  border-color: #ffccc7;
+  background: #fff5f5;
+}
+
+.rc-composer-box.is-disabled {
+  border-style: dashed;
+  background: #f7f8fa;
 }
 
 .rc-composer-input {
@@ -844,6 +865,20 @@
   gap: 12px;
 }
 
+.rc-structured-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rc-structured-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #7a8290;
+  text-transform: uppercase;
+}
+
 .rc-profile-card {
   border: 1px solid var(--line-soft);
   border-radius: 12px;
@@ -860,6 +895,14 @@
   color: #4e5969;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.rc-layer-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #4e5969;
+  font-size: 12px;
+  line-height: 1.7;
 }
 
 .rc-profile-head {
@@ -888,6 +931,25 @@
   flex-wrap: wrap;
 }
 
+.rc-inline-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rc-inline-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f4f7fb;
+  color: #314052;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 .rc-profile-summary {
   display: grid;
   grid-template-columns: 1fr;
@@ -913,6 +975,11 @@
   line-height: 1.45;
   color: #2f3440;
   word-break: break-word;
+}
+
+.rc-profile-v .rc-chip {
+  margin-right: 6px;
+  margin-bottom: 6px;
 }
 
 .rc-profile-section-title {
@@ -956,6 +1023,75 @@
 }
 
 .rc-field-note {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.rc-progress-steps,
+.rc-change-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rc-progress-step,
+.rc-change-item,
+.rc-entity-card {
+  border: 1px solid #e6e9ef;
+  border-radius: 10px;
+  background: #fafbfc;
+  padding: 10px;
+}
+
+.rc-progress-step.current {
+  border-color: #b7cdfc;
+  background: #f5f9ff;
+}
+
+.rc-progress-step.failed {
+  border-color: #ffccc7;
+  background: #fff5f5;
+}
+
+.rc-progress-step.completed {
+  border-color: #ccebd8;
+  background: #f6fff9;
+}
+
+.rc-progress-step-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rc-progress-step-label,
+.rc-change-title,
+.rc-entity-title {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: #1f2329;
+  word-break: break-word;
+}
+
+.rc-entity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.rc-entity-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rc-entity-meta,
+.rc-layer-source {
   font-size: 12px;
   color: var(--muted);
   line-height: 1.55;

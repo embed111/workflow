@@ -967,6 +967,18 @@
         <div style='height:8px'></div>
         <label for='agentSearchRoot' class='hint'>当前 agent路径</label>
         <input id='agentSearchRoot' value='' placeholder='例如 C:/work/agents'/>
+        <div style='height:14px'></div>
+        <div class='card-title'>代码与开发工作区边界</div>
+        <div class='hint'>固定 `workflow` 为 PM/控制工作区，固定 `workflow_code` 为正式代码根仓；开发工作区默认派生自任务产物根，仅用于拉取、提交和推送开发分支。</div>
+        <div style='height:8px'></div>
+        <div id='developerWorkspaceStatusMeta' class='hint'>边界状态读取中...</div>
+        <div style='height:8px'></div>
+        <div class='hint'>PM 工作区路径</div>
+        <div id='pmWorkspacePath' class='assignment-path-box'>-</div>
+        <div class='hint' style='margin-top:8px'>代码根仓路径</div>
+        <div id='codeRootPath' class='assignment-path-box'>-</div>
+        <div class='hint' style='margin-top:8px'>开发工作区根路径</div>
+        <div id='developmentWorkspaceRootPath' class='assignment-path-box'>-</div>
         <div style='height:8px'></div>
         <div class='card-title'>测试数据环境策略</div>
         <div id='showTestDataPolicyMeta' class='hint'>环境策略读取中...</div>

@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 from ..bootstrap import web_server_runtime as ws
+from ..services import developer_workspace_service as dw
 
 
 def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
@@ -25,6 +26,10 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
         agents = ws.list_available_agents(cfg, force_refresh=force_refresh) if root_ready else []
         artifact_settings = ws.get_artifact_root_settings(cfg.root)
         execution_settings = ws.get_assignment_execution_settings(cfg.root)
+        workspace_settings = dw.developer_workspace_response_payload(
+            runtime_root=cfg.root,
+            workspace_root=root_text or None,
+        )
         policy_fields = ws.show_test_data_policy_fields(cfg, state)
         handler.send_json(
             200,
@@ -49,6 +54,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                 "default_task_artifact_root": str(artifact_settings.get("default_task_artifact_root") or ""),
                 "artifact_root_validation_status": str(artifact_settings.get("path_validation_status") or ""),
                 "assignment_execution_settings": execution_settings,
+                **workspace_settings,
                 "agents": agents,
                 "count": len(agents),
             },

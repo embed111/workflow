@@ -376,14 +376,6 @@ def ensure_tables(
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_assignment_system_audit_time ON assignment_system_audit(created_at DESC)"
         )
-        for legacy_table in (
-            "assignment_execution_runs",
-            "assignment_edges",
-            "assignment_nodes",
-            "assignment_audit_log",
-            "assignment_graphs",
-        ):
-            drop_table_if_exists(conn, legacy_table)
         ensure_column(conn, "agent_registry", "vector_icon", "vector_icon TEXT NOT NULL DEFAULT ''")
         ensure_column(conn, "agent_registry", "latest_release_version", "latest_release_version TEXT NOT NULL DEFAULT ''")
         ensure_column(conn, "agent_registry", "bound_release_version", "bound_release_version TEXT NOT NULL DEFAULT ''")

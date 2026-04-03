@@ -56,6 +56,7 @@
     }
     if (tabName === 'settings') {
       updateArtifactRootMeta();
+      updateDeveloperWorkspaceMeta();
       updateAssignmentExecutionSettingsMeta();
     }
   }

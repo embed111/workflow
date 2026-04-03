@@ -268,6 +268,7 @@ def start_role_creation_session(cfg: Any, session_id: str, body: dict[str, Any])
     session_summary = dict(current_detail.get("session") or {})
     role_spec = dict(current_detail.get("role_spec") or {})
     missing_fields = list((current_detail.get("profile") or {}).get("missing_fields") or [])
+    start_gate = dict(role_spec.get("start_gate") or {})
     status = _normalize_session_status(session_summary.get("status"))
     if status == "completed":
         raise TrainingCenterError(409, "当前角色创建已完成，不能再次启动", "role_creation_session_completed")
@@ -288,7 +289,11 @@ def start_role_creation_session(cfg: Any, session_id: str, body: dict[str, Any])
             409,
             "当前草案信息不足，不能开始创建",
             "role_creation_spec_incomplete",
-            {"missing_fields": missing_fields, "missing_labels": _missing_field_labels(missing_fields)},
+            {
+                "missing_fields": missing_fields,
+                "missing_labels": _missing_field_labels(missing_fields),
+                "start_gate_blockers": [str(item).strip() for item in list(start_gate.get("blockers") or []) if str(item).strip()],
+            },
         )
     dialogue_agent = _resolve_role_creation_dialogue_agent(cfg)
     workspace_result = _initialize_role_workspace(

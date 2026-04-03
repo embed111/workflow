@@ -37,6 +37,8 @@ def _task_run_failure_detail_code(summary: str, stderr_text: str) -> str:
         return "codex_result_missing"
     if "invalid agent_search_root" in stderr_lower:
         return "workspace_missing"
+    if "path_in_protected_root" in stderr_lower:
+        return "protected_workspace_root"
     if "no conversation context" in stderr_lower:
         return "input_missing"
     return infer_codex_failure_detail_code(stderr_value or summary, fallback="execution_failed")

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -10,6 +11,31 @@ import sys
 import threading
 from pathlib import Path
 from typing import Any
+
+try:
+    from workflow_app.server.services.developer_workspace_service import (
+        protected_write_roots as resolve_protected_write_roots,
+    )
+except Exception:  # pragma: no cover - direct script fallback
+    def resolve_protected_write_roots(
+        *,
+        workspace_root: str | Path | None = None,
+        runtime_root: Path | None = None,
+        fallback_pm_root: Path | None = None,
+    ) -> list[Path]:
+        if isinstance(workspace_root, Path):
+            root = workspace_root.resolve(strict=False)
+        else:
+            text = str(workspace_root or "").strip()
+            if not text:
+                return []
+            root = Path(text).resolve(strict=False)
+        if not str(root).strip():
+            return []
+        return [
+            (root / "workflow").resolve(strict=False),
+            (root / "workflow_code").resolve(strict=False),
+        ]
 
 
 _WIN_ABS_PATH_PATTERN = re.compile(r"(?i)\b[A-Z]:[\\/][^\s\"'`]+")
@@ -186,6 +212,17 @@ def path_in_scope(path: Path, scope: Path) -> bool:
         return False
 
 
+def path_in_protected_roots(path: Path, protected_roots: list[Path]) -> bool:
+    target = path.resolve(strict=False)
+    for item in protected_roots:
+        candidate = Path(item).resolve(strict=False)
+        if target == candidate:
+            return True
+        if path_in_scope(target, candidate):
+            return True
+    return False
+
+
 def clean_target_token(raw: str) -> str:
     return str(raw or "").strip().strip("\"'").rstrip(".,;")
 
@@ -206,7 +243,7 @@ def resolve_root_alias(raw: str, scope: Path) -> str:
     return (scope / Path(relative)).resolve(strict=False).as_posix()
 
 
-def normalize_write_targets(scope: Path, targets: list[str]) -> list[str]:
+def normalize_write_targets(scope: Path, targets: list[str], *, protected_roots: list[Path]) -> list[str]:
     out: list[str] = []
     seen_raw: set[str] = set()
     seen_norm: set[str] = set()
@@ -218,6 +255,8 @@ def normalize_write_targets(scope: Path, targets: list[str]) -> list[str]:
         path = normalize_abs_path(resolved, base=scope)
         if not path_in_scope(path, scope):
             raise ValueError(f"path_out_of_root: {text}")
+        if path_in_protected_roots(path, protected_roots):
+            raise ValueError(f"path_in_protected_root: {text}")
         norm = path.as_posix()
         if norm in seen_norm:
             seen_raw.add(text)
@@ -278,6 +317,7 @@ def build_prompt(
     latest_message: str,
     agent_search_root: str,
     write_targets: list[str],
+    protected_roots: list[str],
     policy_snapshot: dict[str, Any],
 ) -> str:
     policy_block = policy_prompt_block(policy_snapshot)
@@ -290,14 +330,24 @@ def build_prompt(
         "If user request conflicts with session policy, refuse and explain briefly within role boundary.",
         "Hard rule: any filesystem write must stay inside agent_search_root.",
         "If user asks to write outside agent_search_root, reply exactly: path_out_of_root",
+        "Protected roots are read-only for ordinary execution. Never modify them in this chat execution path.",
+        "If user asks to write inside protected roots, reply exactly: path_in_protected_root",
         "Return only the assistant reply for the latest user request.",
         "Do not add markdown fences or meta explanations.",
         "",
         "Frozen session policy:",
         policy_block,
         "",
-        "Conversation history (oldest to newest):",
+        "Protected roots:",
     ]
+    for item in protected_roots:
+        lines.append(f"- {item}")
+    lines.extend(
+        [
+            "",
+        "Conversation history (oldest to newest):",
+        ]
+    )
     history = messages[-60:]
     for item in history:
         role = str(item.get("role") or "user").upper()
@@ -353,7 +403,8 @@ def extract_agent_text(event: dict[str, Any]) -> str:
 
 
 def run_codex(prompt: str, agent_search_root: Path) -> int:
-    codex_bin = shutil.which("codex")
+    override = str(os.getenv("WORKFLOW_CODEX_BIN") or "").strip()
+    codex_bin = override or str(shutil.which("codex.cmd") or shutil.which("codex") or "").strip()
     if not codex_bin:
         print("codex command not found in PATH", file=sys.stderr)
         return 127
@@ -431,11 +482,16 @@ def main() -> int:
         print(f"invalid agent_search_root: {agent_search_root}", file=sys.stderr)
         return 2
     agent_search_root.mkdir(parents=True, exist_ok=True)
+    protected_roots = resolve_protected_write_roots(workspace_root=agent_search_root)
 
     declared_targets = [str(item) for item in (args.write_target or [])]
     declared_targets.extend(extract_message_paths(args.message or ""))
     try:
-        write_targets = normalize_write_targets(agent_search_root, declared_targets)
+        write_targets = normalize_write_targets(
+            agent_search_root,
+            declared_targets,
+            protected_roots=protected_roots,
+        )
     except ValueError as exc:
         print(str(exc).split(":", 1)[0], file=sys.stderr)
         return 3
@@ -483,6 +539,7 @@ def main() -> int:
         latest_message=args.message.strip(),
         agent_search_root=agent_search_root.as_posix(),
         write_targets=write_targets,
+        protected_roots=[item.as_posix() for item in protected_roots],
         policy_snapshot=policy_snapshot,
     )
     policy_source = policy_snapshot.get("source") if isinstance(policy_snapshot.get("source"), dict) else {}
@@ -494,6 +551,7 @@ def main() -> int:
             "agent_name": args.agent.strip(),
             "focus": args.focus.strip(),
             "agent_search_root": agent_search_root.as_posix(),
+            "protected_write_roots": [item.as_posix() for item in protected_roots],
             "write_targets": write_targets,
             "latest_message": args.message.strip(),
             "history_message_count": len(messages),

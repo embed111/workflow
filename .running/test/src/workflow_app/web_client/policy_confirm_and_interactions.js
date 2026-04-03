@@ -571,6 +571,7 @@
     state.artifactRootDefaultPath = safe(data.default_task_artifact_root || data.artifact_root_default).trim();
     state.artifactRootValidationStatus = safe(data.artifact_root_validation_status).trim();
     updateArtifactRootMeta();
+    applyDeveloperWorkspaceSettingsPayload(data);
     applyAssignmentExecutionSettingsPayload(data.assignment_execution_settings || {});
     const hasRootField = Object.prototype.hasOwnProperty.call(data || {}, 'agent_search_root');
     const nextRoot = hasRootField
