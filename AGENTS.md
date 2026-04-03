@@ -10,17 +10,18 @@
 
 ## 启动读取顺序
 1. 顶层治理入口固定先读 `AGENTS.md`。
-2. 每轮正式工作前先读 `.codex/experience/index.md`，并按其中“必读经验”顺序补充读取必读经验文件。
-3. 默认会话按以下顺序继续读取：
+2. 涉及开发、测试、部署、成员分工或工作区协作时，继续读取顶层 `协作约定.md`。
+3. 每轮正式工作前先读 `.codex/experience/index.md`，并按其中“必读经验”顺序补充读取必读经验文件。
+4. 默认会话按以下顺序继续读取：
    - `.codex/SOUL.md`
    - `.codex/USER.md`
    - `.codex/MEMORY.md`
    - `.codex/memory/全局记忆总览.md`
    - `.codex/memory/YYYY-MM/记忆总览.md`
    - `.codex/memory/YYYY-MM/YYYY-MM-DD.md`
-4. 当日日记缺失时，先在对应 `YYYY-MM/` 目录创建当日日记，再进入正式工作。
-5. 工作日切后的首轮工作，先检查“昨日记忆”是否已归档到对应 `.codex/memory/YYYY-MM/记忆总览.md`。
-6. 工作月切后的首轮工作，先检查“上月记忆总览”是否已归档到 `.codex/memory/全局记忆总览.md`。
+5. 当日日记缺失时，先在对应 `YYYY-MM/` 目录创建当日日记，再进入正式工作。
+6. 工作日切后的首轮工作，先检查“昨日记忆”是否已归档到对应 `.codex/memory/YYYY-MM/记忆总览.md`。
+7. 工作月切后的首轮工作，先检查“上月记忆总览”是否已归档到 `.codex/memory/全局记忆总览.md`。
 
 ## 三层职责边界
 - `.codex/`：agent 工作记忆、内部工作文档、本地技能入口（如 `.codex/skills/*/SKILL.md`）。
@@ -31,6 +32,7 @@
 ## Project Structure & Module Organization
 - `../workflow_code/`：唯一正式代码根仓（code-only），承载 `src/`、`scripts/` 与正式 Git 历史，不再承载便捷启动 wrapper。
 - `.repository/<developer_id>/`：本地临时代码开发工作区；实际代码修改、验证、提交都在这里进行，并推送回 `../workflow_code`。
+- `协作约定.md`：顶层协作真相源；后续成员分工、默认协作顺序、启动口径与推送/部署解释统一看这里。
 - `run_workflow.bat`：当前 PM 仓顶层便捷启动入口，只负责把用户带到当前默认开发工作区/当前 `prod` 部署副本，不属于正式代码真相源。
 - `.codex/`：agent 工作记忆、内部工作文档、本地技能入口（如 `.codex/skills/*/SKILL.md`）。
 - `docs/workflow/`：需求、门禁和证据矩阵文档，先读这里再改流程。
@@ -41,16 +43,10 @@
 - `src/`、`scripts/` 不再属于当前 PM 仓；若这些路径在 `workflow` 中重新出现，应视为误放的代码副本而不是合法治理文件。
 
 ## Current Collaboration Workflow
-- 当前 `workflow` 项目仍处于单人维护阶段，默认由当前 Codex 同时承担开发、测试、发布候选生成与部署协助；后续新增协作者时，再为其分配各自独立的 `.repository/<developer_id>/` 工作区。
-- 当前默认开发主体固定为 `pm-main`；若无额外说明，代码同步、修改、验证、提交与推送都在 `.repository/pm-main/` 中完成。
-- 每次进入代码工作前，先将 `../workflow_code` 的最新代码同步到对应开发工作区；若该工作区存在未提交改动，必须先保护现场，不得直接覆盖。
-- 用户提到 `./run_workflow.bat` 时，默认指当前 PM 仓顶层的便捷入口；该入口默认代理到 `.repository/pm-main` 的启动脚本，并复用 PM 顶层统一的 `.running/dev|test|prod` 运行态。
-- 当前默认协作顺序固定为：
-  1. 同步 `../workflow_code` 最新代码；
-  2. 在 `.repository/<developer_id>/` 中开发、验证并跑门禁；
-  3. 将通过验证的代码推回 `../workflow_code`；
-  4. 生成或刷新 `prod` 升级候选；
-  5. 仅当用户明确要求“更新生产环境代码”或“部署生产环境”时，才执行正式环境升级或等效生产代码更新。
+- 顶层协作真相源：`协作约定.md`
+- 当前默认开发主体仍为 `pm-main`。
+- 完整协作顺序、成员职责、启动口径、推送/部署解释与后续多成员扩展规则，统一以顶层 `协作约定.md` 为准。
+- 若本节与 `协作约定.md` 出现冲突，以 `协作约定.md` 为准。
 
 ## Build, Test, and Development Commands
 - `.\run_workflow.bat`：从当前 PM 仓顶层启动默认 `prod` 入口；内部代理到 `.repository/pm-main` 的启动脚本，并落到 PM 顶层 `.running/prod`。
