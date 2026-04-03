@@ -1,7 +1,7 @@
 # 需求详情-代码与agent分离治理
 
 - 状态：正式需求（当前有效口径）
-- 现状依据：基于 2026-04-02 对 `../workflow/state/runtime-config.json`、`../workflow/src/workflow_app/runtime/task_agent_runner.py`、`../workflow/.running/` 与任务产物外置链路的盘点
+- 现状依据：基于 2026-04-03 对 `../workflow/state/runtime-config.json`、`../workflow_code/src/workflow_app/runtime/task_agent_runner.py`、`../workflow/.repository/`、`../workflow/.running/` 与任务产物外置链路的盘点
 
 ## 1. 主题目标与价值说明
 1. 主题目标：
@@ -25,8 +25,8 @@
    1. 关注点：希望每轮运行都能看到自己到底改的是“正式代码仓”“临时工作副本”还是“运行态目录”，避免路径语义混乱。
 4. 核心场景：
    1. `../workflow` 负责管理项目、编排任务、验收与发布，不作为日常 `workflow` 代码开发目录。
-   2. `../workflow_code` 作为唯一正式代码根仓，承载 `workflow` 产品源码与正式 Git 历史。
-   3. 每个开发者或开发 agent 都在各自独立开发工作区中，从 `../workflow_code` 拉取代码进行开发。
+   2. `../workflow_code` 作为唯一正式代码根仓，承载 `workflow` 产品源码与正式 Git 历史，但不包含 `.codex` 与 `AGENTS.md`。
+   3. 每个开发者或开发 agent 都在各自独立开发工作区中，从 `../workflow_code` 拉取代码进行开发；当前本地落点固定为 `../workflow/.repository/<developer_id>`。
    4. 各开发工作区在本地完成提交后，向指向 `../workflow_code` 的 Git 远程分支提交。
    5. 任务中心真实执行启动 `Codex` 时，只写当前开发工作区或受控工作副本，并把运行痕迹落到运行态根目录。
    6. 优化任务完成后，系统先出差异与证据，再由统一集成链路把结果收口到 `../workflow_code`。
@@ -35,7 +35,7 @@
 ## 3. 用户旅程或关键流程
 1. `../workflow` 作为 PM/控制工作区，负责识别目标项目、分发开发任务、追踪进度与触发验收/发布。
 2. `../workflow_code` 作为 `workflow` 代码根仓，保存正式代码、正式分支与正式集成结果。
-3. 当 PM 或某个开发 agent 需要改动 `workflow` 代码时，系统先在对应开发工作区中执行 `clone/fetch/pull`，确保该工作区以 `../workflow_code` 为代码来源。
+3. 当 PM 或某个开发 agent 需要改动 `workflow` 代码时，系统先在对应开发工作区中执行 `clone/fetch/pull`，确保该工作区以 `../workflow_code` 为代码来源，并固定落在 `../workflow/.repository/` 下。
 4. 每个开发工作区至少记录：
    1. `developer_id`
    2. `workspace_path`
@@ -69,8 +69,8 @@
 ## 4. 功能需求清单（编号）
 1. FR-CA-01 四层真相源分离
    1. `PM/控制层` 固定为 `../workflow`，只承载项目管理、任务编排、验收、发布治理与角色运营功能。
-   2. `代码根仓层` 固定为 `../workflow_code`，只承载可发布源码、`AGENTS.md`、长期知识/技能资产与正式版本基线。
-   3. `开发工作区层` 承载各开发者或开发 agent 各自拉取下来的开发副本，不作为正式发布真相源。
+   2. `代码根仓层` 固定为 `../workflow_code`，只承载可发布源码与正式版本基线；不承载 `.codex`、`AGENTS.md`、运行态目录或审计留痕。
+   3. `开发工作区层` 承载各开发者或开发 agent 各自拉取下来的开发副本，不作为正式发布真相源；当前本地固定为 `../workflow/.repository/`。
    4. `agent 运行态层` 只承载提示词、stdout/stderr、结果、`.codex` 记忆、锁、租约与审计证据。
 2. FR-CA-02 代码主仓禁止被普通运行链路直接写入
    1. `任务中心真实执行`、`训练优化`、`创建角色`、`发布评审生成报告` 等普通 agent 执行链路，不得直接把 `Codex` 的 `cwd` 或写入范围指向 `../workflow_code`。
@@ -78,7 +78,8 @@
 3. FR-CA-03 代码根仓路径固定
    1. 当前阶段 `workflow` 项目的正式代码根仓固定命名为 `../workflow_code`。
    2. `../workflow` 不再承担 `workflow` 产品的正式代码根仓职责。
-   3. 后续如需调整路径，必须视为架构级变更，单独评审。
+   3. `../workflow` 不再跟踪 `src/`、`scripts/`、`run_workflow.bat` 等正式代码副本，避免与 `../workflow_code` 形成双写漂移。
+   4. 后续如需调整路径，必须视为架构级变更，单独评审。
 4. FR-CA-04 发现根与写入根解耦
    1. 当前对用户暴露的 `agent_search_root` 首期继续作为 agent 发现根与 PM 工作区定位根。
    2. 系统内部必须新增或派生：
@@ -88,8 +89,9 @@
 5. FR-CA-05 开发工作区分配
    1. 当前阶段允许 PM 兼做开发者，不要求先创建新的专职 coder/tester 角色。
    2. 每个开发者或开发 agent 必须拥有各自独立的开发工作区。
-   3. 各开发工作区必须从 `../workflow_code` 拉取代码，不允许直接把 `../workflow` 当作开发工作区。
-   4. 每个开发工作区至少记录：
+   3. 各开发工作区必须从 `../workflow_code` 拉取代码，不允许直接把 `../workflow` 当作开发代码源。
+   4. 当前本地开发工作区根固定为 `../workflow/.repository/`，并且必须被 `../workflow/.gitignore` 忽略。
+   5. 每个开发工作区至少记录：
       1. `developer_id`
       2. `workspace_path`
       3. `source_repo_path=../workflow_code`
@@ -213,6 +215,7 @@
    2. When 审核两者职责
    3. Then `../workflow` 只承担 PM/控制/编排职责
    4. And `../workflow_code` 只承担正式代码根仓职责
+   5. And `../workflow` 中不再跟踪 `src/`、`scripts/`、`run_workflow.bat` 的正式代码副本
 3. AC-CA-03 开发工作区从代码根仓拉取
    1. Given 某个开发者或开发 agent 首次进入 `workflow` 代码开发
    2. When 系统为其准备开发环境

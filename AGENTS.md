@@ -29,29 +29,32 @@
 - 禁止把 `.codex/MEMORY.md`、`.codex/memory/**/*.md` 当成产品运行态、配置文件或审计日志使用。
 
 ## Project Structure & Module Organization
-- `src/workflow_app/`：核心源码目录（服务端、CLI、运行时与前端模块源码）。
-- `scripts/`：入口与运维脚本目录（对 `src/workflow_app` 的兼容启动包装 + 工具脚本）。
-- `scripts/acceptance/`：门禁验收脚本目录。
+- `../workflow_code/`：唯一正式代码根仓（code-only），承载 `src/`、`scripts/`、`run_workflow.bat` 与正式 Git 历史。
+- `.repository/<developer_id>/`：本地临时代码开发工作区；实际代码修改、验证、提交都在这里进行，并推送回 `../workflow_code`。
+- `.codex/`：agent 工作记忆、内部工作文档、本地技能入口（如 `.codex/skills/*/SKILL.md`）。
 - `docs/workflow/`：需求、门禁和证据矩阵文档，先读这里再改流程。
 - `logs/`：运行与审计留痕。重点子目录：`events/`（JSONL 事件流）、`runs/`（执行记录）、`decisions/`（决策日志）、`summaries/`（汇总）。
 - `state/`：运行态数据（如 `state/workflow.db`、`session-snapshot.md`、`change-log.md`）。
+- `.running/` 与 `.runtime/`：运行态、副本与部署控制数据。
 - `metrics/` 与 `incidents/`：性能基线和故障记录。
+- `src/`、`scripts/`、`run_workflow.bat` 不再属于当前 PM 仓；若这些路径在 `workflow` 中重新出现，应视为误放的代码副本而不是合法治理文件。
 
 ## Build, Test, and Development Commands
-- `.\run_workflow.bat`：Windows 一键启动（调用 `scripts/launch_workflow.ps1` 并打开页面）。
-- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/launch_workflow.ps1 -OpenBrowser`：可控启动（支持 `-BindHost/-Port/-SkipBackfill`）。
-- `python scripts/workflow_web_server.py --host 127.0.0.1 --port 8090`：仅启动 Web 服务（用于本地接口联调）。
-- `python scripts/workflow_entry_cli.py --mode status`：刷新并查看待分析/待训练状态。
-- `python scripts/workflow_entry_cli.py --mode backfill`：将 `logs/events/*.jsonl` 回填到 SQLite。
-- `python scripts/acceptance/run_acceptance_workflow_gate.py --root . --host 127.0.0.1 --port 8098`：执行 workflow 门禁验收。
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .repository/<developer_id>/scripts/launch_workflow.ps1 -OpenBrowser`：从本地开发工作区启动当前代码版本。
+- `python .repository/<developer_id>/scripts/workflow_web_server.py --host 127.0.0.1 --port 8090`：仅启动开发工作区中的 Web 服务。
+- `python .repository/<developer_id>/scripts/workflow_entry_cli.py --mode status`：刷新并查看待分析/待训练状态。
+- `python .repository/<developer_id>/scripts/workflow_entry_cli.py --mode backfill`：将 `logs/events/*.jsonl` 回填到 SQLite。
+- `python .repository/<developer_id>/scripts/acceptance/run_acceptance_workflow_gate.py --root .repository/<developer_id> --host 127.0.0.1 --port 8098`：执行开发工作区门禁验收。
+- `git -C .repository/<developer_id> status --short --branch`：检查当前开发分支与工作区状态。
 
 ## Coding Style & Naming Conventions
+- 以下代码规范适用于 `../workflow_code/` 与 `.repository/<developer_id>/` 中的代码，不再针对当前 PM 仓根目录落代码。
 - Python 使用 4 空格缩进，优先类型标注与 `pathlib.Path`，函数名使用 `snake_case`。
 - JavaScript 保持 ES 语法与 `camelCase` 变量命名；常量使用 `UPPER_SNAKE_CASE`。
 - 新增脚本命名遵循 `scripts/<action>_<target>.py`，日志文件遵循 `logs/runs/<topic>-YYYYMMDD-HHMMSS.md`。
 
 ## Testing Guidelines
-- 当前主测试入口是门禁脚本（非 pytest 套件）。改动 API/流程时，优先补充 `run_acceptance_workflow_gate.py` 对应 case。
+- 当前主测试入口是开发工作区中的门禁脚本（非 pytest 套件）。改动 API/流程时，优先补充 `run_acceptance_workflow_gate.py` 对应 case。
 - 验收结果需落盘到 `logs/runs/`，并在必要时更新 `docs/workflow/验收证据矩阵-Phase0.md`。
 - 最低回归建议：`healthz` 可用、会话创建成功、任务可中断并可重试、训练链路事件可查询。
 
@@ -63,15 +66,17 @@
   - 由用户手动升级 `prod`
 - 本仓库中“推送到生产环境”默认解释为“生成/刷新 `prod` candidate”，不是自动升级正式环境。
 - 未经用户明确要求，不得直接执行 `prod` 覆盖式部署或自动 apply 正式升级。
-- 代码改动默认先跑 `scripts/quality/check_workspace_line_budget.py --root .`；若本轮触达文件命中行数重构门槛，优先做职责拆分/设计模式重构，再发布。
+- 代码改动默认先在对应开发工作区根执行 `python scripts/quality/check_workspace_line_budget.py --root .`；若本轮触达文件命中行数重构门槛，优先做职责拆分/设计模式重构，再发布。
 
 ## Architecture & Workflow Notes
-- 典型链路：`workflow_web_server.py` 接收请求 -> `task_agent_runner.py` 执行任务 -> 事件与消息写入 `state/workflow.db` 与 `logs/events/*.jsonl`。
-- 前端资源由后端直接托管，核心交互脚本已拆分到 `src/workflow_app/web_client/*.js`（由 `workflow_web_server.py` 运行时拼接），修改 UI 时需同步检查 API 字段兼容性。
+- 当前 PM 仓只保留治理、留痕与本地开发工作区壳；实际实现位于 `../workflow_code/` 或 `.repository/<developer_id>/`。
+- 典型链路仍是 `workflow_web_server.py` 接收请求 -> `task_agent_runner.py` 执行任务 -> 事件与消息写入 `state/workflow.db` 与 `logs/events/*.jsonl`，但相关实现文件位于代码根仓或开发工作区，不再位于当前 PM 仓根目录。
+- 前端资源由后端直接托管，核心交互脚本位于 `../workflow_code/src/workflow_app/web_client/*.js` 或对应开发工作区副本，修改 UI 时需同步检查 API 字段兼容性。
 - 训练相关状态通过队列与事件表回放，调试时优先对照 `logs/runs/` 报告与 `state/change-log.md`。
 
 ## Commit & Pull Request Guidelines
-- 当前工作区未包含 `.git` 历史，建议统一采用 Conventional Commits：`feat:`, `fix:`, `docs:`, `chore:`。
+- 代码提交统一在 `.repository/<developer_id>` 对应 Git 分支完成；当前 PM 仓提交应以治理、文档、留痕与边界收口为主。
+- 代码仓提交建议统一采用 Conventional Commits：`feat:`, `fix:`, `docs:`, `chore:`。
 - 提交信息建议包含作用域，如：`fix(workflow): block $root traversal on write targets`。
 - PR 至少包含：变更目的、影响范围、验证命令、关键日志路径；涉及 UI 时附页面截图。
 - 单个 PR 建议聚焦单一主题（例如仅修复路径安全或仅调整训练队列 UI），避免把流程改造与文档重写混在一次提交中。

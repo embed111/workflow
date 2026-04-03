@@ -200,6 +200,16 @@
   - evidence: 最新提示词明确要求“本轮只做第一批，范围严格收口”，只先固定 `workflow / workflow_code` 边界、bootstrap 与留痕地基
   - action: 后续涉及代码与 agent 分离治理时，先按批次落地边界和最小基础设施，不把运行态外置、集成门禁、角色新增一次性混做
   - confidence: high
+- pref_40:
+  - label: 代码根仓仅保留代码
+  - evidence: 最新明确澄清“`../workflow_code` 作为代码根仓，而且不包含 `.codex` 和 `AGENTS.md`，只包含代码；本地 `.repository` 用于临时修改，而且不被 `.git` 追踪”
+  - action: 后续默认将 `../workflow_code` 视为 code-only canonical repo；`.codex`、`AGENTS.md`、运行态与治理留痕继续留在 PM/控制工作区；本地开发工作区固定落到 `workflow/.repository/` 并由 PM 仓 `.gitignore` 忽略
+  - confidence: high
+- pref_41:
+  - label: PM 仓不保留代码副本
+  - evidence: 最新继续明确要求“本工作区所有代码文件可以清理”“`src scripts` 这两个应该删掉”“一次性帮我整改完”
+  - action: 后续默认把 `workflow` 视为治理壳仓，不再在其中跟踪 `src/`、`scripts/`、`run_workflow.bat` 等正式代码副本；代码修改统一在 `.repository/<developer_id>` 或 `../workflow_code` 侧完成
+  - confidence: high
 
 ## Need Hypotheses
 - h_01:
@@ -261,3 +271,5 @@
 - 2026-03-30: 新增“缺陷判定先分析不因描述短驳回”偏好，后续缺陷提报即使只有一句话，也先分析是否构成 bug，再决定是否按缺陷流转。
 - 2026-03-31: 新增“经验目录先读并持续沉淀”偏好，后续每轮先读 `.codex/experience/index.md`，并把稳定经验与踩坑规避沉淀到经验卡。
 - 2026-04-03: 新增“双仓改造分批收口”偏好，后续处理 `workflow / workflow_code` 分离时默认先固定边界、bootstrap、留痕与 fail-closed，再逐批推进运行态外置与集成门禁。
+- 2026-04-03: 新增“代码根仓仅保留代码”偏好，固定 `workflow_code` 为 code-only 根仓，`.repository` 为 PM 仓内本地临时开发区且不被 `.git` 追踪。
+- 2026-04-03: 新增“PM 仓不保留代码副本”偏好，`workflow` 默认收为治理壳仓，不再跟踪 `src/`、`scripts/`、`run_workflow.bat` 等正式代码副本。
