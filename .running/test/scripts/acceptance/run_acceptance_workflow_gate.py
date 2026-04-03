@@ -244,6 +244,7 @@ def init_code_root_fixture(workspace_root: Path) -> dict[str, str]:
 def write_runtime_config_fixture(runtime_root: Path, workspace_root: Path) -> Path:
     artifact_root = (runtime_root / "artifact-root").resolve()
     artifact_root.mkdir(parents=True, exist_ok=True)
+    pm_root = (workspace_root / "workflow").resolve()
     path = runtime_root / "state" / "runtime-config.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -251,7 +252,7 @@ def write_runtime_config_fixture(runtime_root: Path, workspace_root: Path) -> Pa
             {
                 "agent_search_root": workspace_root.as_posix(),
                 "artifact_root": artifact_root.as_posix(),
-                "development_workspace_root": (artifact_root / "development-workspaces").as_posix(),
+                "development_workspace_root": (pm_root / ".repository").as_posix(),
                 "agent_runtime_root": (artifact_root / "agent-runtime").as_posix(),
                 "show_test_data": False,
             },

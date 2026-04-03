@@ -426,6 +426,7 @@ def main() -> int:
         )
 
         identity_ok = False
+        task_status_ok = False
         trace_ok = False
         created_session_id = str(e_payload.get("session_id") or c_payload.get("session_id") or "")
         snapshot_source_ok = False
@@ -459,7 +460,8 @@ def main() -> int:
             )
             if t_status == 202 and t_payload.get("ok"):
                 task_id = str(t_payload.get("task_id") or "")
-                wait_task_done(base, task_id, timeout_s=180)
+                task_row = wait_task_done(base, task_id, timeout_s=180)
+                task_status_ok = str(task_row.get("status") or "").lower() == "success"
                 m_status, m_payload = call(base, "GET", f"/api/chat/sessions/{created_session_id}/messages")
                 messages = list(m_payload.get("messages") or []) if m_status == 200 else []
                 assistant_msgs = [
@@ -478,9 +480,10 @@ def main() -> int:
                 trace_ok = bool("[SESSION_POLICY_FROZEN]" in prompt_text)
             else:
                 identity_ok = False
+                task_status_ok = False
                 trace_ok = False
-        runtime_task_ok = bool(trace_ok and identity_ok)
-        ac30_ok = bool(ac30_core_ok and (runtime_task_ok or snapshot_source_ok))
+        runtime_task_ok = bool(task_status_ok and trace_ok and identity_ok)
+        ac30_ok = bool(ac30_core_ok and runtime_task_ok)
         results.append(
             (
                 "ac30_patch_task_and_policy_regression",
@@ -491,6 +494,7 @@ def main() -> int:
                     "stats": stats_obj,
                     "trace_ok": trace_ok,
                     "identity_ok": identity_ok,
+                    "task_status_ok": task_status_ok,
                     "runtime_task_ok": runtime_task_ok,
                     "snapshot_source_ok": snapshot_source_ok,
                     "session_id": created_session_id,

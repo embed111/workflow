@@ -49,6 +49,39 @@
   height: 100%;
 }
 
+.defect-queue-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.defect-queue-toggle::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
+}
+
+.defect-queue-toggle.on {
+  border-color: #cfe0ff;
+  background: #eef4ff;
+  color: #2563eb;
+}
+
+.defect-queue-toggle.off {
+  border-color: #dfe3eb;
+  background: #f7f8fa;
+  color: #646a73;
+}
+
 .defect-side,
 .defect-detail {
   min-height: 0;
@@ -72,6 +105,22 @@
   padding: 12px;
 }
 
+.defect-composer-card {
+  flex: 0 0 auto;
+}
+
+.defect-composer-head {
+  margin-bottom: 0;
+}
+
+.defect-composer-body {
+  margin-top: 8px;
+}
+
+.defect-composer-card.is-collapsed .defect-composer-body {
+  display: none;
+}
+
 .defect-detail-scroll {
   height: 100%;
   overflow-y: auto;
@@ -91,6 +140,34 @@
   flex: 1 1 auto;
 }
 
+.defect-list-head {
+  align-items: flex-start;
+}
+
+.defect-list-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.defect-list-toolbar {
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.defect-list-toolbar #defectStatusFilterSelect {
+  flex: 0 0 180px;
+  min-width: 180px;
+}
+
+.defect-list-toolbar #defectKeywordInput {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .defect-list {
   display: flex;
   flex-direction: column;
@@ -98,6 +175,14 @@
   min-height: 0;
   overflow: auto;
   padding-right: 2px;
+}
+
+.defect-list-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .defect-list-item {
@@ -122,6 +207,14 @@
 .defect-list-item.active {
   border-color: #b7cdfc;
   background: #edf3ff;
+}
+
+.defect-list-item-tags,
+.defect-detail-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .defect-list-item-head,
@@ -184,6 +277,18 @@
   color: #06794f;
 }
 
+.defect-status-chip.dispute {
+  background: #f4f1ff;
+  border-color: #ddd6ff;
+  color: #7257cb;
+}
+
+.defect-status-chip.returned {
+  background: #fff7eb;
+  border-color: #ffd8a8;
+  color: #ad6800;
+}
+
 .defect-status-chip.warn {
   background: #fff7eb;
   border-color: #ffd8a8;
@@ -194,6 +299,51 @@
   background: #f2f3f5;
   border-color: #e5e6eb;
   color: #646a73;
+}
+
+.defect-priority-chip,
+.defect-queue-flag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.defect-priority-chip.p0 {
+  border-color: #f3c4c4;
+  background: #fff1f1;
+  color: #9f2f2f;
+}
+
+.defect-priority-chip.p1 {
+  border-color: #f0dfbb;
+  background: #fff7ea;
+  color: #8a5c07;
+}
+
+.defect-priority-chip.p2 {
+  border-color: #d5eadc;
+  background: #eef8f1;
+  color: #246e4b;
+}
+
+.defect-priority-chip.p3 {
+  border-color: #dbe1ea;
+  background: #f4f6f9;
+  color: #55606f;
+}
+
+.defect-queue-flag {
+  border-color: #d8e5ff;
+  background: #eff4ff;
+  color: #245bdb;
+  font-size: 11px;
 }
 
 .defect-meta-grid,
@@ -237,6 +387,197 @@
   line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.defect-detail-card,
+.defect-issue-card,
+.defect-section-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.defect-queue-summary-card {
+  padding: 12px;
+  background: #fff;
+}
+
+.defect-queue-summary-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.defect-queue-summary-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: #f7f8fa;
+  color: #44576b;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.defect-queue-summary-state.on {
+  border-color: #cfe0ff;
+  background: #eff4ff;
+  color: #245bdb;
+}
+
+.defect-queue-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.defect-queue-summary-item {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.defect-queue-summary-label {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.defect-queue-summary-value {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #1f2329;
+  font-weight: 700;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.defect-queue-summary-rule {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e7ebf3;
+  border-radius: 10px;
+  background: #f8fafc;
+  font-size: 12px;
+  color: #44576b;
+  line-height: 1.6;
+}
+
+.defect-issue-card,
+.defect-section-card {
+  padding: 12px;
+}
+
+.defect-issue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.defect-issue-title {
+  margin-top: 2px;
+  font-size: 18px;
+  line-height: 1.35;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.defect-facts-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.defect-facts-grid .defect-meta-item {
+  min-width: 140px;
+  flex: 1 1 0;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.defect-issue-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.defect-section-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.defect-evidence-layout {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.defect-evidence-layout-editable {
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+
+.defect-evidence-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.defect-evidence-shot {
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.defect-evidence-shot-image {
+  width: 100%;
+  height: 88px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line-soft);
+  background: #fff;
+}
+
+.defect-evidence-shot-name {
+  font-size: 12px;
+  color: #33465a;
+  word-break: break-word;
+}
+
+.defect-text-block,
+.defect-empty-note {
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: #f8fafc;
+  font-size: 13px;
+  color: #33465a;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.defect-empty-note {
+  margin-top: 10px;
 }
 
 .defect-image-list,
@@ -299,6 +640,60 @@
   flex-wrap: wrap;
 }
 
+.defect-task-card-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.defect-task-card-meta {
+  padding: 8px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.defect-task-card-meta-key {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.defect-task-card-meta-value {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #243447;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.defect-task-card-note {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12px;
+  color: #33465a;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.defect-task-card-note.warn {
+  background: #fff7eb;
+  border-color: #ffd8a8;
+  color: #8a5a11;
+}
+
+.defect-supplement-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .defect-history-images {
   margin-top: 8px;
   display: grid;
@@ -323,6 +718,61 @@
   padding: 20px;
 }
 
+.defect-timeline {
+  position: relative;
+  margin-top: 8px;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.defect-timeline::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: #d9dfeb;
+}
+
+.defect-timeline-item {
+  position: relative;
+  padding-left: 14px;
+}
+
+.defect-timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px #edf3ff;
+}
+
+.defect-timeline-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.defect-timeline-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2329;
+}
+
+.defect-timeline-time {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 @media (max-width: 1180px) {
   .defect-shell {
     grid-template-columns: 1fr;
@@ -331,9 +781,33 @@
   .defect-detail-scroll {
     max-height: none;
   }
+
+  .defect-evidence-layout,
+  .defect-evidence-layout-editable {
+    grid-template-columns: 1fr;
+  }
+
+  .defect-list-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .defect-list-toolbar #defectStatusFilterSelect {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+
+  .defect-list-toolbar #defectKeywordInput {
+    width: 100%;
+  }
 }
 
 @media (max-width: 900px) {
+  .defect-list-head-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .defect-queue-summary-grid,
   .defect-meta-grid,
   .defect-action-grid {
     grid-template-columns: 1fr;

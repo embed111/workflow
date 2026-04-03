@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from workflow_app.server.services.codex_failure_contract import (
+    build_codex_failure,
+    build_retry_action,
+    infer_codex_failure_detail_code,
+)
+
 
 def _assignment_active_run_record(root: Path, *, ticket_id: str, node_id: str) -> dict[str, Any]:
     for row in _assignment_load_run_records(root, ticket_id=ticket_id, node_id=node_id):
@@ -25,7 +31,50 @@ def _assignment_touch_run_latest_event(
     run_record["latest_event"] = _short_assignment_text(latest_event, 1000) or "执行中"
     run_record["latest_event_at"] = latest_event_at
     run_record["updated_at"] = latest_event_at
-    _assignment_write_run_record(root, ticket_id=ticket_id, run_record=run_record)
+    _assignment_write_run_record(root, ticket_id=ticket_id, run_record=run_record, sync_index=False)
+
+
+def _assignment_execution_codex_failure(
+    root: Path,
+    *,
+    ticket_id: str,
+    node_id: str,
+    run_id: str,
+    run_record: dict[str, Any],
+    exit_code: int,
+    stderr_text: str,
+    failure_message: str,
+    failed_at: str,
+) -> dict[str, Any]:
+    fallback_code = f"codex_exec_failed_exit_{int(exit_code or 0)}" if int(exit_code or 0) > 0 else "assignment_execution_failed"
+    detail_code = infer_codex_failure_detail_code(
+        str(failure_message or stderr_text or "").strip(),
+        fallback=fallback_code,
+    )
+    attempt_count = len(_assignment_load_run_records(root, ticket_id=ticket_id, node_id=node_id))
+    trace_refs = {
+        "prompt": str(run_record.get("prompt_ref") or "").strip(),
+        "stdout": str(run_record.get("stdout_ref") or "").strip(),
+        "stderr": str(run_record.get("stderr_ref") or "").strip(),
+        "result": str(run_record.get("result_ref") or "").strip(),
+    }
+    return build_codex_failure(
+        feature_key="assignment_node_execution",
+        attempt_id=run_id,
+        attempt_count=max(1, int(attempt_count or 0)),
+        failure_detail_code=detail_code,
+        failure_message=str(failure_message or stderr_text or "").strip(),
+        retry_action=build_retry_action(
+            "rerun_assignment_node",
+            payload={
+                "ticket_id": str(ticket_id or "").strip(),
+                "node_id": str(node_id or "").strip(),
+                "run_id": str(run_id or "").strip(),
+            },
+        ),
+        trace_refs=trace_refs,
+        failed_at=failed_at,
+    )
 
 
 def _assignment_cancelled_run_final_message(run_record: dict[str, Any]) -> str:
@@ -405,11 +454,19 @@ def _assignment_system_running_state(root: Path, *, include_test_data: bool) -> 
     now_dt = now_local()
     running_agents: set[str] = set()
     running_node_keys: set[tuple[str, str]] = set()
+    canonical_workflow_ui_ticket = _assignment_ensure_workflow_ui_global_graph_ticket(root)
     for ticket_id in _assignment_list_ticket_ids_lightweight(root):
         task_record = _assignment_load_task_record_lightweight(root, ticket_id)
         if not task_record:
             continue
         if not _assignment_task_visible(task_record, include_test_data=include_test_data):
+            continue
+        if _assignment_is_hidden_workflow_ui_graph_ticket(
+            root,
+            ticket_id,
+            ticket_record=task_record,
+            canonical_ticket_id=canonical_workflow_ui_ticket,
+        ):
             continue
         live_node_ids: set[str] = set()
         for run in _assignment_load_run_records(root, ticket_id=ticket_id):
@@ -603,6 +660,7 @@ def _finalize_assignment_execution_run(
         run_record["exit_code"] = int(exit_code or 0)
         run_record["finished_at"] = now_text
         run_record["updated_at"] = now_text
+        run_record["codex_failure"] = {}
         _assignment_write_run_record(root, ticket_id=ticket_id, run_record=run_record)
         return
     success = int(exit_code or 0) == 0 and not str(failure_message or "").strip()
@@ -672,6 +730,7 @@ def _finalize_assignment_execution_run(
         run_record["exit_code"] = int(exit_code or 0)
         run_record["finished_at"] = now_text
         run_record["updated_at"] = now_text
+        run_record["codex_failure"] = {}
         _assignment_write_run_record(root, ticket_id=ticket_id, run_record=run_record)
     else:
         failure_text = _normalize_text(
@@ -712,6 +771,17 @@ def _finalize_assignment_execution_run(
         run_record["exit_code"] = int(exit_code or 0)
         run_record["finished_at"] = now_text
         run_record["updated_at"] = now_text
+        run_record["codex_failure"] = _assignment_execution_codex_failure(
+            root,
+            ticket_id=ticket_id,
+            node_id=node_id,
+            run_id=run_id,
+            run_record=run_record,
+            exit_code=exit_code,
+            stderr_text=stderr_text,
+            failure_message=failure_text,
+            failed_at=now_text,
+        )
         _assignment_write_run_record(root, ticket_id=ticket_id, run_record=run_record)
     try:
         dispatch_assignment_next(
@@ -771,46 +841,49 @@ def _assignment_execution_worker(
     def read_stream(name: str, pipe: Any, collector: list[str]) -> None:
         if pipe is None:
             return
-        for line in iter(pipe.readline, ""):
-            if line == "":
-                break
-            collector.append(line)
-            _append_assignment_run_text(files[name], line)
-            message_text = line.rstrip("\n")
-            detail: dict[str, Any] = {}
-            event_type = name
-            if name == "stdout":
-                try:
-                    event = json.loads(message_text)
-                except Exception:
-                    event = None
-                if isinstance(event, dict):
-                    event_type = str(event.get("type") or "stdout_event").strip() or "stdout_event"
-                    agent_message_text = _assignment_extract_agent_message_text(event)
-                    message_text = agent_message_text or str(event.get("message") or message_text)
-                    if message_text and agent_message_text:
-                        agent_messages.append(message_text)
-                        payload_candidates = _assignment_extract_json_objects(message_text)
-                        if payload_candidates:
-                            record_observed_result(payload_candidates[-1])
-                    if event_type == "turn.completed":
-                        mark_observed_turn_completed()
-                    detail = event
-            created_at = iso_ts(now_local())
-            _append_assignment_run_event(
-                files["events"],
-                event_type=event_type,
-                message=message_text or f"{name} 输出",
-                created_at=created_at,
-                detail=detail,
-            )
-            _assignment_touch_run_latest_event(
-                root,
-                ticket_id=ticket_id,
-                run_id=run_id,
-                latest_event=message_text or f"{name} 输出",
-                latest_event_at=created_at,
-            )
+        try:
+            for line in iter(pipe.readline, ""):
+                if line == "":
+                    break
+                collector.append(line)
+                _append_assignment_run_text(files[name], line)
+                message_text = line.rstrip("\n")
+                detail: dict[str, Any] = {}
+                event_type = name
+                if name == "stdout":
+                    try:
+                        event = json.loads(message_text)
+                    except Exception:
+                        event = None
+                    if isinstance(event, dict):
+                        event_type = str(event.get("type") or "stdout_event").strip() or "stdout_event"
+                        agent_message_text = _assignment_extract_agent_message_text(event)
+                        message_text = agent_message_text or str(event.get("message") or message_text)
+                        if message_text and agent_message_text:
+                            agent_messages.append(message_text)
+                            payload_candidates = _assignment_extract_json_objects(message_text)
+                            if payload_candidates:
+                                record_observed_result(payload_candidates[-1])
+                        if event_type == "turn.completed":
+                            mark_observed_turn_completed()
+                        detail = event
+                created_at = iso_ts(now_local())
+                _append_assignment_run_event(
+                    files["events"],
+                    event_type=event_type,
+                    message=message_text or f"{name} 输出",
+                    created_at=created_at,
+                    detail=detail,
+                )
+                _assignment_touch_run_latest_event(
+                    root,
+                    ticket_id=ticket_id,
+                    run_id=run_id,
+                    latest_event=message_text or f"{name} 输出",
+                    latest_event_at=created_at,
+                )
+        except (OSError, ValueError):
+            return
 
     run_record = _assignment_load_run_record(root, ticket_id=ticket_id, run_id=run_id)
     if run_record:

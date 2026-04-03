@@ -65,13 +65,19 @@ def _handle_policy_analyze(handler, cfg, state, body: dict[str, Any], _match) ->
         policy_error=policy_error,
         allow_manual_policy_input=allow_manual_input,
     )
+    agent_policy_payload = dict(selected)
+    agent_policy_payload["codex_failure"] = (
+        gate_payload.get("codex_failure")
+        if isinstance(gate_payload.get("codex_failure"), dict)
+        else {}
+    )
     handler.send_json(
         200,
         {
             "ok": True,
             "agent_name": agent_name,
             "policy_confirmation": gate_payload,
-            "agent_policy": selected,
+            "agent_policy": agent_policy_payload,
         },
     )
 

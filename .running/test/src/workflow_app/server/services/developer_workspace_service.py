@@ -11,7 +11,7 @@ RUNTIME_CONFIG_FILE = Path("state") / "runtime-config.json"
 WORKSPACE_REGISTRY_FILE = Path("state") / "developer-workspaces.json"
 PM_ROOT_DIRNAME = "workflow"
 CODE_ROOT_DIRNAME = "workflow_code"
-DEFAULT_DEVELOPMENT_WORKSPACE_DIRNAME = "development-workspaces"
+DEFAULT_DEVELOPMENT_WORKSPACE_DIRNAME = ".repository"
 DEFAULT_AGENT_RUNTIME_DIRNAME = "agent-runtime"
 
 
@@ -218,7 +218,7 @@ def resolve_workspace_boundary(
     if raw_dev_root:
         development_workspace_root = _normalize_abs_path(raw_dev_root, base=runtime_root_path or artifact_root)
     else:
-        development_workspace_root = (artifact_root / DEFAULT_DEVELOPMENT_WORKSPACE_DIRNAME).resolve(strict=False)
+        development_workspace_root = (pm_root / DEFAULT_DEVELOPMENT_WORKSPACE_DIRNAME).resolve(strict=False)
     raw_agent_runtime_root = str(runtime_cfg.get("agent_runtime_root") or "").strip()
     if raw_agent_runtime_root:
         agent_runtime_root = _normalize_abs_path(raw_agent_runtime_root, base=runtime_root_path or artifact_root)

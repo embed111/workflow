@@ -12,7 +12,7 @@
 - `runtime-upgrade-and-agent-monitoring.md`
   - 适用范围： 正式升级、长任务 agent 调用、部署副本启动
   - 原因： 最近多次触发升级卡住、长任务超时、部署副本配置漂移，属于高复用高风险经验
-  - 更新时间： 2026-03-31
+  - 更新时间： 2026-04-03
 - `dual-repo-boundary-and-dev-workspace-bootstrap.md`
   - 适用范围： `workflow / workflow_code` 双仓边界、开发工作区 bootstrap、代码仓受保护根
   - 原因： 新一轮代码与 agent 分离改造已经形成稳定边界与 Git 使用约束，后续批次仍会复用

@@ -323,9 +323,33 @@ def _node_delivery_inbox_relative_paths(
 
 def _assignment_write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    tmp.replace(path)
+    import time as _time
+    import uuid as _uuid
+
+    content = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    last_error: BaseException | None = None
+    for attempt in range(6):
+        tmp = path.with_name(path.name + "." + _uuid.uuid4().hex + ".tmp")
+        try:
+            tmp.write_text(content, encoding="utf-8")
+            tmp.replace(path)
+            return
+        except PermissionError as exc:
+            last_error = exc
+        except OSError as exc:
+            if int(getattr(exc, "winerror", 0) or 0) != 5:
+                raise
+            last_error = exc
+        finally:
+            try:
+                if tmp.exists():
+                    tmp.unlink()
+            except Exception:
+                pass
+        _time.sleep(0.05 * (attempt + 1))
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"assignment json write failed: {path.as_posix()}")
 
 
 def _assignment_read_json(path: Path, fallback: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -649,7 +673,7 @@ def _assignment_build_node_record(
         "artifact_paths": list(artifact_paths or []),
         "status": str(status or "pending").strip().lower() or "pending",
         "status_text": _node_status_text(status or "pending"),
-        "priority": int(priority or 1),
+        "priority": int(1 if priority in (None, "") else priority),
         "priority_label": assignment_priority_label(priority),
         "completed_at": str(completed_at or "").strip(),
         "success_reason": str(success_reason or "").strip(),
@@ -725,6 +749,7 @@ def _assignment_write_audit_entry(
     target_status: str,
     detail: dict[str, Any] | None,
     created_at: str,
+    sync_index: bool = True,
 ) -> str:
     audit_id = assignment_audit_id()
     payload = {
@@ -742,7 +767,8 @@ def _assignment_write_audit_entry(
         "created_at": str(created_at or "").strip(),
     }
     _assignment_append_jsonl(_assignment_audit_log_path(root, ticket_id), payload)
-    sync_assignment_task_bundle_index(root, ticket_id)
+    if sync_index:
+        sync_assignment_task_bundle_index(root, ticket_id)
     return audit_id
 
 
@@ -775,12 +801,19 @@ def _assignment_load_run_record(root: Path, *, ticket_id: str, run_id: str) -> d
     return _assignment_read_json(_assignment_run_file_paths(root, ticket_id, run_id)["meta"])
 
 
-def _assignment_write_run_record(root: Path, *, ticket_id: str, run_record: dict[str, Any]) -> None:
+def _assignment_write_run_record(
+    root: Path,
+    *,
+    ticket_id: str,
+    run_record: dict[str, Any],
+    sync_index: bool = True,
+) -> None:
     run_id = str(run_record.get("run_id") or "").strip()
     if not run_id:
         raise AssignmentCenterError(400, "run_id required", "assignment_run_id_required")
     _assignment_write_json(_assignment_run_file_paths(root, ticket_id, run_id)["meta"], run_record)
-    sync_assignment_task_bundle_index(root, ticket_id)
+    if sync_index:
+        sync_assignment_task_bundle_index(root, ticket_id)
     _assignment_publish_runtime_event(
         ticket_id=ticket_id,
         kind="run",
@@ -1071,7 +1104,7 @@ def _assignment_ensure_ticket_normalized(root: Path, ticket_id: str) -> None:
             artifact_delivered_at=str(node.get("artifact_delivered_at") or "").strip(),
             artifact_paths=list(node.get("artifact_paths") or []),
             status=str(node.get("status") or "pending").strip().lower() or "pending",
-            priority=int(node.get("priority") or 1),
+            priority=int(1 if node.get("priority") in (None, "") else node.get("priority")),
             completed_at=str(node.get("completed_at") or "").strip(),
             success_reason=str(node.get("success_reason") or "").strip(),
             result_ref=str(node.get("result_ref") or "").strip(),

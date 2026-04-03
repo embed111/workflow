@@ -108,21 +108,40 @@
   function collectDefectProbe() {
     const detail = defectCurrentDetail();
     const report = defectCurrentReport();
+    const queue = defectQueueSummary();
     const detailScroll = $('defectDetailScroll');
     const reviewBtn = $('defectSubmitReviewBtn');
+    const queueToggle = $('defectQueueToggleBtn');
+    const queueSummaryCard = $('defectQueueSummaryCard');
     return {
       ts: new Date().toISOString(),
       case: defectProbeCase(),
       pass: false,
       active_tab: readSavedAppTab(),
       active_module: safe(state.requirementBugModule).trim(),
-      list_total: Array.isArray(state.defectList) ? state.defectList.length : 0,
+      list_total: Number(state.defectListTotal || 0),
+      list_loaded_count: Array.isArray(state.defectList) ? state.defectList.length : 0,
+      list_has_more: !!state.defectListHasMore,
       selected_report_id: safe(report.report_id).trim(),
       selected_display_id: safe(report.display_id || report.dts_id || report.report_id).trim(),
       selected_status: safe(report.status).trim(),
       selected_status_text: safe(report.status_text).trim(),
+      selected_task_priority: safe(report.task_priority).trim(),
+      selected_reported_at: safe(report.reported_at).trim(),
+      selected_queue_mode: safe(report.queue_mode).trim(),
+      selected_queue_mode_text: safe(report.queue_mode_text).trim(),
       task_ref_total: Number(detail.task_ref_total || 0),
       history_total: Number(detail.history_total || 0),
+      queue_enabled: !!queue.enabled,
+      queue_active_display_id: safe(queue.active_display_id).trim(),
+      queue_next_display_id: safe(queue.next_display_id).trim(),
+      queue_toggle_text: safe(queueToggle ? queueToggle.textContent : '').trim(),
+      queue_toggle_in_title: !!(queueToggle && queueToggle.closest('.defect-list-head-actions')),
+      legacy_queue_strip_present: !!document.querySelector('.defect-queue-strip'),
+      queue_summary_visible: !!queueSummaryCard,
+      queue_summary_active_text: safe($('defectQueueSummaryActiveValue') ? $('defectQueueSummaryActiveValue').textContent : '').trim(),
+      queue_summary_next_text: safe($('defectQueueSummaryNextValue') ? $('defectQueueSummaryNextValue').textContent : '').trim(),
+      queue_summary_rule_text: safe($('defectQueueSummaryRule') ? $('defectQueueSummaryRule').textContent : '').trim(),
       filter_value: safe(state.defectStatusFilter).trim(),
       keyword_value: safe(state.defectKeyword).trim(),
       process_btn_visible: !!$('defectCreateProcessTaskBtn'),
@@ -166,6 +185,51 @@
       const result = collectDefectProbe();
       if (probeCase === 'requirement_empty') {
         result.pass = !!result.requirement_empty_visible;
+      } else if (probeCase === 'queue_off') {
+        result.pass = (
+          !result.queue_enabled &&
+          !!result.selected_task_priority &&
+          !!result.selected_reported_at &&
+          result.queue_toggle_in_title &&
+          result.queue_summary_visible &&
+          !result.legacy_queue_strip_present &&
+          !!result.queue_summary_rule_text
+        );
+      } else if (probeCase === 'queue_on') {
+        result.pass = (
+          result.queue_enabled &&
+          !!result.queue_active_display_id &&
+          !!result.queue_next_display_id &&
+          result.queue_toggle_in_title &&
+          result.queue_summary_visible &&
+          !result.legacy_queue_strip_present &&
+          !!result.queue_summary_rule_text
+        );
+      } else if (probeCase === 'queue_active') {
+        result.pass = (
+          result.queue_enabled &&
+          result.selected_queue_mode === 'active' &&
+          result.task_ref_total >= 1 &&
+          result.queue_summary_visible &&
+          !!result.queue_summary_active_text
+        );
+      } else if (probeCase === 'queue_advanced') {
+        result.pass = (
+          result.queue_enabled &&
+          result.selected_queue_mode === 'active' &&
+          result.task_ref_total >= 1 &&
+          result.queue_summary_visible &&
+          !!result.queue_summary_next_text
+        );
+      } else if (probeCase === 'queue_drained') {
+        result.pass = (
+          result.queue_enabled &&
+          !result.queue_active_display_id &&
+          !result.queue_next_display_id &&
+          result.queue_toggle_in_title &&
+          result.queue_summary_visible &&
+          !result.legacy_queue_strip_present
+        );
       } else if (probeCase === 'filter_search') {
         result.pass = result.list_total >= 0 && result.list_item_count >= 0;
       } else {
@@ -202,6 +266,33 @@
         try {
           await withButtonLock('defectRefreshBtn', async () => {
             await refreshDefectList({ preserveSelection: true });
+          });
+        } catch (err) {
+          setDefectError(err.message || String(err));
+        }
+      };
+    }
+    if ($('defectQueueToggleBtn')) {
+      $('defectQueueToggleBtn').onclick = async () => {
+        try {
+          await toggleDefectQueueModeAction();
+        } catch (err) {
+          setDefectError(err.message || String(err));
+        }
+      };
+    }
+    if ($('defectComposerToggleBtn')) {
+      $('defectComposerToggleBtn').onclick = () => {
+        state.defectComposerTouched = true;
+        state.defectComposerCollapsed = !state.defectComposerCollapsed;
+        renderDefectCenter();
+      };
+    }
+    if ($('defectLoadMoreBtn')) {
+      $('defectLoadMoreBtn').onclick = async () => {
+        try {
+          await withButtonLock('defectLoadMoreBtn', async () => {
+            await refreshDefectList({ append: true, skipDetail: true });
           });
         } catch (err) {
           setDefectError(err.message || String(err));
@@ -280,8 +371,18 @@
           return;
         }
         try {
+          if (target.closest('#defectCancelTaskNameBtn')) {
+            defectTaskDraftReset();
+            renderDefectCenter();
+            return;
+          }
+          const confirmTaskDraftBtn = target.closest('#defectConfirmTaskNameBtn');
+          if (confirmTaskDraftBtn) {
+            await submitDefectTaskDraftAction(confirmTaskDraftBtn.getAttribute('data-action-kind'));
+            return;
+          }
           if (target.closest('#defectCreateProcessTaskBtn')) {
-            await createDefectProcessTaskAction();
+            await requestDefectProcessTaskAction();
             return;
           }
           if (target.closest('#defectResolvedVersionBtn')) {
@@ -297,10 +398,18 @@
             return;
           }
           if (target.closest('#defectSubmitReviewBtn')) {
-            await submitDefectReviewFlow();
+            await requestDefectReviewTaskAction();
           }
         } catch (err) {
           setDefectError(err.message || String(err));
+        }
+      });
+      $('defectDetailBody').addEventListener('input', (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        if (target.id === 'defectTaskNameBaseInput') {
+          state.defectTaskDraftBaseName = safe(target.value);
+          setDefectTaskDraftError('');
         }
       });
       $('defectDetailBody').addEventListener('paste', (event) => {

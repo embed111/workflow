@@ -8,7 +8,7 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
     root_ready = bool(ctx.get("root_ready"))
     root_error = str(ctx.get("root_error") or "")
     root_text = str(ctx.get("root_text") or "")
-    session_running_task_count = int(ws.active_runtime_task_count(state))
+    session_running_task_count = int(ws.active_runtime_task_count(state, root=cfg.root))
 
     if path != "/api/status" and path != "/api/dashboard":
         return False

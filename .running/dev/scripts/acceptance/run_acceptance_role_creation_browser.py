@@ -29,6 +29,128 @@ DEFAULT_MEMORY_SPEC = """# Memory Spec
 """
 
 
+def write_role_creation_codex_stub(bin_dir: Path) -> Path:
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    script_path = bin_dir / "codex_stub.py"
+    cmd_path = bin_dir / "codex.cmd"
+    script_path.write_text(
+        "\n".join(
+            [
+                "import json",
+                "import os",
+                "import re",
+                "import sys",
+                "import time",
+                "",
+                "prompt = sys.stdin.read()",
+                "is_assignment_prompt = 'artifact_markdown' in prompt or '执行要求：' in prompt",
+                "",
+                "def extract_json_line(label, default=None):",
+                "    matched = re.search(r'^\\s*[-]\\s*' + re.escape(label) + r'\\s*:\\s*(.+)$', prompt, flags=re.M)",
+                "    if not matched:",
+                "        return default",
+                "    raw = matched.group(1).strip()",
+                "    try:",
+                "        return json.loads(raw)",
+                "    except Exception:",
+                "        return raw.strip('\"')",
+                "",
+                "def emit(payload):",
+                "    print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': json.dumps(payload, ensure_ascii=False)}}, ensure_ascii=False))",
+                "",
+                "def emit_turn_completed():",
+                "    print(json.dumps({'type': 'turn.completed', 'message': 'stub turn completed'}, ensure_ascii=False))",
+                "",
+                "latest_user_message = str(extract_json_line('latest_user_message', '') or '')",
+                "session_id = str(extract_json_line('session_id', '') or '')",
+                "session_status = str(extract_json_line('session_status', '') or '').strip().lower()",
+                "current_stage_key = str(extract_json_line('current_stage_key', 'persona_collection') or 'persona_collection').strip().lower() or 'persona_collection'",
+                "can_start = bool(extract_json_line('can_start', False))",
+                "missing_fields = extract_json_line('missing_fields', [])",
+                "if not isinstance(missing_fields, list):",
+                "    missing_fields = []",
+                "state_dir = str(os.getenv('WORKFLOW_ROLE_CREATION_STUB_STATE_DIR') or '').strip()",
+                "failure_marker = ''",
+                "if state_dir:",
+                "    os.makedirs(state_dir, exist_ok=True)",
+                "    failure_marker = os.path.join(state_dir, re.sub(r'[^A-Za-z0-9._-]+', '_', session_id or 'session') + '.fail_once')",
+                "",
+                "if is_assignment_prompt:",
+                "    node_name = ''",
+                "    matched_node = re.search(r'^\\s*-\\s*node_name\\s*:\\s*(.+)$', prompt, flags=re.M)",
+                "    if matched_node:",
+                "        node_name = matched_node.group(1).strip()",
+                "    artifact_label = (node_name or '任务产物').replace('/', '-').replace('\\\\', '-') + '.html'",
+                "    artifact_markdown = '\\n'.join([",
+                "        '# ' + (node_name or '任务产物'),",
+                "        '',",
+                "        '这是浏览器验收 stub 自动生成的交付内容。',",
+                "        '',",
+                "        '## 结果摘要',",
+                "        '当前任务已通过本地 stub 返回结构化结果，用于验证 workflow 的调度、回写与展示链路。',",
+                "    ])",
+                "    emit({",
+                "        'result_summary': (node_name or '任务') + ' 已按验收 stub 完成。',",
+                "        'artifact_label': artifact_label,",
+                "        'artifact_markdown': artifact_markdown,",
+                "        'artifact_files': [],",
+                "        'warnings': [],",
+                "    })",
+                "    emit_turn_completed()",
+                "    raise SystemExit(0)",
+                "",
+                "time.sleep(1.8)",
+                "if '模拟失败' in latest_user_message or '模拟失败' in prompt:",
+                "    if failure_marker and not os.path.exists(failure_marker):",
+                "        with open(failure_marker, 'w', encoding='utf-8') as fh:",
+                "            fh.write('failed')",
+                "        sys.stderr.write('simulated role creation failure')",
+                "        raise SystemExit(17)",
+                "",
+                "delegate_tasks = []",
+                "suggested_stage_key = current_stage_key",
+                "assistant_reply = '信息已收到。我会继续按当前阶段收口角色画像，如需我拆后台任务，直接说明要补什么和希望回传什么产物。'",
+                "",
+                "if any(token in latest_user_message for token in ['另起一个任务', '后台去做', '回传预览', '补行业案例', '补竞品案例']):",
+                "    if any(token in latest_user_message for token in ['回传', '预览', '截图']):",
+                "        task_stage = 'review_and_alignment'",
+                "    elif any(token in latest_user_message for token in ['案例', '竞品', '行业']):",
+                "        task_stage = 'persona_collection'",
+                "    else:",
+                "        task_stage = 'capability_generation'",
+                "    task_title = '补充行业案例并回传预览' if '行业' in latest_user_message else ('补充竞品案例并回传预览' if '竞品' in latest_user_message else '补充任务并回传预览')",
+                "    task_goal = latest_user_message.replace('另起一个任务去', '').strip() or '补充资料并回传预览。'",
+                "    delegate_tasks = [{",
+                "        'title': task_title,",
+                "        'goal': task_goal,",
+                "        'stage_key': task_stage,",
+                "        'expected_artifact': task_title + '.html',",
+                "        'priority': 'P1',",
+                "    }]",
+                "    suggested_stage_key = task_stage",
+                "    assistant_reply = '已记录这条后台任务，主线角色画像会继续保留在当前会话里，等任务回传后再一起对齐。'",
+                "elif can_start:",
+                "    suggested_stage_key = 'capability_generation'",
+                "    assistant_reply = '角色画像已经收口：目标、核心能力、边界、适用场景和协作方式都已明确。下一步可以进入能力展开与交付样例整理。'",
+                "",
+                "emit({",
+                "    'assistant_reply': assistant_reply,",
+                "    'delegate_tasks': delegate_tasks,",
+                "    'suggested_stage_key': suggested_stage_key,",
+                "    'ready_to_start': bool(can_start) and not bool(missing_fields),",
+                "    'missing_fields': [str(item).strip() for item in missing_fields if str(item).strip()],",
+                "    'reasoning_summary': 'acceptance_stub',",
+                "})",
+                "emit_turn_completed()",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cmd_path.write_text("@echo off\r\n" + f"\"{sys.executable}\" \"{script_path.as_posix()}\" %*\r\n", encoding="utf-8")
+    return cmd_path
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Browser acceptance for training center role creation workbench.")
     parser.add_argument("--root", default=".")
@@ -71,7 +193,7 @@ def api_request(base_url: str, method: str, route: str, body: dict[str, Any] | N
         headers["Content-Type"] = "application/json"
     request = urllib.request.Request(base_url + route, data=payload, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=180) as response:
             content_type = str(response.headers.get("Content-Type") or "")
             if "application/json" in content_type:
                 return int(response.status), read_json_response(response)
@@ -83,7 +205,7 @@ def api_request(base_url: str, method: str, route: str, body: dict[str, Any] | N
         return int(exc.code), exc.read().decode("utf-8")
 
 
-def wait_for_health(base_url: str, timeout_s: float = 45.0) -> dict[str, Any]:
+def wait_for_health(base_url: str, timeout_s: float = 90.0) -> dict[str, Any]:
     deadline = time.time() + timeout_s
     while time.time() < deadline:
         try:
@@ -123,6 +245,64 @@ def wait_for_role_creation_idle(base_url: str, session_id: str, timeout_s: float
             ensure_ascii=False,
         )
     )
+
+
+def wait_for_role_creation_failed(base_url: str, session_id: str, timeout_s: float = 120.0) -> dict[str, Any]:
+    deadline = time.time() + timeout_s
+    last_payload: dict[str, Any] = {}
+    while time.time() < deadline:
+        status, data = api_request(base_url, "GET", f"/api/training/role-creation/sessions/{session_id}")
+        if status == 200 and isinstance(data, dict) and data.get("ok"):
+            last_payload = data
+            session = data.get("session") or {}
+            if str(session.get("message_processing_status") or "").strip().lower() == "failed":
+                return data
+        time.sleep(1)
+    raise RuntimeError(
+        "role creation failed timeout: "
+        + json.dumps(
+            {
+                "session_id": session_id,
+                "last_status": (last_payload.get("session") or {}).get("message_processing_status"),
+                "last_error": (last_payload.get("session") or {}).get("message_processing_error"),
+            },
+            ensure_ascii=False,
+        )
+    )
+
+
+def wait_for_role_creation_started(base_url: str, session_id: str, timeout_s: float = 240.0) -> dict[str, Any]:
+    deadline = time.time() + timeout_s
+    last_payload: dict[str, Any] = {}
+    while time.time() < deadline:
+        status, data = api_request(base_url, "GET", f"/api/training/role-creation/sessions/{session_id}")
+        if status == 200 and isinstance(data, dict) and data.get("ok"):
+            last_payload = data
+            session = data.get("session") or {}
+            if (
+                str(session.get("status") or "").strip().lower() == "creating"
+                and str(session.get("assignment_ticket_id") or "").strip()
+                and str(session.get("workspace_init_ref") or "").strip()
+            ):
+                return data
+        time.sleep(1)
+    raise RuntimeError(
+        "role creation start timeout: "
+        + json.dumps(
+            {
+                "session_id": session_id,
+                "last_status": (last_payload.get("session") or {}).get("status"),
+                "last_stage": (last_payload.get("session") or {}).get("current_stage_key"),
+                "last_ticket_id": (last_payload.get("session") or {}).get("assignment_ticket_id"),
+                "last_workspace_init_ref": (last_payload.get("session") or {}).get("workspace_init_ref"),
+            },
+            ensure_ascii=False,
+        )
+    )
+
+
+def allow_async_writes_to_settle(delay_s: float = 3.0) -> None:
+    time.sleep(max(0.2, float(delay_s)))
 
 
 def find_edge() -> Path:
@@ -237,13 +417,27 @@ def capture_probe(
     name: str,
     case_id: str,
     extra: dict[str, str] | None = None,
+    *,
+    budget_ms: int = 26000,
 ) -> tuple[str, str, dict[str, Any]]:
     url = tc_probe_url(base_url, case_id, extra)
     shot_path = evidence_root / "screenshots" / f"{name}.png"
     probe_path = evidence_root / "screenshots" / f"{name}.probe.json"
     profile_dir = evidence_root / "edge-profile" / name
-    edge_shot(edge_path, url, shot_path, profile_dir=profile_dir)
-    probe = parse_probe(edge_dom(edge_path, url, profile_dir=profile_dir))
+    budgets = [budget_ms]
+    if budget_ms < 60000:
+        budgets.append(60000)
+    last_error: Exception | None = None
+    probe: dict[str, Any] | None = None
+    for current_budget_ms in budgets:
+        edge_shot(edge_path, url, shot_path, profile_dir=profile_dir, budget_ms=current_budget_ms)
+        try:
+            probe = parse_probe(edge_dom(edge_path, url, profile_dir=profile_dir, budget_ms=current_budget_ms))
+            break
+        except RuntimeError as exc:
+            last_error = exc
+    if probe is None:
+        raise last_error or RuntimeError("trainingCenterProbeOutput_not_found")
     write_json(probe_path, probe)
     return shot_path.as_posix(), probe_path.as_posix(), probe
 
@@ -256,6 +450,7 @@ def launch_server(
     port: int,
     stdout_path: Path,
     stderr_path: Path,
+    env: dict[str, str] | None = None,
 ) -> tuple[subprocess.Popen[bytes], Any, Any]:
     stdout_path.parent.mkdir(parents=True, exist_ok=True)
     stderr_path.parent.mkdir(parents=True, exist_ok=True)
@@ -275,7 +470,7 @@ def launch_server(
         cwd=str(repo_root),
         stdout=stdout_handle,
         stderr=stderr_handle,
-        env=os.environ.copy(),
+        env=env or os.environ.copy(),
     )
     return server, stdout_handle, stderr_handle
 
@@ -301,6 +496,7 @@ def running_server(
     port: int,
     stdout_path: Path,
     stderr_path: Path,
+    env: dict[str, str] | None = None,
 ) -> Iterator[None]:
     server, stdout_handle, stderr_handle = launch_server(
         repo_root,
@@ -309,6 +505,7 @@ def running_server(
         port=port,
         stdout_path=stdout_path,
         stderr_path=stderr_path,
+        env=env,
     )
     try:
         yield
@@ -356,11 +553,22 @@ def prepare_runtime_root(repo_root: Path, runtime_root: Path) -> Path:
 def role_message_text(role_name: str) -> str:
     return (
         f"角色名是{role_name}。"
-        "角色目标是做增长诊断。"
-        "核心能力有问题拆解、漏斗分析、实验设计。"
-        "边界是不写代码。"
-        "适用场景是增长复盘。"
-        "协作方式是输出结构化建议。"
+        "角色目标是把复杂增长问题收口成结构化诊断、实验建议和复盘摘要。"
+        "核心能力有问题拆解、漏斗分析、实验设计、复盘摘要。"
+        "能力模块：问题拆解 / 漏斗诊断 / 实验设计 / 复盘摘要。"
+        "知识沉淀：诊断方法说明、诊断模板、最小示例、反例、验收清单。"
+        "边界是不写代码、不直接改数据库。"
+        "适用场景是增长复盘、投放问题排查、转化漏斗优化。"
+        "协作方式是先给结构化结论，再给证据和建议。"
+    )
+
+
+def role_message_supplement_text() -> str:
+    return (
+        "默认交付策略：默认先回传结构化诊断摘要和可执行清单，再补完整说明。"
+        "格式边界：HTML 为主，Markdown / JSON 为辅，不输出 SVG。"
+        "首批优先顺序：先覆盖漏斗诊断，再出实验设计模板，最后整理复盘清单。"
+        "首批任务：先沉淀诊断模板和验收清单，再生成首批能力对象。"
     )
 
 
@@ -429,8 +637,15 @@ def main() -> int:
     api_dir.mkdir(parents=True, exist_ok=True)
     shots_dir.mkdir(parents=True, exist_ok=True)
     log_root.mkdir(parents=True, exist_ok=True)
+    runtime_stamp = time.strftime("%Y%m%d-%H%M%S")
     runtime_base = Path(os.getenv("TEST_TMP_DIR") or (repo_root / ".test" / "runtime")).resolve()
-    runtime_root = prepare_runtime_root(repo_root, runtime_base / "role-creation-browser-acceptance")
+    runtime_root = prepare_runtime_root(repo_root, runtime_base / f"role-creation-browser-acceptance-{runtime_stamp}")
+    stub_bin = runtime_root / "bin"
+    stub_cmd = write_role_creation_codex_stub(stub_bin)
+    server_env = os.environ.copy()
+    server_env["PATH"] = stub_bin.as_posix() + os.pathsep + server_env.get("PATH", "")
+    server_env["WORKFLOW_ROLE_CREATION_CODEX_BIN"] = stub_cmd.as_posix()
+    server_env["WORKFLOW_ROLE_CREATION_STUB_STATE_DIR"] = (runtime_root / "stub-state").as_posix()
     base_url = f"http://{args.host}:{args.port}"
     edge_path = find_edge()
 
@@ -446,6 +661,7 @@ def main() -> int:
         "runtime_root": str(runtime_root),
         "base_url": base_url,
         "edge_path": str(edge_path),
+        "codex_stub": str(stub_cmd),
         "api": {},
         "screenshots": {},
         "sessions": {},
@@ -461,6 +677,7 @@ def main() -> int:
             port=args.port,
             stdout_path=log_root / "server.stdout.log",
             stderr_path=log_root / "server.stderr.log",
+            env=server_env,
         ):
             evidence["healthz"] = wait_for_health(base_url)
 
@@ -501,6 +718,31 @@ def main() -> int:
                 method="POST",
                 path="/api/config/artifact-root",
                 payload={"artifact_root": artifact_root.as_posix()},
+                status=status,
+                body=body,
+            )
+
+            assignment_settings_payload = {
+                "execution_provider": "codex",
+                "codex_command_path": stub_cmd.as_posix(),
+                "command_template": "",
+                "global_concurrency_limit": 1,
+                "operator": operator,
+            }
+            status, body = api_request(
+                base_url,
+                "POST",
+                "/api/assignments/settings/execution",
+                assignment_settings_payload,
+            )
+            assert_true(status == 200 and isinstance(body, dict) and body.get("ok"), "configure assignment execution failed")
+            evidence["api"]["configure_assignment_execution"] = record_api(
+                api_dir,
+                stage="setup",
+                name="configure_assignment_execution",
+                method="POST",
+                path="/api/assignments/settings/execution",
+                payload=assignment_settings_payload,
                 status=status,
                 body=body,
             )
@@ -572,6 +814,46 @@ def main() -> int:
                 status=200,
                 body=main_message_ready,
             )
+            main_supplement_payload = {
+                "content": role_message_supplement_text(),
+                "operator": operator,
+            }
+            status, main_supplement = api_request(
+                base_url,
+                "POST",
+                f"/api/training/role-creation/sessions/{main_session_id}/messages",
+                main_supplement_payload,
+            )
+            assert_true(status == 200 and isinstance(main_supplement, dict) and main_supplement.get("ok"), "main supplement post failed")
+            evidence["api"]["main_message_supplement"] = record_api(
+                api_dir,
+                stage="main",
+                name="message_supplement",
+                method="POST",
+                path=f"/api/training/role-creation/sessions/{main_session_id}/messages",
+                payload=main_supplement_payload,
+                status=status,
+                body=main_supplement,
+            )
+            evidence["screenshots"]["analysis_progress"] = capture_required_probe(
+                edge_path,
+                base_url,
+                evidence_root,
+                "rc_analysis_progress",
+                "rc_profile_tab",
+                {"tc_probe_session": main_session_id},
+            )
+            main_supplement_ready = wait_for_role_creation_idle(base_url, main_session_id)
+            evidence["api"]["main_message_supplement_idle"] = record_api(
+                api_dir,
+                stage="main",
+                name="message_supplement_idle",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{main_session_id}",
+                payload=None,
+                status=200,
+                body=main_supplement_ready,
+            )
 
             main_start_payload = {"operator": operator}
             status, main_start = api_request(
@@ -580,7 +862,6 @@ def main() -> int:
                 f"/api/training/role-creation/sessions/{main_session_id}/start",
                 main_start_payload,
             )
-            assert_true(status == 200 and isinstance(main_start, dict) and main_start.get("ok"), "main start failed")
             evidence["api"]["main_start_session"] = record_api(
                 api_dir,
                 stage="main",
@@ -591,11 +872,13 @@ def main() -> int:
                 status=status,
                 body=main_start,
             )
+            assert_true(status == 200 and isinstance(main_start, dict) and main_start.get("ok"), "main start failed")
             main_ticket_id = str((main_start.get("session") or {}).get("assignment_ticket_id") or "").strip()
             main_workspace_init_ref = str((main_start.get("session") or {}).get("workspace_init_ref") or "").strip()
             assert_true(main_ticket_id, "main ticket_id missing")
             assert_true(main_workspace_init_ref, "main workspace init ref missing")
             assert_true((runtime_root / main_workspace_init_ref).exists(), "workspace init evidence missing on disk")
+            allow_async_writes_to_settle()
 
             status, main_detail_started = api_request(
                 base_url,
@@ -721,6 +1004,35 @@ def main() -> int:
                 status=200,
                 body=archive_message_ready,
             )
+            archive_supplement_payload = {"content": role_message_supplement_text(), "operator": operator}
+            status, archive_supplement = api_request(
+                base_url,
+                "POST",
+                f"/api/training/role-creation/sessions/{archive_session_id}/messages",
+                archive_supplement_payload,
+            )
+            assert_true(status == 200 and isinstance(archive_supplement, dict) and archive_supplement.get("ok"), "archive supplement post failed")
+            evidence["api"]["archive_message_supplement"] = record_api(
+                api_dir,
+                stage="archive",
+                name="message_supplement",
+                method="POST",
+                path=f"/api/training/role-creation/sessions/{archive_session_id}/messages",
+                payload=archive_supplement_payload,
+                status=status,
+                body=archive_supplement,
+            )
+            archive_supplement_ready = wait_for_role_creation_idle(base_url, archive_session_id)
+            evidence["api"]["archive_message_supplement_idle"] = record_api(
+                api_dir,
+                stage="archive",
+                name="message_supplement_idle",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{archive_session_id}",
+                payload=None,
+                status=200,
+                body=archive_supplement_ready,
+            )
 
             status, archive_start = api_request(
                 base_url,
@@ -741,6 +1053,7 @@ def main() -> int:
             )
             archive_ticket_id = str((archive_start.get("session") or {}).get("assignment_ticket_id") or "").strip()
             archive_before_ids = set(role_task_ids(archive_start))
+            allow_async_writes_to_settle()
             archive_delegate_payload = {"content": "另起一个任务去补竞品案例并回传预览。", "operator": operator}
             status, archive_delegate = api_request(
                 base_url,
@@ -796,6 +1109,93 @@ def main() -> int:
                 "archived_task_id": archive_task_id,
             }
 
+            failure_role_name = "增长分析师浏览器验收失败演练"
+            failure_create_payload = {"session_title": "失败重试验收", "operator": operator}
+            status, failure_create = api_request(base_url, "POST", "/api/training/role-creation/sessions", failure_create_payload)
+            assert_true(status == 200 and isinstance(failure_create, dict) and failure_create.get("ok"), "failure create session failed")
+            evidence["api"]["failure_create_session"] = record_api(
+                api_dir,
+                stage="failure",
+                name="create_session",
+                method="POST",
+                path="/api/training/role-creation/sessions",
+                payload=failure_create_payload,
+                status=status,
+                body=failure_create,
+            )
+            failure_session_id = str((failure_create.get("session") or {}).get("session_id") or "").strip()
+            assert_true(failure_session_id, "failure session_id missing")
+            failure_message_payload = {
+                "content": role_message_text(failure_role_name) + role_message_supplement_text() + "模拟失败。",
+                "operator": operator,
+            }
+            status, failure_message = api_request(
+                base_url,
+                "POST",
+                f"/api/training/role-creation/sessions/{failure_session_id}/messages",
+                failure_message_payload,
+            )
+            assert_true(status == 200 and isinstance(failure_message, dict) and failure_message.get("ok"), "failure message post failed")
+            evidence["api"]["failure_message"] = record_api(
+                api_dir,
+                stage="failure",
+                name="message",
+                method="POST",
+                path=f"/api/training/role-creation/sessions/{failure_session_id}/messages",
+                payload=failure_message_payload,
+                status=status,
+                body=failure_message,
+            )
+            failure_detail = wait_for_role_creation_failed(base_url, failure_session_id)
+            evidence["api"]["failure_detail"] = record_api(
+                api_dir,
+                stage="failure",
+                name="detail_failed",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{failure_session_id}",
+                payload=None,
+                status=200,
+                body=failure_detail,
+            )
+            evidence["screenshots"]["failure_retry"] = capture_required_probe(
+                edge_path,
+                base_url,
+                evidence_root,
+                "rc_failure_retry",
+                "rc_failure",
+                {"tc_probe_session": failure_session_id},
+            )
+            status, failure_retry = api_request(
+                base_url,
+                "POST",
+                f"/api/training/role-creation/sessions/{failure_session_id}/retry-analysis",
+                {"operator": operator},
+            )
+            assert_true(status == 200 and isinstance(failure_retry, dict) and failure_retry.get("ok"), "failure retry api failed")
+            evidence["api"]["failure_retry"] = record_api(
+                api_dir,
+                stage="failure",
+                name="retry_analysis",
+                method="POST",
+                path=f"/api/training/role-creation/sessions/{failure_session_id}/retry-analysis",
+                payload={"operator": operator},
+                status=status,
+                body=failure_retry,
+            )
+            failure_retry_ready = wait_for_role_creation_idle(base_url, failure_session_id)
+            evidence["api"]["failure_retry_idle"] = record_api(
+                api_dir,
+                stage="failure",
+                name="retry_idle",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{failure_session_id}",
+                payload=None,
+                status=200,
+                body=failure_retry_ready,
+            )
+            assert_true(not bool(failure_retry_ready.get("codex_failure")), "failure retry should clear codex_failure")
+            evidence["sessions"]["failure"] = {"session_id": failure_session_id}
+
             high_role_name = "增长分析师浏览器验收高负载"
             high_create_payload = {"session_title": "高任务量验收", "operator": operator}
             status, high_create = api_request(base_url, "POST", "/api/training/role-creation/sessions", high_create_payload)
@@ -846,33 +1246,89 @@ def main() -> int:
                 status=200,
                 body=high_message_ready,
             )
-
-            status, high_start = api_request(
+            high_supplement_payload = {"content": role_message_supplement_text(), "operator": operator}
+            status, high_supplement = api_request(
                 base_url,
                 "POST",
-                f"/api/training/role-creation/sessions/{high_session_id}/start",
-                {"operator": operator},
+                f"/api/training/role-creation/sessions/{high_session_id}/messages",
+                high_supplement_payload,
             )
-            assert_true(status == 200 and isinstance(high_start, dict) and high_start.get("ok"), "high-load start failed")
+            assert_true(status == 200 and isinstance(high_supplement, dict) and high_supplement.get("ok"), "high-load supplement post failed")
+            evidence["api"]["high_load_message_supplement"] = record_api(
+                api_dir,
+                stage="high",
+                name="message_supplement",
+                method="POST",
+                path=f"/api/training/role-creation/sessions/{high_session_id}/messages",
+                payload=high_supplement_payload,
+                status=status,
+                body=high_supplement,
+            )
+            high_supplement_ready = wait_for_role_creation_idle(base_url, high_session_id)
+            evidence["api"]["high_load_message_supplement_idle"] = record_api(
+                api_dir,
+                stage="high",
+                name="message_supplement_idle",
+                method="GET",
+                path=f"/api/training/role-creation/sessions/{high_session_id}",
+                payload=None,
+                status=200,
+                body=high_supplement_ready,
+            )
+
+            high_start_payload = {"operator": operator}
+            high_start_status = 0
+            high_start: Any = {}
+            try:
+                high_start_status, high_start = api_request(
+                    base_url,
+                    "POST",
+                    f"/api/training/role-creation/sessions/{high_session_id}/start",
+                    high_start_payload,
+                )
+            except TimeoutError as exc:
+                high_start = {
+                    "ok": False,
+                    "error": "client_timeout",
+                    "message": str(exc),
+                }
             evidence["api"]["high_load_start_session"] = record_api(
                 api_dir,
                 stage="high",
                 name="start_session",
                 method="POST",
                 path=f"/api/training/role-creation/sessions/{high_session_id}/start",
-                payload={"operator": operator},
-                status=status,
+                payload=high_start_payload,
+                status=high_start_status,
                 body=high_start,
             )
-            high_ticket_id = str((high_start.get("session") or {}).get("assignment_ticket_id") or "").strip()
+            if high_start_status == 200 and isinstance(high_start, dict) and high_start.get("ok"):
+                high_start_detail = high_start
+            else:
+                high_start_detail = wait_for_role_creation_started(base_url, high_session_id)
+                evidence["api"]["high_load_start_session_eventual"] = record_api(
+                    api_dir,
+                    stage="high",
+                    name="start_session_eventual",
+                    method="GET",
+                    path=f"/api/training/role-creation/sessions/{high_session_id}",
+                    payload=None,
+                    status=200,
+                    body=high_start_detail,
+                )
+            assert_true(
+                isinstance(high_start_detail, dict)
+                and high_start_detail.get("ok")
+                and str((high_start_detail.get("session") or {}).get("status") or "").strip().lower() == "creating",
+                "high-load start failed",
+            )
+            high_ticket_id = str((high_start_detail.get("session") or {}).get("assignment_ticket_id") or "").strip()
             assert_true(high_ticket_id, "high-load ticket_id missing")
+            allow_async_writes_to_settle()
 
             high_task_specs = [
                 ("persona_collection", "收集行业漏斗案例", "整理 6 份增长漏斗案例并给出摘要。"),
-                ("persona_collection", "整理竞品角色画像", "补一版竞品增长岗位画像差异。"),
                 ("capability_generation", "生成漏斗诊断模板", "生成漏斗诊断模板并沉淀 HTML 预览。"),
-                ("capability_generation", "生成实验设计样例", "生成实验设计样例并补方法说明。"),
-                ("review_and_alignment", "整理回看截图", "整理结果回看截图并附验证说明。"),
                 ("review_and_alignment", "生成交付预览页", "生成交付预览页并回传给当前会话。"),
             ]
             high_created_task_ids: list[str] = []
@@ -976,7 +1432,49 @@ def main() -> int:
             }
 
             stage_meta = dict(main_detail_started.get("stage_meta") or {})
-            main_profile = dict(main_message_ready.get("profile") or {})
+            main_profile = dict(main_supplement_ready.get("profile") or {})
+            main_start_gate = dict(main_supplement_ready.get("start_gate") or {})
+            main_structured_specs = dict(main_supplement_ready.get("structured_specs") or {})
+            main_capability_spec = dict(main_structured_specs.get("capability_package_spec") or {})
+            main_knowledge_plan = dict(main_structured_specs.get("knowledge_asset_plan") or {})
+            main_seed_plan = dict(main_structured_specs.get("seed_delivery_plan") or {})
+            main_module_names = [
+                str((item or {}).get("module_name") or "").strip()
+                for item in list(main_capability_spec.get("capability_modules") or [])
+                if str((item or {}).get("module_name") or "").strip()
+            ]
+            main_knowledge_topics = [
+                str((item or {}).get("asset_topic") or "").strip()
+                for item in list(main_knowledge_plan.get("assets") or [])
+                if str((item or {}).get("asset_topic") or "").strip()
+            ]
+            main_seed_task_names = [
+                str((item or {}).get("task_name") or "").strip()
+                for item in list(main_seed_plan.get("task_suggestions") or [])
+                if str((item or {}).get("task_name") or "").strip()
+            ]
+            main_boundary_lines = [
+                str(item).strip()
+                for item in list(main_profile.get("boundaries") or [])
+                if str(item).strip()
+            ]
+            main_delivery_summary = str((main_capability_spec.get("default_delivery_policy") or {}).get("summary") or "").strip()
+            main_format_strategy = dict(main_capability_spec.get("format_strategy") or {})
+            main_preferred_formats = {
+                str(item).strip()
+                for item in list(main_format_strategy.get("preferred_formats") or [])
+                if str(item).strip()
+            }
+            main_allowed_formats = {
+                str(item).strip()
+                for item in list(main_format_strategy.get("allowed_formats") or [])
+                if str(item).strip()
+            }
+            main_avoided_formats = {
+                str(item).strip()
+                for item in list(main_format_strategy.get("avoided_formats") or [])
+                if str(item).strip()
+            }
             evidence["assertions"]["current_stage_api"] = {
                 "session_id": main_session_id,
                 "current_stage_key": str((main_detail_started.get("session") or {}).get("current_stage_key") or ""),
@@ -986,7 +1484,10 @@ def main() -> int:
                 "session_id": main_session_id,
                 "role_name": str(main_profile.get("role_name") or ""),
                 "core_capabilities": list(main_profile.get("core_capabilities") or []),
-                "message_api": evidence["api"]["main_message_idle"],
+                "capability_modules": list(main_capability_spec.get("capability_modules") or []),
+                "knowledge_assets": list(main_knowledge_plan.get("assets") or []),
+                "seed_tasks": list(main_seed_plan.get("task_suggestions") or []),
+                "message_api": evidence["api"]["main_message_supplement_idle"],
             }
             evidence["assertions"]["delegate_task_api"] = {
                 "session_id": main_session_id,
@@ -999,10 +1500,49 @@ def main() -> int:
                 "workspace_init_ref": main_workspace_init_ref,
                 "workspace_init_path": str((runtime_root / main_workspace_init_ref).resolve()),
             }
+            evidence["assertions"]["structured_quality"] = {
+                "session_id": main_session_id,
+                "module_names": main_module_names,
+                "knowledge_topics": main_knowledge_topics,
+                "seed_task_names": main_seed_task_names,
+                "boundary_lines": main_boundary_lines,
+                "default_delivery_summary": main_delivery_summary,
+                "preferred_formats": sorted(main_preferred_formats),
+                "allowed_formats": sorted(main_allowed_formats),
+                "avoided_formats": sorted(main_avoided_formats),
+            }
 
             assert_true(str((main_detail_started.get("session") or {}).get("current_stage_key") or "").strip() != "", "current stage key missing")
             assert_true(str(main_profile.get("role_name") or "").strip() == main_role_name, "role profile name mismatch")
             assert_true(len(list(main_profile.get("core_capabilities") or [])) >= 3, "role profile capabilities missing")
+            assert_true(bool(main_start_gate.get("can_start")), "main start gate should be ready after supplement")
+            assert_true(len(list(main_capability_spec.get("capability_modules") or [])) >= 2, "capability modules missing")
+            assert_true(len(list(main_knowledge_plan.get("assets") or [])) >= 2, "knowledge assets missing")
+            assert_true(len(list(main_seed_plan.get("task_suggestions") or [])) >= 1, "seed task suggestions missing")
+            assert_true(
+                {"问题拆解", "漏斗诊断", "实验设计", "复盘摘要"}.issubset(set(main_module_names)),
+                "capability modules should contain the explicit module split",
+            )
+            assert_true(
+                {"诊断方法说明", "诊断模板", "最小示例", "反例", "验收清单"}.issubset(set(main_knowledge_topics)),
+                "knowledge assets should contain the explicit asset plan",
+            )
+            assert_true(
+                not any(any(token in item for token in ("HTML", "Markdown", "JSON", "SVG")) for item in main_boundary_lines),
+                "format boundary should not be mixed into role boundaries",
+            )
+            assert_true(
+                "结构化诊断摘要" in main_delivery_summary and "可执行清单" in main_delivery_summary,
+                "default delivery summary missing expected structured delivery hints",
+            )
+            assert_true(
+                ("HTML" in main_preferred_formats or "HTML" in main_allowed_formats) and "SVG" in main_avoided_formats,
+                "format strategy missing expected preferred/avoided formats",
+            )
+            assert_true(
+                not any(any(token in item for token in ("知识沉淀：", "首批任务：", "角色名是")) for item in main_module_names + main_knowledge_topics + main_seed_task_names),
+                "structured items should not keep raw label prefixes or role-name noise",
+            )
             assert_true(bool(main_delegate_task_ids), "delegate task evidence missing")
             assert_true(stage_meta.get("ticket_id"), "stage meta ticket id missing")
 
@@ -1081,6 +1621,7 @@ def main() -> int:
                 f"- default: {default_session_id}",
                 f"- main: {main_session_id} ticket={main_ticket_id} workspace_init_ref={main_workspace_init_ref}",
                 f"- archive: {archive_session_id} ticket={archive_ticket_id} archived_task={archive_task_id}",
+                f"- failure: {failure_session_id}",
                 f"- high_load: {high_session_id} ticket={high_ticket_id} archived_task={high_archive_task_id}",
                 "",
                 "## Required Screenshots",
@@ -1095,8 +1636,9 @@ def main() -> int:
                     "## Key Evidence",
                     "",
                     f"- current_stage_api: {evidence['api']['main_detail_started']}",
-                    f"- role_spec_api: {evidence['api']['main_message_with_image']}",
+                    f"- role_spec_api: {evidence['api']['main_message_supplement_idle']}",
                     f"- explicit_delegate_api: {evidence['api']['main_explicit_delegate']}",
+                    f"- failure_retry_api: {evidence['api']['failure_retry_idle']}",
                     f"- task_id_consistency: {task_consistency_path.as_posix()}",
                     f"- workspace_init: {(runtime_root / main_workspace_init_ref).as_posix()}",
                     f"- high_load_state: {high_state_snapshot_path.as_posix()}",

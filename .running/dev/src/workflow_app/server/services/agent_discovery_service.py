@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+
+from workflow_app.server.services.codex_failure_contract import build_codex_failure, build_retry_action
+
 
 _AGENT_CACHE_MTIME_TOLERANCE_S = 0.001
 
@@ -31,6 +35,57 @@ def bind_runtime_symbols(symbols: dict[str, object]) -> None:
             continue
         target[key] = value
 
+
+def _policy_item_codex_failure(item: dict[str, Any]) -> dict[str, Any]:
+    node = item if isinstance(item, dict) else {}
+    detail_code = str(node.get("policy_error") or "").strip().lower()
+    parse_status = str(node.get("parse_status") or "").strip().lower()
+    contract_status = str(node.get("policy_contract_status") or "").strip().lower()
+    if not detail_code and parse_status == "failed":
+        detail_code = "policy_contract_invalid" if contract_status == "failed" else "policy_extract_failed"
+    if not detail_code:
+        return {}
+    analysis_chain = node.get("analysis_chain") if isinstance(node.get("analysis_chain"), dict) else {}
+    files = analysis_chain.get("files") if isinstance(analysis_chain.get("files"), dict) else {}
+    return build_codex_failure(
+        feature_key="policy_analysis",
+        attempt_id=str(files.get("trace_dir") or node.get("agents_hash") or "").strip(),
+        attempt_count=1,
+        failure_detail_code=detail_code,
+        failure_message=str(
+            node.get("policy_error")
+            or node.get("policy_gate_reason")
+            or node.get("clarity_gate_reason")
+            or ""
+        ).strip(),
+        failure_stage="contract_validate" if detail_code == "policy_contract_invalid" else "",
+        retry_action=build_retry_action(
+            "retry_policy_analysis",
+            payload={
+                "agent_name": str(node.get("agent_name") or "").strip(),
+                "agents_path": str(node.get("agents_md_path") or "").strip(),
+            },
+        ),
+        trace_refs=files,
+        failed_at=str(node.get("policy_cache_cached_at") or "").strip(),
+    )
+
+
+def _iter_agent_manifest_paths(agents_root: Path) -> list[Path]:
+    root_path = agents_root.resolve(strict=False)
+    found: list[Path] = []
+    for current_root, dir_names, file_names in os.walk(root_path, topdown=True):
+        dir_names[:] = sorted(
+            dir_name
+            for dir_name in dir_names
+            if not str(dir_name or "").startswith(".")
+        )
+        if "AGENTS.md" not in file_names:
+            continue
+        found.append(Path(current_root) / "AGENTS.md")
+    found.sort(key=lambda path: str(path).lower())
+    return found
+
 def discover_agents(
     agents_root: Path,
     *,
@@ -56,7 +111,7 @@ def discover_agents(
             cache_conn = connect_db(cache_root)
         except Exception:
             cache_conn = None
-    for agents_file in sorted(agents_root.rglob("AGENTS.md"), key=lambda p: str(p).lower()):
+    for agents_file in _iter_agent_manifest_paths(agents_root):
         if not agents_file.is_file():
             continue
         try:
@@ -264,6 +319,20 @@ def discover_agents(
                     "policy_cache_reason": cache_reason,
                     "policy_cache_cached_at": cache_cached_at,
                     "policy_cache_trace": cache_trace,
+                    "codex_failure": _policy_item_codex_failure(
+                        {
+                            "agent_name": agent_name,
+                            "agents_hash": digest,
+                            "agents_md_path": agents_file.as_posix(),
+                            "parse_status": parse_status,
+                            "policy_error": str(payload.get("policy_error") or ""),
+                            "policy_contract_status": str(payload.get("policy_contract_status") or ""),
+                            "policy_gate_reason": str(payload.get("policy_gate_reason") or ""),
+                            "clarity_gate_reason": str(payload.get("clarity_gate_reason") or ""),
+                            "analysis_chain": payload.get("analysis_chain") if isinstance(payload.get("analysis_chain"), dict) else {},
+                            "policy_cache_cached_at": cache_cached_at,
+                        }
+                    ),
                     "agents_mtime": agents_mtime,
                 }
             )
@@ -519,6 +588,20 @@ def discover_agents(
                 "policy_cache_reason": cache_reason,
                 "policy_cache_cached_at": cache_cached_at,
                 "policy_cache_trace": cache_trace,
+                "codex_failure": _policy_item_codex_failure(
+                    {
+                        "agent_name": agent_name,
+                        "agents_hash": digest,
+                        "agents_md_path": agents_file.as_posix(),
+                        "parse_status": str(payload.get("parse_status") or "failed"),
+                        "policy_error": str(payload.get("policy_error") or ""),
+                        "policy_contract_status": str(payload.get("policy_contract_status") or "failed"),
+                        "policy_gate_reason": str(payload.get("policy_gate_reason") or ""),
+                        "clarity_gate_reason": str(payload.get("clarity_gate_reason") or ""),
+                        "analysis_chain": payload.get("analysis_chain") if isinstance(payload.get("analysis_chain"), dict) else {},
+                        "policy_cache_cached_at": cache_cached_at,
+                    }
+                ),
                 "agents_mtime": agents_mtime,
             }
         )

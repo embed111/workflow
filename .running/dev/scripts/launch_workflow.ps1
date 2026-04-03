@@ -99,6 +99,26 @@ if (-not [string]::IsNullOrWhiteSpace($effectiveInstanceFile)) {
     [Environment]::SetEnvironmentVariable('WORKFLOW_RUNTIME_INSTANCE_FILE', $effectiveInstanceFile, 'Process')
 }
 
+$runtimeConfigPatch = @{}
+if (-not [string]::IsNullOrWhiteSpace([string]$manifest['agent_search_root'])) {
+    $runtimeConfigPatch['agent_search_root'] = [string]$manifest['agent_search_root']
+}
+$manifestArtifactRoot = if (-not [string]::IsNullOrWhiteSpace([string]$manifest['task_artifact_root'])) {
+    [string]$manifest['task_artifact_root']
+} else {
+    [string]$manifest['artifact_root']
+}
+if (-not [string]::IsNullOrWhiteSpace($manifestArtifactRoot)) {
+    $runtimeConfigPatch['artifact_root'] = $manifestArtifactRoot
+    $runtimeConfigPatch['task_artifact_root'] = $manifestArtifactRoot
+}
+if ($manifest.ContainsKey('show_test_data')) {
+    $runtimeConfigPatch['show_test_data'] = [bool]$manifest['show_test_data']
+}
+if ($runtimeConfigPatch.Count -gt 0) {
+    Write-WorkflowRuntimeConfig -RuntimeRoot $effectiveRuntimeRoot -Patch $runtimeConfigPatch | Out-Null
+}
+
 & (Join-Path $PSScriptRoot "dev/launch_workflow.ps1") `
     -BindHost $effectiveHost `
     -Port $effectivePort `

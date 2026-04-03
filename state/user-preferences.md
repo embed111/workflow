@@ -210,6 +210,16 @@
   - evidence: 最新继续明确要求“本工作区所有代码文件可以清理”“`src scripts` 这两个应该删掉”“一次性帮我整改完”
   - action: 后续默认把 `workflow` 视为治理壳仓，不再在其中跟踪 `src/`、`scripts/`、`run_workflow.bat` 等正式代码副本；代码修改统一在 `.repository/<developer_id>` 或 `../workflow_code` 侧完成
   - confidence: high
+- pref_42:
+  - label: 当前单人阶段由你承载开发测试部署
+  - evidence: 最新明确提出“目前这个 workflow 项目暂时还只有你一个人，所以你目前需要承载开发测试部署等流程，后续会逐渐给你添加一些人手来辅助维护”
+  - action: 后续默认由我先同步代码根仓，再在 `.repository/pm-main` 中完成开发、验证、门禁、`test` 部署与 `prod` 候选刷新；后续新增协作者时再拆分职责
+  - confidence: high
+- pref_43:
+  - label: 生产入口放在 PM 顶层
+  - evidence: 最新明确提出“代码仓不需要 run_workflow.bat，本工作区顶层需要一个，这样我不用去找”
+  - action: 后续将 `./run_workflow.bat` 固定放在 `../workflow/` PM 仓顶层，作为便捷启动入口；正式代码仓不再保留同名脚本
+  - confidence: high
 
 ## Need Hypotheses
 - h_01:
@@ -273,3 +283,5 @@
 - 2026-04-03: 新增“双仓改造分批收口”偏好，后续处理 `workflow / workflow_code` 分离时默认先固定边界、bootstrap、留痕与 fail-closed，再逐批推进运行态外置与集成门禁。
 - 2026-04-03: 新增“代码根仓仅保留代码”偏好，固定 `workflow_code` 为 code-only 根仓，`.repository` 为 PM 仓内本地临时开发区且不被 `.git` 追踪。
 - 2026-04-03: 新增“PM 仓不保留代码副本”偏好，`workflow` 默认收为治理壳仓，不再跟踪 `src/`、`scripts/`、`run_workflow.bat` 等正式代码副本。
+- 2026-04-03: 新增“当前单人阶段由你承载开发测试部署”偏好，默认由我负责代码同步、开发验证、`test` 部署与 `prod` 候选刷新。
+- 2026-04-03: 更新“生产入口”偏好，`./run_workflow.bat` 固定放在 `workflow` PM 顶层作为便捷入口，代码仓不再保留同名脚本。

@@ -15,7 +15,7 @@ def try_handle_task_crud_routes(self, cfg, state, path: str, body: dict[str, Any
             return True
         message_id_num = int(message_id_text)
         operator = safe_token(str(body.get("operator") or "web-user"), "web-user", 80)
-        if has_session_runtime_task(state, session_id):
+        if has_session_runtime_task(state, session_id, root=cfg.root):
             ref = relative_to_root(cfg.root, event_file(cfg.root))
             workflow_meta = latest_workflow_for_session(cfg.root, session_id)
             audit_id = add_message_delete_audit(
@@ -98,7 +98,7 @@ def try_handle_task_crud_routes(self, cfg, state, path: str, body: dict[str, Any
         if not session_id:
             self.send_json(400, {"ok": False, "error": "session_id required", "code": "session_required"})
             return True
-        if has_session_runtime_task(state, session_id):
+        if has_session_runtime_task(state, session_id, root=cfg.root):
             self.send_json(
                 409,
                 {
@@ -242,7 +242,7 @@ def try_handle_task_crud_routes(self, cfg, state, path: str, body: dict[str, Any
             body.get("include_active_test_sessions", False),
             default=False,
         )
-        active_count = active_runtime_task_count(state)
+        active_count = active_runtime_task_count(state, root=cfg.root)
         if active_count > 0:
             self.send_json(
                 409,

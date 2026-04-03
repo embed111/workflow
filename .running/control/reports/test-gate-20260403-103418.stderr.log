@@ -1,0 +1,82 @@
+Traceback (most recent call last):
+  File "C:\Users\think\AppData\Local\Programs\Python\Python314\Lib\pathlib\__init__.py", line 1011, in mkdir
+    os.mkdir(self, mode)
+    ~~~~~~~~^^^^^^^^^^^^
+FileNotFoundError: [WinError 3] 系统找不到指定的路径。: 'D:\\code\\AI\\J-Agents\\.output-test\\records\\sessions'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\think\AppData\Local\Programs\Python\Python314\Lib\pathlib\__init__.py", line 1011, in mkdir
+    os.mkdir(self, mode)
+    ~~~~~~~~^^^^^^^^^^^^
+FileNotFoundError: [WinError 3] 系统找不到指定的路径。: 'D:\\code\\AI\\J-Agents\\.output-test\\records'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\think\AppData\Local\Programs\Python\Python314\Lib\pathlib\__init__.py", line 1011, in mkdir
+    os.mkdir(self, mode)
+    ~~~~~~~~^^^^^^^^^^^^
+FileNotFoundError: [WinError 3] 系统找不到指定的路径。: 'D:\\code\\AI\\J-Agents\\.output-test'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\think\AppData\Local\Programs\Python\Python314\Lib\pathlib\__init__.py", line 1011, in mkdir
+    os.mkdir(self, mode)
+    ~~~~~~~~^^^^^^^^^^^^
+FileNotFoundError: [WinError 3] 系统找不到指定的路径。: 'D:\\code\\AI\\J-Agents'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\think\AppData\Local\Programs\Python\Python314\Lib\pathlib\__init__.py", line 1011, in mkdir
+    os.mkdir(self, mode)
+    ~~~~~~~~^^^^^^^^^^^^
+FileNotFoundError: [WinError 3] 系统找不到指定的路径。: 'D:\\code\\AI'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\think\AppData\Local\Programs\Python\Python314\Lib\pathlib\__init__.py", line 1011, in mkdir
+    os.mkdir(self, mode)
+    ~~~~~~~~^^^^^^^^^^^^
+FileNotFoundError: [WinError 3] 系统找不到指定的路径。: 'D:\\code'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\work\J-Agents\workflow\.running\test\scripts\bin\workflow_entry_cli.py", line 17, in <module>
+    main()
+    ~~~~^^
+  File "C:\work\J-Agents\workflow\.running\test\src\workflow_app\entry\workflow_entry_cli.py", line 560, in main
+    ensure_layout(root)
+    ~~~~~~~~~~~~~^^^^^^
+  File "C:\work\J-Agents\workflow\.running\test\src\workflow_app\entry\workflow_entry_cli.py", line 64, in ensure_layout
+    ensure_store(root)
+    ~~~~~~~~~~~~^^^^^^
+  File "C:\work\J-Agents\workflow\.running\test\src\workflow_app\server\services\work_record_store_parts\store_core_and_paths.py", line 422, in ensure_store
+    path.mkdir(parents=True, exist_ok=True)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\think\AppData\Local\Programs\Python\Python314\Lib\pathlib\__init__.py", line 1015, in mkdir
+    self.parent.mkdir(parents=True, exist_ok=True)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\think\AppData\Local\Programs\Python\Python314\Lib\pathlib\__init__.py", line 1015, in mkdir
+    self.parent.mkdir(parents=True, exist_ok=True)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\think\AppData\Local\Programs\Python\Python314\Lib\pathlib\__init__.py", line 1015, in mkdir
+    self.parent.mkdir(parents=True, exist_ok=True)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  [Previous line repeated 3 more times]
+  File "C:\Users\think\AppData\Local\Programs\Python\Python314\Lib\pathlib\__init__.py", line 1011, in mkdir
+    os.mkdir(self, mode)
+    ~~~~~~~~^^^^^^^^^^^^
+FileNotFoundError: [WinError 3] 系统找不到指定的路径。: 'D:\\'
+status failed with exit code 1
+At C:\work\J-Agents\workflow\.running\test\scripts\dev\launch_workflow.ps1:70 char:5
++     throw "status failed with exit code $LASTEXITCODE"
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (status failed with exit code 1:String) [], RuntimeException
+    + FullyQualifiedErrorId : status failed with exit code 1
+ 

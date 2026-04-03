@@ -8,7 +8,8 @@ param(
     [string]$ArtifactRoot = '',
     [switch]$SkipTestGate,
     [switch]$StartAfterDeploy,
-    [switch]$OpenBrowser
+    [switch]$OpenBrowser,
+    [switch]$AllowDirectProdDeploy
 )
 
 $ErrorActionPreference = 'Stop'
@@ -225,6 +226,11 @@ $prodGitProtection = Protect-WorkflowProdGitRuntimeState -SourceRoot $sourceRoot
 if (-not [bool]$prodGitProtection.ok) {
     Write-Host "[workflow-deploy] warning: prod git protection skipped: $($prodGitProtection.reason) $($prodGitProtection.error)"
 }
+
+if ($Environment -eq 'prod' -and -not $AllowDirectProdDeploy) {
+    throw "direct prod deploy is disabled by default; deploy test to generate a candidate and upgrade prod from the runtime UI, or pass -AllowDirectProdDeploy for explicit maintenance"
+}
+
 $descriptor = Resolve-WorkflowEnvironmentDescriptor `
     -SourceRoot $sourceRoot `
     -Environment $Environment `
@@ -259,7 +265,11 @@ Write-Host "[workflow-deploy] agent root: $($descriptor.agent_search_root)"
 Write-Host "[workflow-deploy] artifact root: $($descriptor.artifact_root)"
 Write-Host "[workflow-deploy] version: $version"
 
-Copy-WorkflowTree -SourcePath $sourceRoot -TargetPath ([string]$descriptor.deploy_root) -ExcludeDirs $script:WorkflowCopyExcludeDirs
+Copy-WorkflowTree `
+    -SourcePath $sourceRoot `
+    -TargetPath ([string]$descriptor.deploy_root) `
+    -ExcludeDirs $script:WorkflowCopyExcludeDirs `
+    -ExcludeFiles $script:WorkflowCopyExcludeFiles
 $metadataPath = Write-DeploymentMetadata -Descriptor $descriptor -Version $version -DeployedAt $deployedAt
 $localDeploymentMarkerPath = Write-WorkflowLocalDeploymentMarker -Descriptor $descriptor -Version $version -DeployedAt $deployedAt
 

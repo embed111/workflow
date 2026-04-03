@@ -227,6 +227,21 @@ def try_handle_get(handler, cfg, state, ctx: dict) -> bool:
                     "workset_changes": {},
                     "evaluations": [],
                     "history_records": [],
+                    "capabilities": [],
+                    "tasks_evolution": {
+                        "default_tab": "tasks",
+                        "current_stage": "",
+                        "blockers": [],
+                        "pending_nodes": [],
+                        "auto_publish": {"status": "pending", "reason": "agent_search_root_not_ready"},
+                    },
+                    "baseline": {
+                        "current_release_version": "",
+                        "current_role_profile_summary": "",
+                        "history_key_capabilities": [],
+                        "regression_results": [],
+                        "source": "agent_registry",
+                    },
                     "is_test_data": False,
                     **policy_fields,
                     "include_test_data": bool(ws.current_show_test_data(cfg, state)),
@@ -320,6 +335,21 @@ def try_handle_post(handler, cfg, state, ctx: dict) -> bool:
             data = ws.post_role_creation_message(
                 cfg,
                 ws.safe_token(mrcsm.group(1), "", 160),
+                body,
+            )
+            handler.send_json(200, {"ok": True, **data})
+        except ws.TrainingCenterError as exc:
+            payload = {"ok": False, "error": str(exc), "code": exc.code}
+            payload.update(exc.extra)
+            handler.send_json(exc.status_code, payload)
+        return True
+
+    mrcsr = re.fullmatch(r"/api/training/role-creation/sessions/([0-9A-Za-z._:-]+)/retry-analysis", path)
+    if mrcsr:
+        try:
+            data = ws.retry_role_creation_session_analysis(
+                cfg,
+                ws.safe_token(mrcsr.group(1), "", 160),
                 body,
             )
             handler.send_json(200, {"ok": True, **data})

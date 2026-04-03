@@ -42,6 +42,14 @@
     const blockings = Array.isArray(detail.blocking_reasons) ? detail.blocking_reasons : [];
     const artifactPaths = Array.isArray(selected.artifact_paths) ? selected.artifact_paths : [];
     const ticketId = selectedAssignmentTicketId();
+    const codexFailure =
+      detail && typeof detail === 'object' && detail.codex_failure
+        ? detail.codex_failure
+        : selected && typeof selected === 'object' && selected.codex_failure
+          ? selected.codex_failure
+          : detail && detail.execution_chain && detail.execution_chain.latest_run && typeof detail.execution_chain.latest_run === 'object'
+            ? detail.execution_chain.latest_run.codex_failure
+            : null;
     const rawStatus = safe(selected.status).trim().toLowerCase();
     let receiptActionHtml = '';
     let managementHtml = '';
@@ -155,6 +163,13 @@
         meta_html: overviewMetaHtml,
       }) +
       assignmentExecutionChainHtml() +
+      (codexFailureHasValue(codexFailure)
+        ? assignmentDetailSectionHtml('执行失败治理', "<div id='assignmentCodexFailureHost'></div>", {
+          open: true,
+          state_key: 'codex-failure',
+          meta_html: assignmentSectionMetaTextHtml('统一失败视图'),
+        })
+        : '') +
       assignmentDetailSectionHtml('回执信息', receiptInfoBody, {
         state_key: 'receipt-info',
         meta_html: assignmentSectionMetaTextHtml(safe(selected.result_ref).trim() ? '已附结果引用' : '暂无结果引用'),
@@ -206,6 +221,16 @@
           }
         )
         : '');
+    const failureHost = $('assignmentCodexFailureHost');
+    if (failureHost && codexFailureHasValue(codexFailure)) {
+      renderCodexFailureCard(failureHost, codexFailure, {
+        title: '节点执行失败',
+        context: {
+          ticketId: ticketId,
+          nodeId: safe(selected.node_id).trim(),
+        },
+      });
+    }
     bindAssignmentDetailToggleState(body);
     window.requestAnimationFrame(() => {
       restoreAssignmentExecutionScrollState(body);
@@ -365,6 +390,7 @@
   }
 
   function renderAssignmentCenter() {
+    renderAssignmentGraphSelector();
     renderAssignmentScheduler();
     renderAssignmentGraph();
     renderAssignmentDetail();
@@ -465,10 +491,40 @@
   }
 
   function assignmentGraphsUrl() {
+    // Task center now binds to the canonical global graph only.
     return withTestDataQuery(
-      '/api/assignments?source_workflow=' + encodeURIComponent(ASSIGNMENT_UI_SOURCE_WORKFLOW) +
-      '&limit=12',
+      '/api/assignments?limit=1' +
+      '&source_workflow=' + encodeURIComponent(ASSIGNMENT_UI_SOURCE_WORKFLOW) +
+      '&external_request_id=' + encodeURIComponent(ASSIGNMENT_UI_GLOBAL_GRAPH_REQUEST_ID),
     );
+  }
+
+  function assignmentGraphOptionLabel(item) {
+    const row = item && typeof item === 'object' ? item : {};
+    const baseLabel = typeof assignmentGraphDisplayName === 'function'
+      ? assignmentGraphDisplayName(row)
+      : (safe(row.graph_name).trim() || safe(row.ticket_id).trim() || '未命名任务图');
+    return row.is_test_data ? (baseLabel + ' · 测试') : baseLabel;
+  }
+
+  function isAssignmentGraphSelectorVisibleItem(item) {
+    const row = item && typeof item === 'object' ? item : {};
+    const sourceWorkflow = safe(row.source_workflow).trim().toLowerCase();
+    return !!row.is_test_data || sourceWorkflow === ASSIGNMENT_UI_SOURCE_WORKFLOW;
+  }
+
+  function assignmentVisibleGraphs() {
+    const items = Array.isArray(state.assignmentGraphs) ? state.assignmentGraphs : [];
+    return items.filter((item) => isAssignmentGraphSelectorVisibleItem(item));
+  }
+
+  function renderAssignmentGraphSelector() {
+    const select = $('assignmentGraphSelect');
+    if (!select) return;
+    select.disabled = true;
+    select.hidden = true;
+    select.setAttribute('aria-hidden', 'true');
+    select.style.display = 'none';
   }
 
   function assignmentDelay(ms) {
@@ -575,58 +631,22 @@
     const previous = safe(state.assignmentSelectedTicketId).trim();
     const data = await getJSON(assignmentGraphsUrl());
     state.assignmentGraphs = Array.isArray(data.items) ? data.items : [];
-    const emptyPrototypeGraph = state.assignmentGraphs.find((item) => {
-      const metrics = item && item.metrics_summary && typeof item.metrics_summary === 'object'
-        ? item.metrics_summary
-        : {};
-      return !!(item && item.is_test_data) &&
-        safe(item && item.external_request_id).trim() === 'task-center-prototype-v1' &&
-        Number(metrics.total_nodes || 0) <= 0;
-    });
-    if (
-      !!state.showTestData &&
-      !opts.testBootstrapAttempted &&
-      (!state.assignmentGraphs.length || (!!emptyPrototypeGraph && state.assignmentGraphs.length === 1))
-    ) {
-      await ensureAssignmentPrototypeTestData();
-      return refreshAssignmentGraphs({
-        preserveSelection: !!opts.preserveSelection,
-        testBootstrapAttempted: true,
-      });
-    }
-    const selectedExists = state.assignmentGraphs.some((item) => safe(item && item.ticket_id).trim() === previous);
+    const visibleGraphs = assignmentVisibleGraphs();
+    const selectedExists = visibleGraphs.some((item) => safe(item && item.ticket_id).trim() === previous);
     const globalTicketId = globalAssignmentTicketId();
     const preferredTicketId = preferredAssignmentTicketId();
-    if (globalTicketId) {
-      state.assignmentSelectedTicketId = globalTicketId;
-      if (previous !== globalTicketId) {
-        state.assignmentActiveLoaded = 0;
-        state.assignmentHistoryLoaded = 0;
-      }
-    } else if (previous && selectedExists) {
-      state.assignmentSelectedTicketId = previous;
-    } else if (!selectedExists) {
-      state.assignmentSelectedTicketId = preferredTicketId ||
-        (state.assignmentGraphs.length
-          ? safe(state.assignmentGraphs[0].ticket_id).trim()
-          : '');
-      state.assignmentActiveLoaded = 0;
-      state.assignmentHistoryLoaded = 0;
-    } else if (!opts.preserveSelection && !previous && preferredTicketId) {
-      state.assignmentSelectedTicketId = preferredTicketId;
+    const nextTicketId = selectedExists
+      ? previous
+      : (globalTicketId || preferredTicketId || (
+        visibleGraphs.length
+          ? safe(visibleGraphs[0].ticket_id).trim()
+          : ''
+      ));
+    if (nextTicketId !== previous) {
       state.assignmentActiveLoaded = 0;
       state.assignmentHistoryLoaded = 0;
     }
-    if (!state.assignmentSelectedTicketId && preferredTicketId) {
-      state.assignmentSelectedTicketId = preferredTicketId;
-    }
-    if (!state.assignmentSelectedTicketId) {
-      state.assignmentSelectedTicketId = state.assignmentGraphs.length
-        ? safe(state.assignmentGraphs[0].ticket_id).trim()
-        : '';
-      state.assignmentActiveLoaded = 0;
-      state.assignmentHistoryLoaded = 0;
-    }
+    state.assignmentSelectedTicketId = nextTicketId;
     if (selectedAssignmentTicketId()) {
       return refreshAssignmentGraphData({ ticketId: selectedAssignmentTicketId() });
     }

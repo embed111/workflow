@@ -10,7 +10,8 @@
   function defectStatusTone(value) {
     const key = safe(value).trim().toLowerCase();
     if (key === 'resolved' || key === 'closed') return 'ok';
-    if (key === 'dispute') return 'warn';
+    if (key === 'dispute') return 'dispute';
+    if (key === 'not_formal') return 'returned';
     if (key === 'unresolved') return 'active';
     return 'muted';
   }
@@ -30,6 +31,98 @@
     return safe(state.defectSelectedReportId).trim();
   }
 
+  function defectQueueSummary() {
+    return state.defectQueueSummary && typeof state.defectQueueSummary === 'object'
+      ? state.defectQueueSummary
+      : {};
+  }
+
+  function defectTaskDraftAction() {
+    return safe(state.defectTaskDraftAction).trim().toLowerCase();
+  }
+
+  function defectTaskDraftReportId() {
+    return safe(state.defectTaskDraftReportId).trim();
+  }
+
+  function defectTaskDraftDefaultBaseName(report) {
+    const row = report && typeof report === 'object' ? report : defectCurrentReport();
+    const displayId = safe(row.display_id || row.dts_id || row.report_id).trim();
+    const summary = safe(row.defect_summary).trim();
+    if (displayId && summary) {
+      if (summary.startsWith(displayId)) return summary;
+      return (displayId + ' ' + summary).trim();
+    }
+    if (displayId) return displayId + ' 缺陷问题';
+    return summary || '缺陷问题';
+  }
+
+  function defectTaskDraftReset() {
+    state.defectTaskDraftAction = '';
+    state.defectTaskDraftReportId = '';
+    state.defectTaskDraftBaseName = '';
+    state.defectTaskDraftDefaultBaseName = '';
+    state.defectTaskDraftError = '';
+  }
+
+  function defectTaskDraftOpen(actionKind, report) {
+    const row = report && typeof report === 'object' ? report : defectCurrentReport();
+    const reportId = safe(row.report_id).trim();
+    if (!reportId) return;
+    const action = safe(actionKind).trim().toLowerCase();
+    const defaultBaseName = defectTaskDraftDefaultBaseName(row);
+    state.defectTaskDraftAction = action;
+    state.defectTaskDraftReportId = reportId;
+    state.defectTaskDraftDefaultBaseName = defaultBaseName;
+    state.defectTaskDraftBaseName = defaultBaseName;
+    state.defectTaskDraftError = '';
+  }
+
+  function defectTaskDraftVisible(actionKind, reportId) {
+    const action = safe(actionKind).trim().toLowerCase();
+    const reportKey = safe(reportId).trim();
+    return defectTaskDraftAction() === action && defectTaskDraftReportId() === reportKey;
+  }
+
+  function defectTaskDraftPreviewBaseName() {
+    const value = safe(state.defectTaskDraftBaseName).trim();
+    if (value) return value;
+    return safe(state.defectTaskDraftDefaultBaseName).trim() || defectTaskDraftDefaultBaseName(defectCurrentReport());
+  }
+
+  function setDefectTaskDraftError(text) {
+    state.defectTaskDraftError = safe(text);
+    const node = $('defectTaskDraftError');
+    if (node) node.textContent = state.defectTaskDraftError;
+  }
+
+  function syncDefectTaskDraftInput() {
+    const input = $('defectTaskNameBaseInput');
+    if (!input) return defectTaskDraftPreviewBaseName();
+    state.defectTaskDraftBaseName = safe(input.value);
+    return defectTaskDraftPreviewBaseName();
+  }
+
+  function normalizeDefectQueueSummary(payload) {
+    const row = payload && typeof payload === 'object' ? payload : {};
+    return {
+      enabled: !!row.enabled,
+      updated_at: safe(row.updated_at),
+      candidate_total: Number(row.candidate_total || 0),
+      active_slot_busy: !!row.active_slot_busy,
+      head_report_id: safe(row.head_report_id).trim(),
+      active_report_id: safe(row.active_report_id).trim(),
+      active_display_id: safe(row.active_display_id).trim(),
+      active_summary: safe(row.active_summary),
+      active_task_priority: safe(row.active_task_priority).trim(),
+      next_report_id: safe(row.next_report_id).trim(),
+      next_display_id: safe(row.next_display_id).trim(),
+      next_summary: safe(row.next_summary),
+      next_task_priority: safe(row.next_task_priority).trim(),
+      next_reported_at: safe(row.next_reported_at),
+    };
+  }
+
   function normalizeDefectListItem(item) {
     const row = item && typeof item === 'object' ? item : {};
     return {
@@ -44,6 +137,13 @@
       decision_title: safe(row.decision_title),
       decision_summary: safe(row.decision_summary),
       decision_source: safe(row.decision_source),
+      task_priority: safe(row.task_priority).trim() || 'P1',
+      reported_at: safe(row.reported_at),
+      task_ref_total: Number(row.task_ref_total || 0),
+      queue_eligible: !!row.queue_eligible,
+      has_task_chain: !!row.has_task_chain,
+      queue_mode: safe(row.queue_mode).trim() || 'out_of_queue',
+      queue_mode_text: safe(row.queue_mode_text).trim(),
       created_at: safe(row.created_at),
       updated_at: safe(row.updated_at),
       is_formal: !!row.is_formal,

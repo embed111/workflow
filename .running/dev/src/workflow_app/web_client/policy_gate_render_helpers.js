@@ -1,11 +1,3 @@
-        state.agentDropdownPanelWidth = Math.max(1, Math.floor(trigger.getBoundingClientRect().width));
-      }
-      positionAgentDropdownPanel();
-    } else {
-      resetAgentDropdownPanelPosition();
-    }
-  }
-
   function renderAgentDropdownTrigger(items) {
     const rows = Array.isArray(items) ? items : [];
     const trigger = $('agentSelectTrigger');

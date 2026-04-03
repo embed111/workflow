@@ -1,5 +1,11 @@
 
 
+ASSIGNMENT_GLOBAL_GRAPH_NAME = "任务中心全局主图"
+ASSIGNMENT_GLOBAL_GRAPH_SOURCE_WORKFLOW = "workflow-ui"
+ASSIGNMENT_GLOBAL_GRAPH_REQUEST_ID = "workflow-ui-global-graph-v1"
+ASSIGNMENT_GLOBAL_GRAPH_SUMMARY = "任务中心手动创建（全局主图）"
+
+
 def _node_blocking_reasons(
     node_id: str,
     *,
@@ -212,21 +218,22 @@ def _assert_no_cycles(node_ids: set[str], edges: list[tuple[str, str]]) -> None:
 
 def _normalize_graph_header(conn: sqlite3.Connection, body: dict[str, Any]) -> dict[str, Any]:
     system_limit, _updated_at = _get_global_concurrency_limit(conn)
+    is_test_data = _normalize_assignment_test_flag(body.get("is_test_data"), default=False)
     review_mode = _normalize_review_mode(body.get("review_mode"))
     graph_name = _normalize_text(
-        body.get("graph_name") or "任务中心主图",
+        body.get("graph_name") or ASSIGNMENT_GLOBAL_GRAPH_NAME,
         field="graph_name",
         required=True,
         max_len=120,
     )
     source_workflow = _normalize_text(
-        body.get("source_workflow") or "workflow-ui",
+        body.get("source_workflow") or ASSIGNMENT_GLOBAL_GRAPH_SOURCE_WORKFLOW,
         field="source_workflow",
         required=True,
         max_len=120,
     )
     summary = _normalize_text(
-        body.get("summary") or "任务中心手动创建",
+        body.get("summary") or ASSIGNMENT_GLOBAL_GRAPH_SUMMARY,
         field="summary",
         required=False,
         max_len=500,
@@ -237,6 +244,10 @@ def _normalize_graph_header(conn: sqlite3.Connection, body: dict[str, Any]) -> d
         required=False,
         max_len=160,
     )
+    if (not is_test_data) and source_workflow == ASSIGNMENT_GLOBAL_GRAPH_SOURCE_WORKFLOW:
+        graph_name = ASSIGNMENT_GLOBAL_GRAPH_NAME
+        summary = ASSIGNMENT_GLOBAL_GRAPH_SUMMARY
+        external_request_id = ASSIGNMENT_GLOBAL_GRAPH_REQUEST_ID
     graph_limit = _normalize_positive_int(
         body.get("global_concurrency_limit"),
         field="global_concurrency_limit",
@@ -251,7 +262,7 @@ def _normalize_graph_header(conn: sqlite3.Connection, body: dict[str, Any]) -> d
         "review_mode": review_mode,
         "external_request_id": external_request_id,
         "global_concurrency_limit": graph_limit,
-        "is_test_data": _normalize_assignment_test_flag(body.get("is_test_data"), default=False),
+        "is_test_data": is_test_data,
     }
 
 
@@ -261,6 +272,7 @@ def _resolve_assignment_agent(
     raw: Any,
     *,
     source_workflow: Any = "",
+    allow_creating_agent: bool = False,
 ) -> dict[str, str]:
     requested = _normalize_text(raw, field="assigned_agent_id", required=True, max_len=120)
     token = safe_token(requested, "", 120)
@@ -278,7 +290,7 @@ def _resolve_assignment_agent(
     ).fetchone()
     if row is not None:
         runtime_status = str(row["runtime_status"] or "idle").strip().lower() or "idle"
-        if runtime_status == "creating" and source_text != "training-role-creation":
+        if runtime_status == "creating" and source_text != "training-role-creation" and not allow_creating_agent:
             raise AssignmentCenterError(
                 409,
                 "assigned agent is creating and only available to role creation workflow",
@@ -319,11 +331,18 @@ def _resolve_optional_assignment_agent(
     raw: Any,
     *,
     source_workflow: Any = "",
+    allow_creating_agent: bool = False,
 ) -> dict[str, str]:
     text = str(raw or "").strip()
     if not text:
         return {"agent_id": "", "agent_name": ""}
-    return _resolve_assignment_agent(conn, cfg, text, source_workflow=source_workflow)
+    return _resolve_assignment_agent(
+        conn,
+        cfg,
+        text,
+        source_workflow=source_workflow,
+        allow_creating_agent=allow_creating_agent,
+    )
 
 
 def _normalize_dependency_lists(body: dict[str, Any]) -> tuple[list[str], list[str]]:
@@ -356,11 +375,22 @@ def _normalize_node_payload(
         required=True,
         max_len=120,
     )
+    allow_creating_agent_raw = (
+        body.get("allow_creating_agent")
+        if "allow_creating_agent" in body
+        else body.get("allowCreatingAgent")
+    )
+    allow_creating_agent = False
+    if isinstance(allow_creating_agent_raw, bool):
+        allow_creating_agent = allow_creating_agent_raw
+    elif allow_creating_agent_raw is not None:
+        allow_creating_agent = str(allow_creating_agent_raw).strip().lower() in {"1", "true", "yes", "on"}
     agent_meta = _resolve_assignment_agent(
         conn,
         cfg,
         body.get("assigned_agent_id") or body.get("agent_id") or body.get("agent_name"),
         source_workflow=source_text,
+        allow_creating_agent=allow_creating_agent,
     )
     delivery_mode = _normalize_delivery_mode(
         body.get("delivery_mode")
@@ -376,6 +406,7 @@ def _normalize_node_payload(
         or body.get("delivery_receiver_agent_name")
         or "",
         source_workflow=source_text,
+        allow_creating_agent=allow_creating_agent,
     )
     if delivery_mode == "specified" and not str(receiver_meta.get("agent_id") or "").strip():
         raise AssignmentCenterError(

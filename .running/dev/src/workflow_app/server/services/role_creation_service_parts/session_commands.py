@@ -1,561 +1,3 @@
-def _persist_role_creation_dialogue_fields(
-    conn: sqlite3.Connection,
-    *,
-    session_id: str,
-    dialogue_agent_name: str,
-    dialogue_agent_workspace_path: str,
-    dialogue_provider: str,
-    trace_ref: str,
-    updated_at: str,
-    stage_key: str = "",
-    stage_index: int = 0,
-) -> None:
-    if stage_key:
-        conn.execute(
-            """
-            UPDATE role_creation_sessions
-            SET dialogue_agent_name=?,dialogue_agent_workspace_path=?,dialogue_provider=?,last_dialogue_trace_ref=?,
-                current_stage_key=?,current_stage_index=?,updated_at=?
-            WHERE session_id=?
-            """,
-            (
-                dialogue_agent_name,
-                dialogue_agent_workspace_path,
-                dialogue_provider,
-                trace_ref,
-                stage_key,
-                stage_index,
-                updated_at,
-                session_id,
-            ),
-        )
-        return
-    conn.execute(
-        """
-        UPDATE role_creation_sessions
-        SET dialogue_agent_name=?,dialogue_agent_workspace_path=?,dialogue_provider=?,last_dialogue_trace_ref=?,updated_at=?
-        WHERE session_id=?
-        """,
-        (
-            dialogue_agent_name,
-            dialogue_agent_workspace_path,
-            dialogue_provider,
-            trace_ref,
-            updated_at,
-            session_id,
-        ),
-    )
-
-
-def _pick_role_creation_turn_stage_key(
-    *,
-    session_summary: dict[str, Any],
-    analyst_turn: dict[str, Any],
-    created_tasks: list[dict[str, Any]],
-) -> str:
-    if _normalize_session_status(session_summary.get("status")) != "creating":
-        return ""
-    candidate = str(analyst_turn.get("suggested_stage_key") or "").strip().lower()
-    if candidate not in ROLE_CREATION_ANALYST_STAGE_KEYS:
-        candidate = ""
-    if not candidate and created_tasks:
-        candidate = str(created_tasks[-1].get("stage_key") or "").strip().lower()
-    if candidate in {"", "workspace_init", "complete_creation"}:
-        return ""
-    if candidate not in ROLE_CREATION_STAGE_BY_KEY:
-        return ""
-    if candidate == str(session_summary.get("current_stage_key") or "").strip().lower():
-        return ""
-    return candidate
-
-
-def _append_role_creation_scheduler_message(
-    root: Path,
-    *,
-    session_id: str,
-    content: str,
-    meta: dict[str, Any],
-) -> None:
-    conn = connect_db(root)
-    try:
-        conn.execute("BEGIN")
-        _append_message(
-            conn,
-            session_id=session_id,
-            role="system",
-            content=content,
-            attachments=[],
-            message_type="system_task_update",
-            meta=meta,
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-
-def _resume_role_creation_scheduler(
-    cfg: Any,
-    *,
-    session_id: str,
-    ticket_id: str,
-    operator: str,
-) -> dict[str, Any]:
-    try:
-        result = assignment_service.resume_assignment_scheduler(
-            cfg.root,
-            ticket_id_text=ticket_id,
-            operator=operator,
-            include_test_data=True,
-        )
-    except Exception as exc:
-        _append_role_creation_scheduler_message(
-            cfg.root,
-            session_id=session_id,
-            content="任务图已生成，但自动调度启动失败。",
-            meta={
-                "assignment_ticket_id": ticket_id,
-                "scheduler_state": "idle",
-                "scheduler_error": str(exc),
-            },
-        )
-        return {}
-    dispatched = list(result.get("dispatch_result", {}).get("dispatched") or [])
-    if dispatched:
-        _append_role_creation_scheduler_message(
-            cfg.root,
-            session_id=session_id,
-            content="已启动后台任务：" + "；".join(
-                [
-                    str(item.get("node_name") or item.get("task_name") or item.get("node_id") or "").strip()
-                    for item in dispatched[:3]
-                    if str(item.get("node_name") or item.get("task_name") or item.get("node_id") or "").strip()
-                ]
-            ),
-            meta={
-                "assignment_ticket_id": ticket_id,
-                "scheduler_state": "running",
-                "task_ids": [
-                    str(item.get("node_id") or "").strip()
-                    for item in dispatched
-                    if str(item.get("node_id") or "").strip()
-                ],
-                "dispatch_result": result.get("dispatch_result") or {},
-            },
-        )
-    return result
-
-
-def _dispatch_role_creation_scheduler(
-    cfg: Any,
-    *,
-    ticket_id: str,
-    operator: str,
-) -> dict[str, Any]:
-    try:
-        return assignment_service.dispatch_assignment_next(
-            cfg.root,
-            ticket_id_text=ticket_id,
-            operator=operator,
-            include_test_data=True,
-        )
-    except Exception:
-        return {}
-
-
-def _finalize_role_creation_message_processing_failure(
-    cfg: Any,
-    *,
-    session_id: str,
-    message_ids: list[str],
-    batch_id: str,
-    operator: str,
-    error_text: str,
-) -> None:
-    session_key = safe_token(session_id, "", 160)
-    if not session_key:
-        return
-    normalized_error = _normalize_text(error_text, max_len=2000) or "未知错误"
-    now_text = _tc_now_text()
-    conn = connect_db(cfg.root)
-    try:
-        conn.execute("BEGIN")
-        try:
-            _fetch_session_row(conn, session_key)
-        except TrainingCenterError as exc:
-            if str(getattr(exc, "code", "") or "").strip() == "role_creation_session_not_found":
-                conn.rollback()
-                return
-            raise
-        _update_role_creation_user_message_processing_state(
-            conn,
-            session_id=session_key,
-            message_ids=message_ids,
-            processing_state="failed",
-            batch_id=batch_id,
-            error_text=normalized_error,
-            started_at=now_text,
-        )
-        _append_message(
-            conn,
-            session_id=session_key,
-            role="assistant",
-            content="这轮分析暂时失败了。你可以继续补充消息，我会把未处理内容重新合并后再分析一次。",
-            attachments=[],
-            message_type="chat",
-            meta={
-                "dialogue_error": normalized_error,
-                "processing_batch_id": batch_id,
-                "processing_failure": True,
-            },
-            created_at=now_text,
-        )
-        failure_messages = _list_session_messages(conn, session_key)
-        _update_role_creation_message_queue_state(
-            conn,
-            session_id=session_key,
-            queue_status="failed",
-            queue_error=normalized_error,
-            batch_id=batch_id,
-            started_at=now_text,
-            updated_at=now_text,
-            messages=failure_messages,
-        )
-        conn.commit()
-    finally:
-        conn.close()
-    append_training_center_audit(
-        cfg.root,
-        action="role_creation_message_batch_failed",
-        operator=operator,
-        target_id=session_key,
-        detail={
-            "session_id": session_key,
-            "message_ids": list(message_ids or []),
-            "processing_batch_id": batch_id,
-            "error": normalized_error,
-        },
-    )
-
-
-def _process_role_creation_message_batch(
-    cfg: Any,
-    *,
-    session_id: str,
-    operator: str,
-) -> bool:
-    time.sleep(ROLE_CREATION_MESSAGE_BATCH_DEBOUNCE_S)
-    session_key = safe_token(session_id, "", 160)
-    if not session_key:
-        return False
-    batch_started_at = _tc_now_text()
-    batch_id = safe_token(f"rcmb-{uuid.uuid4().hex[:10]}", f"rcmb-{uuid.uuid4().hex[:10]}", 120)
-    batch_messages: list[dict[str, Any]] = []
-    current_detail: dict[str, Any] = {}
-    session_summary: dict[str, Any] = {}
-    role_spec: dict[str, Any] = {}
-    missing_fields: list[str] = []
-    session_title = ""
-    task_refs: list[dict[str, Any]] = []
-    created_tasks: list[dict[str, Any]] = []
-    analyst_turn: dict[str, Any] = {}
-    conn = connect_db(cfg.root)
-    try:
-        conn.execute("BEGIN")
-        _row, session_summary, messages, task_refs, role_spec, missing_fields = _load_session_context(conn, session_key)
-        if _normalize_session_status(session_summary.get("status")) == "completed":
-            _update_role_creation_message_queue_state(
-                conn,
-                session_id=session_key,
-                queue_status="idle",
-                updated_at=batch_started_at,
-                messages=messages,
-            )
-            conn.commit()
-            return False
-        batch_messages = _role_creation_pending_batch_messages(messages)
-        if not batch_messages:
-            _update_role_creation_message_queue_state(
-                conn,
-                session_id=session_key,
-                queue_status="idle",
-                updated_at=batch_started_at,
-                messages=messages,
-            )
-            conn.commit()
-            return False
-        _update_role_creation_user_message_processing_state(
-            conn,
-            session_id=session_key,
-            message_ids=[str(item.get("message_id") or "").strip() for item in batch_messages],
-            processing_state="processing",
-            batch_id=batch_id,
-            started_at=batch_started_at,
-        )
-        processing_messages = _list_session_messages(conn, session_key)
-        _update_role_creation_message_queue_state(
-            conn,
-            session_id=session_key,
-            queue_status="running",
-            queue_error="",
-            batch_id=batch_id,
-            started_at=batch_started_at,
-            updated_at=batch_started_at,
-            messages=processing_messages,
-        )
-        conn.commit()
-    finally:
-        conn.close()
-    try:
-        current_detail = get_role_creation_session_detail(cfg.root, session_key)
-        session_summary = dict(current_detail.get("session") or {})
-        role_spec = dict(current_detail.get("role_spec") or {})
-        missing_fields = list((current_detail.get("profile") or {}).get("missing_fields") or [])
-        session_title = str(session_summary.get("session_title") or "").strip()
-        task_refs = list(current_detail.get("task_refs") or [])
-        batch_text = _role_creation_batch_prompt_text(batch_messages)
-        analyst_turn = run_role_creation_analyst_dialogue(
-            cfg,
-            detail=current_detail,
-            latest_user_message=batch_text,
-            operator=operator,
-        )
-        created_tasks = _create_role_creation_tasks_from_intents(
-            cfg,
-            session_summary=session_summary,
-            task_refs=task_refs,
-            task_intents=list(analyst_turn.get("delegate_tasks") or []),
-            operator=operator,
-        )
-        if not created_tasks:
-            created_tasks = _maybe_create_delegate_tasks(
-                cfg,
-                session_summary=session_summary,
-                task_refs=task_refs,
-                role_spec=role_spec,
-                message_text=batch_text,
-                operator=operator,
-            )
-        assistant_reply = str(analyst_turn.get("assistant_reply") or "").strip()
-        if not assistant_reply:
-            assistant_reply = _build_assistant_reply(
-                session_summary={**session_summary, "session_title": session_title},
-                role_spec=role_spec,
-                missing_fields=missing_fields,
-                created_tasks=created_tasks,
-            )
-        next_stage_key = _pick_role_creation_turn_stage_key(
-            session_summary=session_summary,
-            analyst_turn=analyst_turn,
-            created_tasks=created_tasks,
-        )
-        next_stage_index = int((ROLE_CREATION_STAGE_BY_KEY.get(next_stage_key) or {}).get("index") or 0)
-        dialogue_trace_ref = str(analyst_turn.get("trace_ref") or "").strip()
-        assistant_message: dict[str, Any] = {}
-        assistant_created_at = _tc_now_text()
-        final_counts: dict[str, int] = {}
-        conn = connect_db(cfg.root)
-        try:
-            conn.execute("BEGIN")
-            _persist_role_creation_dialogue_fields(
-                conn,
-                session_id=session_key,
-                dialogue_agent_name=str(analyst_turn.get("dialogue_agent_name") or "").strip(),
-                dialogue_agent_workspace_path=str(analyst_turn.get("dialogue_agent_workspace_path") or "").strip(),
-                dialogue_provider=str(analyst_turn.get("provider") or ROLE_CREATION_ANALYST_PROVIDER).strip(),
-                trace_ref=dialogue_trace_ref,
-                updated_at=assistant_created_at,
-                stage_key=next_stage_key,
-                stage_index=next_stage_index,
-            )
-            if next_stage_key:
-                _append_message(
-                    conn,
-                    session_id=session_key,
-                    role="system",
-                    content=_role_creation_stage_update_text(next_stage_key),
-                    attachments=[],
-                    message_type="system_stage_update",
-                    meta={
-                        "stage_key": next_stage_key,
-                        "source": "analyst_dialogue",
-                        "trace_ref": dialogue_trace_ref,
-                        "processing_batch_id": batch_id,
-                    },
-                    created_at=assistant_created_at,
-                )
-            if created_tasks:
-                task_names = [
-                    str(item.get("task_name") or "").strip()
-                    for item in created_tasks
-                    if str(item.get("task_name") or "").strip()
-                ]
-                _append_message(
-                    conn,
-                    session_id=session_key,
-                    role="system",
-                    content="已创建后台任务：" + "；".join(task_names[:3]),
-                    attachments=[],
-                    message_type="system_task_update",
-                    meta={
-                        "created_tasks": created_tasks,
-                        "task_ids": [
-                            str(item.get("task_id") or "").strip()
-                            for item in created_tasks
-                            if str(item.get("task_id") or "").strip()
-                        ],
-                        "processing_batch_id": batch_id,
-                    },
-                    created_at=assistant_created_at,
-                )
-            assistant_message = _append_message(
-                conn,
-                session_id=session_key,
-                role="assistant",
-                content=assistant_reply,
-                attachments=[],
-                message_type="chat",
-                meta={
-                    "dialogue_agent_name": str(analyst_turn.get("dialogue_agent_name") or "").strip(),
-                    "dialogue_agent_workspace_path": str(analyst_turn.get("dialogue_agent_workspace_path") or "").strip(),
-                    "dialogue_provider": str(analyst_turn.get("provider") or ROLE_CREATION_ANALYST_PROVIDER).strip(),
-                    "trace_ref": dialogue_trace_ref,
-                    "delegate_task_count": len(created_tasks),
-                    "contract_has_json": bool(analyst_turn.get("contract_has_json")),
-                    "dialogue_error": str(analyst_turn.get("error") or "").strip(),
-                    "processing_batch_id": batch_id,
-                    "handled_message_ids": [
-                        str(item.get("message_id") or "").strip()
-                        for item in batch_messages
-                        if str(item.get("message_id") or "").strip()
-                    ],
-                },
-                created_at=assistant_created_at,
-            )
-            _update_role_creation_user_message_processing_state(
-                conn,
-                session_id=session_key,
-                message_ids=[str(item.get("message_id") or "").strip() for item in batch_messages],
-                processing_state="processed",
-                batch_id=batch_id,
-                started_at=batch_started_at,
-                processed_at=assistant_created_at,
-                assistant_message_id=str(assistant_message.get("message_id") or "").strip(),
-            )
-            final_messages = _list_session_messages(conn, session_key)
-            pending_counts = _role_creation_user_message_counts(final_messages)
-            final_counts = _update_role_creation_message_queue_state(
-                conn,
-                session_id=session_key,
-                queue_status="pending" if pending_counts["unhandled"] > 0 else "idle",
-                queue_error="",
-                updated_at=assistant_created_at,
-                messages=final_messages,
-            )
-            conn.commit()
-        finally:
-            conn.close()
-        if created_tasks and str(session_summary.get("assignment_ticket_id") or "").strip():
-            _dispatch_role_creation_scheduler(
-                cfg,
-                ticket_id=str(session_summary.get("assignment_ticket_id") or "").strip(),
-                operator=operator,
-            )
-        if str(session_summary.get("created_agent_workspace_path") or "").strip():
-            _sync_workspace_profile(cfg.root, session_summary, role_spec)
-        append_training_center_audit(
-            cfg.root,
-            action="role_creation_message_batch_processed",
-            operator=operator,
-            target_id=session_key,
-            detail={
-                "session_id": session_key,
-                "processing_batch_id": batch_id,
-                "message_ids": [
-                    str(item.get("message_id") or "").strip()
-                    for item in batch_messages
-                    if str(item.get("message_id") or "").strip()
-                ],
-                "assistant_message_id": str(assistant_message.get("message_id") or "").strip(),
-                "created_task_count": len(created_tasks),
-                "dialogue_agent_name": str(analyst_turn.get("dialogue_agent_name") or "").strip(),
-                "dialogue_agent_workspace_path": str(analyst_turn.get("dialogue_agent_workspace_path") or "").strip(),
-                "dialogue_provider": str(analyst_turn.get("provider") or "").strip(),
-                "dialogue_trace_ref": str(analyst_turn.get("trace_ref") or "").strip(),
-                "dialogue_error": str(analyst_turn.get("error") or "").strip(),
-                "unhandled_user_message_count": int(final_counts.get("unhandled") or 0),
-            },
-        )
-        return int(final_counts.get("unhandled") or 0) > 0
-    except TrainingCenterError as exc:
-        if str(getattr(exc, "code", "") or "").strip() == "role_creation_session_not_found":
-            return False
-        _finalize_role_creation_message_processing_failure(
-            cfg,
-            session_id=session_key,
-            message_ids=[str(item.get("message_id") or "").strip() for item in batch_messages],
-            batch_id=batch_id,
-            operator=operator,
-            error_text=str(exc),
-        )
-        return False
-    except Exception as exc:
-        _finalize_role_creation_message_processing_failure(
-            cfg,
-            session_id=session_key,
-            message_ids=[str(item.get("message_id") or "").strip() for item in batch_messages],
-            batch_id=batch_id,
-            operator=operator,
-            error_text=str(exc),
-        )
-        return False
-
-
-def _run_role_creation_message_worker(
-    cfg: Any,
-    *,
-    session_id: str,
-    operator: str,
-) -> None:
-    try:
-        while True:
-            has_more = _process_role_creation_message_batch(
-                cfg,
-                session_id=session_id,
-                operator=operator,
-            )
-            if not has_more:
-                break
-    finally:
-        with _ROLE_CREATION_MESSAGE_WORKER_LOCK:
-            current = _ROLE_CREATION_MESSAGE_WORKERS.get(session_id)
-            if current is threading.current_thread():
-                _ROLE_CREATION_MESSAGE_WORKERS.pop(session_id, None)
-
-
-def _ensure_role_creation_message_worker(
-    cfg: Any,
-    *,
-    session_id: str,
-    operator: str,
-) -> bool:
-    session_key = safe_token(session_id, "", 160)
-    if not session_key:
-        return False
-    with _ROLE_CREATION_MESSAGE_WORKER_LOCK:
-        current = _ROLE_CREATION_MESSAGE_WORKERS.get(session_key)
-        if current and current.is_alive():
-            return False
-        worker = threading.Thread(
-            target=_run_role_creation_message_worker,
-            kwargs={"cfg": cfg, "session_id": session_key, "operator": operator},
-            name=f"role-creation-message-{session_key}",
-            daemon=True,
-        )
-        _ROLE_CREATION_MESSAGE_WORKERS[session_key] = worker
-        worker.start()
-        return True
-
-
 def create_role_creation_session(cfg: Any, body: dict[str, Any]) -> dict[str, Any]:
     _ensure_role_creation_tables(cfg.root)
     session_id = _role_creation_session_id()
@@ -580,8 +22,8 @@ def create_role_creation_session(cfg: Any, body: dict[str, Any]) -> dict[str, An
                 session_id,
                 requested_title,
                 "draft",
-                "persona_collection",
-                2,
+                "workspace_init",
+                1,
                 "{}",
                 _json_dumps(list(ROLE_CREATION_ALL_FIELDS[:-1])),
                 "",
@@ -710,6 +152,112 @@ def post_role_creation_message(cfg: Any, session_id: str, body: dict[str, Any]) 
     return get_role_creation_session_detail(cfg.root, session_key)
 
 
+def retry_role_creation_session_analysis(cfg: Any, session_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    _ensure_role_creation_tables(cfg.root)
+    session_key = safe_token(str(session_id or ""), "", 160)
+    if not session_key:
+        raise TrainingCenterError(400, "session_id required", "role_creation_session_id_required")
+    operator = str(body.get("operator") or "web-user")
+    current_detail = get_role_creation_session_detail(cfg.root, session_key)
+    session_summary = dict(current_detail.get("session") or {})
+    queue_status = _normalize_role_creation_queue_state(
+        session_summary.get("message_processing_status"),
+        default="idle",
+    )
+    if queue_status in {"pending", "running"}:
+        return current_detail
+    if _normalize_session_status(session_summary.get("status")) == "completed":
+        raise TrainingCenterError(
+            409,
+            "当前角色创建已完成，不能再重试本轮分析",
+            "role_creation_session_completed",
+            {"session_id": session_key},
+        )
+    now_text = _tc_now_text()
+    retry_message_ids: list[str] = []
+    conn = connect_db(cfg.root)
+    try:
+        conn.execute("BEGIN")
+        _fetch_session_row(conn, session_key)
+        messages = _list_session_messages(conn, session_key)
+        retry_message_ids = [
+            str(message.get("message_id") or "").strip()
+            for message in list(messages or [])
+            if str(message.get("role") or "").strip().lower() == "user"
+            and _normalize_message_type(message.get("message_type")) == "chat"
+            and _normalize_role_creation_user_message_state(
+                message.get("processing_state") or (message.get("meta") or {}).get("processing_state"),
+                default="processed",
+            ) in {"failed", "pending"}
+        ]
+        if not retry_message_ids:
+            raise TrainingCenterError(
+                409,
+                "当前没有失败或待处理消息可重试",
+                "role_creation_retry_no_pending_messages",
+                {
+                    "session_id": session_key,
+                    "message_processing_status": queue_status,
+                    "unhandled_user_message_count": int(session_summary.get("unhandled_user_message_count") or 0),
+                },
+            )
+        _update_role_creation_user_message_processing_state(
+            conn,
+            session_id=session_key,
+            message_ids=retry_message_ids,
+            processing_state="pending",
+        )
+        updated_messages = _list_session_messages(conn, session_key)
+        _update_role_creation_message_queue_state(
+            conn,
+            session_id=session_key,
+            queue_status="pending",
+            queue_error="",
+            batch_id="",
+            updated_at=now_text,
+            messages=updated_messages,
+        )
+        _append_message(
+            conn,
+            session_id=session_key,
+            role="system",
+            content="已手动触发本轮分析重试。",
+            attachments=[],
+            message_type="system_task_update",
+            meta={
+                "retry_analysis": True,
+                "retry_message_ids": list(retry_message_ids),
+            },
+            created_at=now_text,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    worker_started = _ensure_role_creation_message_worker(
+        cfg,
+        session_id=session_key,
+        operator=operator,
+    )
+    append_training_center_audit(
+        cfg.root,
+        action="role_creation_analysis_retry_requested",
+        operator=operator,
+        target_id=session_key,
+        detail={
+            "session_id": session_key,
+            "retry_message_ids": list(retry_message_ids),
+            "worker_started": bool(worker_started),
+        },
+    )
+    detail = get_role_creation_session_detail(cfg.root, session_key)
+    detail["retry_requested"] = {
+        "message_count": len(retry_message_ids),
+        "worker_started": bool(worker_started),
+        "requested_at": now_text,
+    }
+    return detail
+
+
 def start_role_creation_session(cfg: Any, session_id: str, body: dict[str, Any]) -> dict[str, Any]:
     _ensure_role_creation_tables(cfg.root)
     session_key = safe_token(str(session_id or ""), "", 160)
@@ -720,6 +268,7 @@ def start_role_creation_session(cfg: Any, session_id: str, body: dict[str, Any])
     session_summary = dict(current_detail.get("session") or {})
     role_spec = dict(current_detail.get("role_spec") or {})
     missing_fields = list((current_detail.get("profile") or {}).get("missing_fields") or [])
+    start_gate = dict(role_spec.get("start_gate") or {})
     status = _normalize_session_status(session_summary.get("status"))
     if status == "completed":
         raise TrainingCenterError(409, "当前角色创建已完成，不能再次启动", "role_creation_session_completed")
@@ -740,7 +289,11 @@ def start_role_creation_session(cfg: Any, session_id: str, body: dict[str, Any])
             409,
             "当前草案信息不足，不能开始创建",
             "role_creation_spec_incomplete",
-            {"missing_fields": missing_fields, "missing_labels": _missing_field_labels(missing_fields)},
+            {
+                "missing_fields": missing_fields,
+                "missing_labels": _missing_field_labels(missing_fields),
+                "start_gate_blockers": [str(item).strip() for item in list(start_gate.get("blockers") or []) if str(item).strip()],
+            },
         )
     dialogue_agent = _resolve_role_creation_dialogue_agent(cfg)
     workspace_result = _initialize_role_workspace(
@@ -761,33 +314,19 @@ def start_role_creation_session(cfg: Any, session_id: str, body: dict[str, Any])
         agent_id=str(workspace_result.get("created_agent_id") or "").strip(),
         agent_name=str(workspace_result.get("created_agent_name") or "").strip(),
     )
-    graph_body = {
-        "graph_name": f"{_role_creation_title_from_spec(role_spec, session_summary.get('session_title') or '')}创建工作流",
-        "source_workflow": "training-role-creation",
-        "summary": "训练中心创建角色工作流",
-        "review_mode": "none",
-        "external_request_id": session_key,
-        "operator": operator,
-        "nodes": [
-            {
-                "node_id": str(item.get("node_id") or "").strip(),
-                "node_name": str(item.get("node_name") or "").strip(),
-                "assigned_agent_id": str(item.get("assigned_agent_id") or "").strip(),
-                "node_goal": str(item.get("node_goal") or "").strip(),
-                "expected_artifact": str(item.get("expected_artifact") or "").strip(),
-                "priority": str(item.get("priority") or "P1").strip(),
-                "upstream_node_ids": list(item.get("upstream_node_ids") or []),
-            }
-            for item in starter_nodes
-        ],
-    }
+    created_starter_nodes: list[dict[str, Any]] = []
     try:
-        graph_result = assignment_service.create_assignment_graph(cfg, graph_body)
+        ticket_id = _ensure_role_creation_assignment_graph(cfg, operator=operator)
+        created_starter_nodes = _create_role_creation_assignment_nodes(
+            cfg,
+            ticket_id=ticket_id,
+            starter_nodes=starter_nodes,
+            operator=operator,
+        )
     except Exception as exc:
         _raise_role_creation_assignment_error(exc, "role_creation_start_graph_failed")
-    ticket_id = str(graph_result.get("ticket_id") or "").strip()
     if not ticket_id:
-        raise TrainingCenterError(500, "创建角色任务图失败", "role_creation_start_graph_missing_ticket")
+        raise TrainingCenterError(500, "映射任务中心主图失败", "role_creation_start_graph_missing_ticket")
     now_text = _tc_now_text()
     conn = connect_db(cfg.root)
     try:
@@ -844,7 +383,7 @@ def start_role_creation_session(cfg: Any, session_id: str, body: dict[str, Any])
             conn,
             session_id=session_key,
             role="system",
-            content="已进入角色画像收集，并生成真实任务中心引用。",
+            content="已进入角色画像收集，并映射到任务中心全局主图。",
             attachments=[],
             message_type="system_task_update",
             meta={
@@ -864,6 +403,24 @@ def start_role_creation_session(cfg: Any, session_id: str, body: dict[str, Any])
             created_at=now_text,
         )
         conn.commit()
+    except Exception:
+        conn.rollback()
+        for item in reversed(created_starter_nodes):
+            node_id = str(item.get("node_id") or "").strip()
+            if not node_id:
+                continue
+            try:
+                assignment_service.delete_assignment_node(
+                    cfg.root,
+                    ticket_id_text=ticket_id,
+                    node_id_text=node_id,
+                    operator=operator,
+                    reason="rollback role creation starter nodes",
+                    include_test_data=True,
+                )
+            except Exception:
+                pass
+        raise
     finally:
         conn.close()
     append_training_center_audit(
@@ -1096,25 +653,54 @@ def delete_role_creation_session(cfg: Any, session_id: str, body: dict[str, Any]
     detail = get_role_creation_session_detail(cfg.root, session_key)
     session_summary = dict(detail.get("session") or {})
     session_status = _normalize_session_status(session_summary.get("status"))
-    if session_status == "creating":
+    delete_state = _role_creation_delete_state(cfg.root, session_summary)
+    if not bool(delete_state.get("delete_available")):
+        delete_block_reason = str(delete_state.get("delete_block_reason") or "").strip()
+        if delete_block_reason == "message_processing_active":
+            raise TrainingCenterError(
+                409,
+                "当前对话仍在分析中，暂不支持删除，请等待处理完成后再删除",
+                "role_creation_delete_processing_blocked",
+                {
+                    "message_processing_status": str(session_summary.get("message_processing_status") or "").strip(),
+                    "unhandled_user_message_count": int(session_summary.get("unhandled_user_message_count") or 0),
+                },
+            )
+        if session_status == "creating" and delete_block_reason == "assignment_running_nodes":
+            raise TrainingCenterError(
+                409,
+                str(delete_state.get("delete_block_reason_text") or "当前任务中心仍有运行中的任务，暂不支持清理删除"),
+                "role_creation_delete_running_tasks_blocked",
+                {
+                    "assignment_ticket_id": str(session_summary.get("assignment_ticket_id") or "").strip(),
+                    "created_agent_name": str(session_summary.get("created_agent_name") or "").strip(),
+                    "assignment_running_node_count": int(delete_state.get("assignment_running_node_count") or 0),
+                    "assignment_scheduler_state": str(delete_state.get("assignment_scheduler_state") or "").strip(),
+                    "assignment_scheduler_state_text": str(delete_state.get("assignment_scheduler_state_text") or "").strip(),
+                },
+            )
+        if session_status == "creating":
+            raise TrainingCenterError(
+                409,
+                str(delete_state.get("delete_block_reason_text") or "当前角色正在创建中，暂不支持删除"),
+                "role_creation_delete_creating_blocked",
+                {
+                    "assignment_ticket_id": str(session_summary.get("assignment_ticket_id") or "").strip(),
+                    "created_agent_name": str(session_summary.get("created_agent_name") or "").strip(),
+                },
+            )
         raise TrainingCenterError(
             409,
-            "当前角色正在创建中，暂不支持删除，请先完成当前创建流程",
-            "role_creation_delete_creating_blocked",
-            {
-                "assignment_ticket_id": str(session_summary.get("assignment_ticket_id") or "").strip(),
-                "created_agent_name": str(session_summary.get("created_agent_name") or "").strip(),
-            },
+            str(delete_state.get("delete_block_reason_text") or "当前状态不支持删除"),
+            "role_creation_delete_blocked",
+            {"status": session_status},
         )
-    if _role_creation_session_processing_active(session_summary):
-        raise TrainingCenterError(
-            409,
-            "当前对话仍在分析中，暂不支持删除，请等待处理完成后再删除",
-            "role_creation_delete_processing_blocked",
-            {
-                "message_processing_status": str(session_summary.get("message_processing_status") or "").strip(),
-                "unhandled_user_message_count": int(session_summary.get("unhandled_user_message_count") or 0),
-            },
+    cleanup_result: dict[str, Any] = {}
+    if session_status == "creating":
+        cleanup_result = _cleanup_role_creation_session_assets(
+            cfg,
+            session_summary=session_summary,
+            task_refs=list(detail.get("task_refs") or []),
         )
     deleted_payload = dict(session_summary)
     deleted_message_count = len(list(detail.get("messages") or []))
@@ -1141,13 +727,129 @@ def delete_role_creation_session(cfg: Any, session_id: str, body: dict[str, Any]
             "created_agent_id": str(session_summary.get("created_agent_id") or "").strip(),
             "deleted_message_count": deleted_message_count,
             "deleted_task_ref_count": deleted_task_ref_count,
+            "cleanup_result": cleanup_result,
         },
     )
     return {
         "deleted_session": deleted_payload,
         "deleted_message_count": deleted_message_count,
         "deleted_task_ref_count": deleted_task_ref_count,
+        "cleanup_result": cleanup_result,
     }
+
+
+def _cleanup_role_creation_session_assets(
+    cfg: Any,
+    *,
+    session_summary: dict[str, Any],
+    task_refs: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    cleanup_result: dict[str, Any] = {
+        "mode": "creating_cleanup",
+        "assignment_ticket_id": str(session_summary.get("assignment_ticket_id") or "").strip(),
+        "created_agent_id": str(session_summary.get("created_agent_id") or "").strip(),
+        "created_agent_workspace_path": str(session_summary.get("created_agent_workspace_path") or "").strip(),
+    }
+    ticket_id = str(session_summary.get("assignment_ticket_id") or "").strip()
+    if ticket_id:
+        removed_node_ids: list[str] = []
+        missing_node_ids: list[str] = []
+        task_node_ids: list[str] = []
+        seen_node_ids: set[str] = set()
+        for item in list(task_refs or []):
+            node_id = str(item.get("node_id") or "").strip()
+            if not node_id or node_id in seen_node_ids:
+                continue
+            seen_node_ids.add(node_id)
+            task_node_ids.append(node_id)
+        for node_id in task_node_ids:
+            try:
+                assignment_service.delete_assignment_node(
+                    cfg.root,
+                    ticket_id_text=ticket_id,
+                    node_id_text=node_id,
+                    operator="training-center",
+                    reason="cleanup role creation session nodes",
+                    include_test_data=True,
+                )
+                removed_node_ids.append(node_id)
+            except Exception as exc:
+                code = str(getattr(exc, "code", "") or "").strip()
+                if code in {"assignment_node_not_found", "assignment_graph_not_found"}:
+                    missing_node_ids.append(node_id)
+                    continue
+                if code == "assignment_delete_running_node_blocked":
+                    raise TrainingCenterError(
+                        409,
+                        "当前角色创建在任务中心主图中仍有运行中的任务，暂不支持清理删除",
+                        "role_creation_cleanup_assignment_running",
+                        {"ticket_id": ticket_id, "node_id": node_id},
+                    ) from exc
+                raise TrainingCenterError(
+                    500,
+                    f"清理关联任务节点失败: {exc}",
+                    "role_creation_cleanup_assignment_remove_failed",
+                    {"ticket_id": ticket_id, "node_id": node_id},
+                ) from exc
+        cleanup_result["assignment_cleanup"] = {
+            "ticket_id": ticket_id,
+            "removed_node_ids": removed_node_ids,
+            "missing_node_ids": missing_node_ids,
+            "removed_node_count": len(removed_node_ids),
+            "requested_node_count": len(task_node_ids),
+        }
+    workspace_path_text = str(session_summary.get("created_agent_workspace_path") or "").strip()
+    if workspace_path_text:
+        workspace_path = Path(workspace_path_text).resolve(strict=False)
+        search_root_text = str(getattr(cfg, "agent_search_root", "") or "").strip()
+        if search_root_text:
+            search_root = Path(search_root_text).resolve(strict=False)
+            if not path_in_scope(workspace_path, search_root):
+                raise TrainingCenterError(
+                    409,
+                    "角色工作区超出允许清理范围",
+                    "role_creation_cleanup_workspace_out_of_scope",
+                    {"workspace_path": workspace_path.as_posix()},
+                )
+        if workspace_path.exists():
+            if not workspace_path.is_dir():
+                raise TrainingCenterError(
+                    409,
+                    "角色工作区路径不是目录，不能执行清理",
+                    "role_creation_cleanup_workspace_invalid",
+                    {"workspace_path": workspace_path.as_posix()},
+                )
+            try:
+                shutil.rmtree(workspace_path)
+            except Exception as exc:
+                raise TrainingCenterError(
+                    500,
+                    f"清理角色工作区失败: {exc}",
+                    "role_creation_cleanup_workspace_remove_failed",
+                    {"workspace_path": workspace_path.as_posix()},
+                ) from exc
+        cleanup_result["workspace_cleanup"] = {
+            "workspace_path": workspace_path.as_posix(),
+            "removed": not workspace_path.exists(),
+        }
+    agent_id = str(session_summary.get("created_agent_id") or "").strip()
+    if agent_id:
+        conn = connect_db(cfg.root)
+        try:
+            conn.execute("BEGIN")
+            registry_removed = int(conn.execute("DELETE FROM agent_registry WHERE agent_id=?", (agent_id,)).rowcount or 0)
+            review_removed = int(conn.execute("DELETE FROM agent_release_review WHERE agent_id=?", (agent_id,)).rowcount or 0)
+            history_removed = int(conn.execute("DELETE FROM agent_release_history WHERE agent_id=?", (agent_id,)).rowcount or 0)
+            conn.commit()
+        finally:
+            conn.close()
+        cleanup_result["agent_registry_cleanup"] = {
+            "agent_id": agent_id,
+            "agent_registry_removed": registry_removed,
+            "agent_release_review_removed": review_removed,
+            "agent_release_history_removed": history_removed,
+        }
+    return cleanup_result
 
 
 def complete_role_creation_session(cfg: Any, session_id: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -1257,13 +959,6 @@ def complete_role_creation_session(cfg: Any, session_id: str, body: dict[str, An
         },
     )
     return get_role_creation_session_detail(cfg.root, session_key)
-import threading
-import time
-
-
-_ROLE_CREATION_MESSAGE_WORKER_LOCK = threading.Lock()
-_ROLE_CREATION_MESSAGE_WORKERS: dict[str, threading.Thread] = {}
-
 
 def _role_creation_session_processing_active(session_summary: dict[str, Any]) -> bool:
     return _normalize_role_creation_queue_state(

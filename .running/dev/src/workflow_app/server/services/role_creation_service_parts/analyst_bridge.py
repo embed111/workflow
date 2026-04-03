@@ -7,6 +7,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from workflow_app.server.services.codex_exec_monitor import resolve_codex_command, run_monitored_subprocess
+
 
 ROLE_CREATION_ANALYST_AGENT_NAME = "Analyst"
 ROLE_CREATION_ANALYST_PROVIDER = "codex"
@@ -16,17 +18,6 @@ ROLE_CREATION_ANALYST_STAGE_KEYS = (
     "review_and_alignment",
     "acceptance_confirmation",
 )
-
-
-def _role_creation_analyst_timeout_s() -> int:
-    raw = str(__import__("os").getenv("WORKFLOW_ROLE_CREATION_ANALYST_TIMEOUT_S") or "").strip()
-    if raw:
-        try:
-            return max(30, int(raw))
-        except Exception:
-            pass
-    return 180
-
 
 def _role_creation_write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -43,6 +34,14 @@ def _role_creation_dialogue_trace_dir(root: Path, session_id: str) -> Path:
     stamp = f"{date_key(now_dt)}-{now_dt.strftime('%H%M%S')}-{uuid.uuid4().hex[:6]}"
     session_token = safe_token(session_id, "session", 80) or "session"
     return root / "logs" / "runs" / f"role-creation-analyst-{session_token}-{stamp}"
+
+
+def _resolve_role_creation_codex_bin() -> str:
+    override = str(__import__("os").getenv("WORKFLOW_ROLE_CREATION_CODEX_BIN") or "").strip()
+    if override:
+        override_path = Path(override).expanduser()
+        return override_path.as_posix() if override_path.exists() else override
+    return resolve_codex_command()
 
 
 def _resolve_role_creation_dialogue_agent(cfg: Any) -> dict[str, str]:
@@ -206,10 +205,13 @@ def _build_role_creation_analyst_prompt(
             "你正在以当前工作区的分析 agent 身份，处理 workflow 的“创建角色”对话回合。",
             "这是一条后端 JSON contract 调用，不是普通开放式聊天。",
             "不要修改任何文件，不要执行脚本，不要维护记忆，不要更新状态文档，不要创建原型或需求文档文件。",
-            "你只负责：分析引导、角色画像收口、判断是否该建议后台任务、判断是否该建议阶段切换。",
+            "你只负责：分析引导、角色画像收口、能力包/知识沉淀/首批任务收口、判断是否该建议后台任务、判断是否该建议阶段切换。",
             "若用户有明确“另起任务/后台去做/去整理并回传”之类委派语义，且当前 session_status=creating，可返回 delegate_tasks。",
             "不要把你自己在当前会话里直接完成的分析引导、追问、判断动作伪装成后台任务。",
             "不要编造已完成的任务、截图、回传结果、执行证据或验收结论。",
+            "role_spec 已包含 role_profile_spec / capability_package_spec / knowledge_asset_plan / seed_delivery_plan / start_gate / recent_changes / pending_questions。",
+            "不要把能力模块、默认交付策略、格式边界、知识资产、首批任务误写成只有六要素画像的追问或结论。",
+            "如果 start_gate.can_start=false，优先围绕 blockers / pending_questions 继续收口，不要提前说“可以开始创建”。",
             "ready_to_start 必须尊重当前给定的 role_spec / missing_fields / can_start，不要自行放宽门槛。",
             "assistant_reply 用中文，直接对用户说话，保持分析引导口吻，简洁明确。",
             "",
@@ -360,7 +362,8 @@ def run_role_creation_analyst_dialogue(
         "session_id": session_id,
         "operator": str(operator or "").strip(),
         "dialogue_agent": dialogue_agent,
-        "timeout_s": _role_creation_analyst_timeout_s(),
+        "monitor_mode": "no_total_timeout",
+        "result_exit_grace_s": 8,
     }
     _role_creation_write_json(meta_path, meta_payload)
     trace_ref = relative_to_root(Path(cfg.root).resolve(strict=False), trace_dir)
@@ -380,7 +383,7 @@ def run_role_creation_analyst_dialogue(
         }
         _role_creation_write_json(result_path, result)
         return result
-    codex_bin = shutil.which("codex.cmd") or shutil.which("codex")
+    codex_bin = _resolve_role_creation_codex_bin()
     if not codex_bin:
         result = {
             "ok": False,
@@ -412,31 +415,39 @@ def run_role_creation_analyst_dialogue(
     stdout_text = ""
     stderr_text = ""
     error_code = ""
-    proc: subprocess.Popen[str] | None = None
+    monitor_info: dict[str, Any] = {}
     try:
-        proc = subprocess.Popen(
-            command,
-            cwd=workspace_path.as_posix(),
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
+        completion_state = {"ready": False}
+
+        def _observe_stdout(line: str) -> None:
+            cleaned = str(line or "").strip()
+            if not cleaned:
+                return
+            try:
+                event = json.loads(cleaned)
+            except Exception:
+                return
+            if not isinstance(event, dict):
+                return
+            if str(event.get("type") or "").strip() == "turn.completed":
+                completion_state["ready"] = True
+                return
+            text = _role_creation_extract_codex_event_text(event)
+            if text and _role_creation_extract_json_objects(text):
+                completion_state["ready"] = True
+
+        result = run_monitored_subprocess(
+            command=command,
+            cwd=workspace_path,
+            stdin_text=prompt_text,
+            on_stdout_line=_observe_stdout,
+            completion_checker=lambda: bool(completion_state["ready"]),
         )
-        stdout_text, stderr_text = proc.communicate(prompt_text + "\n", timeout=_role_creation_analyst_timeout_s())
-        if int(proc.returncode or 0) != 0:
-            error_code = f"codex_exec_failed_exit_{int(proc.returncode or 0)}"
-    except subprocess.TimeoutExpired:
-        try:
-            proc.kill()  # type: ignore[name-defined]
-        except Exception:
-            pass
-        try:
-            stdout_text, stderr_text = proc.communicate(timeout=3)  # type: ignore[name-defined]
-        except Exception:
-            stdout_text, stderr_text = "", ""
-        error_code = "codex_exec_timeout"
+        stdout_text = result.stdout_text
+        stderr_text = result.stderr_text
+        monitor_info = dict(result.monitor or {})
+        if int(result.exit_code or 0) != 0:
+            error_code = f"codex_exec_failed_exit_{int(result.exit_code or 0)}"
     except Exception:
         error_code = "codex_exec_exception"
     _role_creation_write_text(stdout_path, stdout_text)
@@ -479,6 +490,7 @@ def run_role_creation_analyst_dialogue(
         {
             **normalized,
             "command": command,
+            "monitor": monitor_info,
             "stdout_path": relative_to_root(Path(cfg.root).resolve(strict=False), stdout_path),
             "stderr_path": relative_to_root(Path(cfg.root).resolve(strict=False), stderr_path),
             "prompt_path": relative_to_root(Path(cfg.root).resolve(strict=False), prompt_path),

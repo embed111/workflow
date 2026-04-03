@@ -21,19 +21,19 @@
 4. 用户画像 D：平台运维者
    1. 关注点：部署链路清晰、门禁自动执行、失败可回退、环境互不污染。
 5. 核心场景：
-   1. 开发者在 `../workflow` 源码工作区完成修改后，一键部署到 `.running/dev` 自测。
+   1. 开发者先将 `../workflow_code` 同步到 `../workflow/.repository/<developer_id>/` 开发工作区，并在该工作区完成修改后，一键部署到 `.running/dev` 自测。
    2. 开发完成后，一键部署到 `.running/test` 并执行一批不消耗 token 的自动化测试。
    3. 自动化测试全部通过后，系统自动形成“正式升级候选”。
    4. 正式环境用户打开页面时，在顶部看到悬浮置顶的升级提示与升级按钮。
-   5. 用户在确认当前无运行中任务后，主动触发升级；页面允许短暂刷新和重连。
+   5. 用户在确认当前无运行中任务后，主动触发升级；或在明确授权维护窗口时，由 Codex 执行正式部署；页面允许短暂刷新和重连。
 
 ## 3. 用户旅程或关键流程
-1. 开发者在 `../workflow` 源码工作区完成本轮开发。
-2. 开发者执行一键部署脚本，目标环境选择 `dev`，系统将当前版本部署到 `../workflow/.running/dev/`。
-3. 开发者自测通过后，再执行一键部署脚本，目标环境选择 `test`，系统将当前版本部署到 `../workflow/.running/test/`。
+1. 开发者先将 `../workflow_code` 最新代码同步到 `../workflow/.repository/<developer_id>/`，并在该开发工作区完成本轮开发。
+2. 开发者在对应开发工作区执行一键部署脚本，目标环境选择 `dev`，系统将当前版本部署到 `../workflow/.running/dev/`。
+3. 开发者自测通过后，再在对应开发工作区执行一键部署脚本，目标环境选择 `test`，系统将当前版本部署到 `../workflow/.running/test/`。
 4. 测试环境部署完成后，系统自动执行一批本地自动化测试用例；这些用例不得调用需要消耗 token 的执行链路。
 5. 若测试全部通过，系统自动将该版本标记为“正式升级候选”。
-6. 正式环境 `../workflow/.running/prod/` 持续提供用户使用；`../workflow/run_workflow.bat` 默认启动该环境。
+6. 正式环境 `../workflow/.running/prod/` 持续提供用户使用；用户手动启动当前正式入口时，应在 `../workflow/` 根目录执行 `.\run_workflow.bat`。
 7. 当正式环境检测到存在新“正式升级候选”且版本高于当前运行版本时，页面顶部显示悬浮置顶升级提示。
 8. 用户可随时点击升级按钮触发升级前检查：
    1. 若仍存在 `running` 任务，则本次升级不得放行，并明确提示阻塞原因；
@@ -49,14 +49,14 @@
       3. `prod`
    2. 这 3 个目录都属于运行副本，不是源码主工作区。
 2. FR-RU-02 源码工作区与运行副本分离
-   1. `../workflow` 源码工作区负责开发与构建，不直接作为正式运行目录。
+   1. `../workflow_code` 作为正式代码根仓，`../workflow/.repository/<developer_id>/` 作为本地开发工作区；二者均不直接作为正式运行目录。
    2. 正式用户使用的程序必须来自 `../workflow/.running/prod/`。
 3. FR-RU-03 一键部署脚本
    1. 系统必须提供可指定目标环境的一键部署脚本。
    2. 脚本至少支持 `dev/test/prod` 三种目标环境。
    3. 部署脚本必须支持重复执行，重复执行时不得破坏未选中环境。
 4. FR-RU-04 正式启动入口固定
-   1. `../workflow/run_workflow.bat` 默认只启动正式环境。
+   1. `../workflow/run_workflow.bat` 默认只启动正式环境，但其本质是 PM 顶层便捷代理，不是正式代码副本。
    2. 该入口不得默认切到 `dev` 或 `test`。
 5. FR-RU-05 环境运行态隔离
    1. `dev/test/prod` 必须拥有各自独立的运行态目录、端口、日志与进程标识。
@@ -128,7 +128,7 @@
 
 ## 6. 验收标准（Given/When/Then）
 1. AC-RU-01 可部署到开发环境
-   1. Given 开发者在 `../workflow` 源码工作区完成修改
+   1. Given 开发者已将 `../workflow_code` 同步到 `../workflow/.repository/<developer_id>/` 并完成修改
    2. When 执行一键部署脚本并指定 `dev`
    3. Then 系统成功将版本部署到 `../workflow/.running/dev/`
    4. And 不影响 `test/prod`
@@ -138,7 +138,7 @@
    3. Then 系统成功将版本部署到 `../workflow/.running/test/`
    4. And 不影响 `prod`
 3. AC-RU-03 正式入口固定为 prod
-   1. Given 用户执行 `../workflow/run_workflow.bat`
+   1. Given 用户在 `../workflow/` 根目录执行 `.\run_workflow.bat`
    2. When 服务启动
    3. Then 实际运行环境为 `../workflow/.running/prod/`
 4. AC-RU-04 dev/test 与 prod 任务路径冲突时阻断
@@ -197,7 +197,7 @@
 
 ## 8. 依赖项与开放问题
 1. 依赖项：
-   1. `../workflow` 支持按环境区分运行根目录、端口与进程。
+   1. `../workflow` 支持按环境区分运行根目录、端口与进程，并由 `../workflow_code` 或开发工作区副本提供启动与部署脚本。
    2. 存在一批本地可执行且不消耗 token 的自动化测试用例。
    3. 正式环境页面可读取当前版本与候选版本元数据。
    4. 任务运行状态可被稳定识别，用于升级前门禁判断。

@@ -152,17 +152,37 @@
           ? '需人工确认'
           : '自动生效';
     alert.className = 'policy-confirm-alert ' + (info.clarity_gate === 'block' ? 'block' : '');
+    let alertText = '';
     if (info.clarity_gate === 'auto' && info.parse_status === 'ok') {
-      alert.textContent =
+      alertText =
         '当前角色与职责可自动生效。' +
         (canEdit ? ' 你也可以通过“编辑后使用本会话”做优化。' : '');
     } else {
-      alert.textContent =
+      alertText =
         '风险提示：当前角色与职责提取结果' +
         (info.parse_status === 'incomplete' ? '不完整' : info.parse_status === 'failed' ? '失败' : '存在歧义') +
         '，门禁=' +
         gateLabel +
         '。若直接使用，可能出现职责漂移。';
+    }
+    alert.innerHTML = '';
+    const alertTextNode = document.createElement('div');
+    alertTextNode.textContent = alertText;
+    alert.appendChild(alertTextNode);
+    if (codexFailureHasValue(info.codex_failure)) {
+      const failureHost = document.createElement('div');
+      failureHost.className = 'policy-confirm-failure-host';
+      alert.appendChild(failureHost);
+      renderCodexFailureCard(failureHost, info.codex_failure, {
+        title: '策略失败原因',
+        compact: true,
+        context: {
+          request: Object.assign({}, requestContext || {}),
+          onPolicyResult(data, requestPayload) {
+            openPolicyConfirmModal(data.policy_confirmation || data, requestPayload);
+          },
+        },
+      });
     }
 
     summary.innerHTML = '';

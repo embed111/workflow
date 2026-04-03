@@ -1,323 +1,4 @@
-  // Training center actions, release operations, and probe flows.
-
-  function trainingCenterPlanPayload() {
-    return {
-      target_agent_id: trainingCenterSelectedTargetAgent(),
-      capability_goal: safe($('tcPlanGoalInput') ? $('tcPlanGoalInput').value : '').trim(),
-      training_tasks: parseTrainingTasksInput(),
-      acceptance_criteria: safe($('tcPlanAcceptanceInput') ? $('tcPlanAcceptanceInput').value : '').trim(),
-      priority: safe($('tcPlanPrioritySelect') ? $('tcPlanPrioritySelect').value : '').trim(),
-      execution_engine: 'workflow_native',
-      operator: 'web-user',
-      created_by: 'web-user',
-    };
-  }
-
-  async function enqueueTrainingCenterPlan(source) {
-    const mode = safe(source).toLowerCase() === 'auto_analysis' ? 'auto_analysis' : 'manual';
-    const payload = trainingCenterPlanPayload();
-    const endpoint = mode === 'manual' ? '/api/training/plans/manual' : '/api/training/plans/auto';
-    const data = await postJSON(endpoint, payload);
-    setTrainingCenterError('');
-    setTrainingCenterRunResult(data);
-    await refreshTrainingCenterQueue();
-    await refreshTrainingCenterAgents();
-    return data;
-  }
-
-  async function submitTrainingCenterPlanFromLoop(action) {
-    const mode = safe(action).toLowerCase() === 'start' ? 'start' : 'draft';
-    const created = await enqueueTrainingCenterPlan('manual');
-    const queueTaskId = safe(created && created.queue_task_id).trim();
-    if (!queueTaskId) {
-      renderTrainingLoop();
-      return created;
-    }
-    state.tcLoopSelectedQueueTaskId = queueTaskId;
-    state.tcLoopSelectedNodeId = queueTaskId;
-    state.tcLoopMode = 'status';
-    state.tcLoopStatusTab = 'overview';
-    if (mode === 'start') {
-      await executeTrainingCenterQueueTask(queueTaskId);
-    }
-    await refreshTrainingLoopServerData(queueTaskId, { force: true });
-    renderTrainingCenterQueue();
-    renderTrainingLoop();
-    return created;
-  }
-
-  async function renameTrainingCenterQueueTask(queueTaskId, nextTitle) {
-    const qid = safe(queueTaskId).trim();
-    if (!qid) throw new Error('请先选择训练任务');
-    const title = safe(nextTitle).trim();
-    if (!title) throw new Error('任务名称不能为空');
-    const data = await postJSON('/api/training/queue/' + encodeURIComponent(qid) + '/rename', {
-      capability_goal: title,
-      operator: 'web-user',
-    });
-    setTrainingCenterError('');
-    setTrainingCenterRunResult(data);
-    await refreshTrainingCenterQueue();
-  }
-
-  async function removeTrainingCenterQueueTask(queueTaskId) {
-    const data = await postJSON('/api/training/queue/' + encodeURIComponent(queueTaskId) + '/remove', {
-      operator: 'web-user',
-      reason: 'manual_remove_from_ui',
-    });
-    setTrainingCenterError('');
-    setTrainingCenterRunResult(data);
-    await refreshTrainingCenterQueue(false);
-    await refreshTrainingCenterAgents();
-  }
-
-  async function executeTrainingCenterQueueTask(queueTaskId) {
-    const data = await postJSON('/api/training/queue/' + encodeURIComponent(queueTaskId) + '/execute', {
-      operator: 'web-user',
-    });
-    setTrainingCenterError('');
-    setTrainingCenterRunResult(data);
-    if (safe(data.run_id)) {
-      const run = await getJSON('/api/training/runs/' + encodeURIComponent(safe(data.run_id)));
-      setTrainingCenterRunResult(run);
-    }
-    await refreshTrainingCenterQueue(false);
-    await refreshTrainingCenterAgents();
-    if (safe(state.tcLoopSelectedQueueTaskId).trim() === safe(queueTaskId).trim()) {
-      await refreshTrainingLoopServerData(queueTaskId, { force: true });
-    }
-  }
-
-  async function dispatchNextTrainingCenterQueue() {
-    const data = await postJSON('/api/training/queue/dispatch-next', {
-      operator: 'web-user',
-    });
-    setTrainingCenterError('');
-    setTrainingCenterRunResult(data);
-    await refreshTrainingCenterQueue(false);
-    await refreshTrainingCenterAgents();
-  }
-
-  function selectedTrainingCenterAgentId() {
-    const fromState = safe(state.tcSelectedAgentId).trim();
-    if (fromState) return fromState;
-    return safe(trainingCenterSelectedTargetAgent()).trim();
-  }
-
-  async function switchTrainingCenterAgentVersion() {
-    const agentId = selectedTrainingCenterAgentId();
-    if (!agentId) throw new Error('请先选择角色');
-    const versionLabel = safe($('tcSwitchVersionSelect') ? $('tcSwitchVersionSelect').value : '').trim();
-    if (!versionLabel) throw new Error('请选择已发布版本');
-    const currentVersion = currentTrainingCenterDisplayedVersion(state.tcSelectedAgentDetail || {});
-    if (versionLabel === currentVersion) {
-      return null;
-    }
-    const data = await postJSON('/api/training/agents/' + encodeURIComponent(agentId) + '/switch', {
-      version_label: versionLabel,
-      operator: 'web-user',
-    });
-    setTrainingCenterDetailError('');
-    setTrainingCenterAgentActionResult(data);
-    setTrainingCenterRunResult(data);
-    await refreshTrainingCenterAgents();
-    await refreshTrainingCenterQueue(false);
-  }
-
-  async function cloneTrainingCenterAgentFromCurrent() {
-    const agentId = selectedTrainingCenterAgentId();
-    if (!agentId) throw new Error('请先选择角色');
-    const newAgentName = safe($('tcCloneAgentNameInput') ? $('tcCloneAgentNameInput').value : '').trim();
-    if (!newAgentName) throw new Error('克隆角色名称必填');
-    const data = await postJSON('/api/training/agents/' + encodeURIComponent(agentId) + '/clone', {
-      new_agent_name: newAgentName,
-      operator: 'web-user',
-    });
-    state.tcSelectedAgentId = safe(data.agent_id || '').trim();
-    state.tcSelectedAgentName = safe(data.agent_name || '').trim();
-    setTrainingCenterDetailError('');
-    setTrainingCenterAgentActionResult(data);
-    setTrainingCenterRunResult(data);
-    await refreshTrainingCenterAgents();
-    await refreshTrainingCenterQueue(false);
-  }
-
-  async function setTrainingCenterAgentAvatar() {
-    const agentId = selectedTrainingCenterAgentId();
-    if (!agentId) throw new Error('请先选择角色');
-    const fileInput = $('tcAvatarFileInput');
-    const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
-    if (!file) throw new Error('请选择本地头像文件');
-    const name = safe(file.name).trim();
-    const ext = name.includes('.') ? safe(name.split('.').pop()).toLowerCase() : '';
-    if (!['png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
-      throw new Error('头像格式仅支持 png/jpg/webp');
-    }
-    const size = Number(file.size) || 0;
-    if (size <= 0) {
-      throw new Error('头像文件内容为空');
-    }
-    if (size > 2 * 1024 * 1024) {
-      throw new Error('头像文件超过 2MB 限制');
-    }
-    const dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(safe(reader.result));
-      reader.onerror = () => reject(new Error('头像文件读取失败'));
-      reader.readAsDataURL(file);
-    });
-    const rawUrl = safe(dataUrl).trim();
-    const splitIndex = rawUrl.indexOf(',');
-    if (splitIndex <= 0) {
-      throw new Error('头像文件读取失败');
-    }
-    const meta = rawUrl.slice(0, splitIndex);
-    const payloadBase64 = rawUrl.slice(splitIndex + 1);
-    const contentType = meta.replace(/^data:/i, '').replace(/;base64$/i, '').trim();
-    try {
-      const data = await postJSON('/api/training/agents/' + encodeURIComponent(agentId) + '/avatar', {
-        upload_name: name,
-        upload_content_type: contentType || safe(file.type),
-        upload_base64: payloadBase64,
-        operator: 'web-user',
-      });
-      if (fileInput) {
-        fileInput.value = '';
-      }
-      setTrainingCenterDetailError('');
-      setTrainingCenterAgentActionResult(data);
-      setTrainingCenterRunResult(data);
-      await refreshTrainingCenterAgents();
-    } catch (err) {
-      renderTrainingCenterAvatarPreview(state.tcSelectedAgentDetail || {});
-      throw err;
-    }
-  }
-
-  async function discardTrainingCenterPreRelease() {
-    const agentId = selectedTrainingCenterAgentId();
-    if (!agentId) throw new Error('请先选择角色');
-    if (!hasTrainingCenterPublishedRelease(state.tcSelectedAgentDetail || {})) {
-      throw new Error('没有首个发布版本，不能舍弃修改');
-    }
-    const data = await postJSON(
-      '/api/training/agents/' + encodeURIComponent(agentId) + '/pre-release/discard',
-      {
-        operator: 'web-user',
-      }
-    );
-    setTrainingCenterDetailError('');
-    setTrainingCenterAgentActionResult(data);
-    setTrainingCenterRunResult(data);
-    await refreshTrainingCenterAgents();
-    await refreshTrainingCenterQueue(false);
-  }
-
-  async function enterTrainingCenterReleaseReview() {
-    const agentId = selectedTrainingCenterAgentId();
-    if (!agentId) throw new Error('请先选择角色');
-    startTrainingCenterReleaseReviewProgress(agentId, 'enter');
-    try {
-      const data = await postJSON(
-        '/api/training/agents/' + encodeURIComponent(agentId) + '/release-review/enter',
-        {
-          operator: 'web-user',
-        }
-      );
-      if (!state.tcReleaseReviewByAgent || typeof state.tcReleaseReviewByAgent !== 'object') {
-        state.tcReleaseReviewByAgent = {};
-      }
-      state.tcReleaseReviewByAgent[agentId] = normalizeTrainingCenterReleaseReviewPayload(agentId, data);
-      finishTrainingCenterReleaseReviewProgress(agentId);
-      setTrainingCenterDetailError('');
-      setTrainingCenterAgentActionResult(data);
-      setTrainingCenterRunResult(data);
-      renderTrainingCenterReleaseReview(agentId);
-      await refreshTrainingCenterAgents();
-    } catch (err) {
-      failTrainingCenterReleaseReviewProgress(agentId, err);
-      throw err;
-    }
-  }
-
-  async function discardTrainingCenterReleaseReview() {
-    const agentId = selectedTrainingCenterAgentId();
-    if (!agentId) throw new Error('请先选择角色');
-    const reason = safe($('tcEvalSummaryInput') ? $('tcEvalSummaryInput').value : '').trim();
-    const data = await postJSON(
-      '/api/training/agents/' + encodeURIComponent(agentId) + '/release-review/discard',
-      {
-        operator: 'web-user',
-        reason: reason,
-      }
-    );
-    if (!state.tcReleaseReviewByAgent || typeof state.tcReleaseReviewByAgent !== 'object') {
-      state.tcReleaseReviewByAgent = {};
-    }
-    state.tcReleaseReviewByAgent[agentId] = normalizeTrainingCenterReleaseReviewPayload(agentId, data);
-    setTrainingCenterDetailError('');
-    setTrainingCenterAgentActionResult(data);
-    setTrainingCenterRunResult(data);
-    renderTrainingCenterReleaseReview(agentId);
-    await refreshTrainingCenterAgents();
-  }
-
-  async function submitTrainingCenterManualEvaluation() {
-    const agentId = selectedTrainingCenterAgentId();
-    if (!agentId) throw new Error('请先选择角色');
-    const decision = safe($('tcEvalDecisionSelect') ? $('tcEvalDecisionSelect').value : '').trim();
-    const reviewer = safe($('tcEvalReviewerInput') ? $('tcEvalReviewerInput').value : '').trim();
-    const summary = safe($('tcEvalSummaryInput') ? $('tcEvalSummaryInput').value : '').trim();
-    if (decision === 'reject_discard_pre_release' && !hasTrainingCenterPublishedRelease(state.tcSelectedAgentDetail || {})) {
-      throw new Error('没有首个发布版本，不能舍弃修改');
-    }
-    const data = await postJSON(
-      '/api/training/agents/' + encodeURIComponent(agentId) + '/release-review/manual',
-      {
-        decision: decision,
-        reviewer: reviewer,
-        review_comment: summary,
-        operator: 'web-user',
-      }
-    );
-    if (!state.tcReleaseReviewByAgent || typeof state.tcReleaseReviewByAgent !== 'object') {
-      state.tcReleaseReviewByAgent = {};
-    }
-    state.tcReleaseReviewByAgent[agentId] = normalizeTrainingCenterReleaseReviewPayload(agentId, data);
-    setTrainingCenterDetailError('');
-    setTrainingCenterAgentActionResult(data);
-    setTrainingCenterRunResult(data);
-    renderTrainingCenterReleaseReview(agentId);
-    await refreshTrainingCenterAgents();
-  }
-
-  async function confirmTrainingCenterReleaseReview() {
-    const agentId = selectedTrainingCenterAgentId();
-    if (!agentId) throw new Error('请先选择角色');
-    startTrainingCenterReleaseReviewProgress(agentId, 'confirm');
-    try {
-      const data = await postJSON(
-        '/api/training/agents/' + encodeURIComponent(agentId) + '/release-review/confirm',
-        {
-          operator: 'web-user',
-        }
-      );
-      if (!state.tcReleaseReviewByAgent || typeof state.tcReleaseReviewByAgent !== 'object') {
-        state.tcReleaseReviewByAgent = {};
-      }
-      state.tcReleaseReviewByAgent[agentId] = normalizeTrainingCenterReleaseReviewPayload(agentId, data);
-      finishTrainingCenterReleaseReviewProgress(agentId);
-      setTrainingCenterDetailError('');
-      setTrainingCenterAgentActionResult(data);
-      setTrainingCenterRunResult(data);
-      renderTrainingCenterReleaseReview(agentId);
-      await refreshTrainingCenterAgents();
-    } catch (err) {
-      failTrainingCenterReleaseReviewProgress(agentId, err);
-      throw err;
-    }
-  }
-
+﻿  // Training center probe and diagnostics helpers.
   function roleCreationProbeSessionId() {
     return safe(queryParam('tc_probe_session')).trim();
   }
@@ -338,6 +19,62 @@
     return Array.from(document.querySelectorAll('#rcStageFlow .archive-pocket'));
   }
 
+  function collectTrainingLoopLayoutProbe(output) {
+    if (safe(state.tcModule).trim() !== 'ops') return;
+    const moduleOps = $('tcModuleOps');
+    const centerPane = $('tcLoopCenterPane');
+    const detailBody = $('tcLoopDetailBody');
+    const chatShell = detailBody ? detailBody.querySelector('.tc-loop-chat-shell') : null;
+    const chatStream = detailBody ? detailBody.querySelector('.tc-loop-chat-stream') : null;
+    const composer = detailBody ? detailBody.querySelector('.tc-loop-create-composer') : null;
+    const rightColumn = $('tcLoopRightColumn');
+    const rightPane = $('tcLoopRightPane');
+    const activeRightPane = rightPane ? rightPane.querySelector('.tc-loop-right-pane-shell.active') : null;
+    const runPanel = rightColumn ? rightColumn.querySelector('.tc-loop-run-panel') : null;
+
+    function metrics(node) {
+      if (!node) return null;
+      const rect = node.getBoundingClientRect();
+      const style = window.getComputedStyle(node);
+      return {
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        height: Math.round(rect.height),
+        client_height: Math.round(node.clientHeight || 0),
+        scroll_height: Math.round(node.scrollHeight || 0),
+        overflow_y: safe(style.overflowY).trim().toLowerCase(),
+        display: safe(style.display).trim().toLowerCase(),
+      };
+    }
+
+    const detailMetrics = metrics(detailBody);
+    const composerMetrics = metrics(composer);
+    const rightMetrics = metrics(rightColumn);
+    const runMetrics = metrics(runPanel);
+
+    output.loop_layout = {
+      window_inner_height: Math.round(window.innerHeight || 0),
+      document_client_height: Math.round(document.documentElement ? document.documentElement.clientHeight || 0 : 0),
+      document_scroll_height: Math.round(document.documentElement ? document.documentElement.scrollHeight || 0 : 0),
+      body_scroll_height: Math.round(document.body ? document.body.scrollHeight || 0 : 0),
+      module_ops: metrics(moduleOps),
+      center_pane: metrics(centerPane),
+      detail_body: detailMetrics,
+      chat_shell: metrics(chatShell),
+      chat_stream: metrics(chatStream),
+      composer: composerMetrics,
+      right_column: rightMetrics,
+      right_pane: metrics(rightPane),
+      active_right_pane: metrics(activeRightPane),
+      run_panel: runMetrics,
+      page_overflowing: Math.round(document.documentElement ? document.documentElement.scrollHeight || 0 : 0) > Math.round(window.innerHeight || 0) + 8,
+      composer_bottom_gap:
+        detailMetrics && composerMetrics ? Math.round(detailMetrics.bottom - composerMetrics.bottom) : null,
+      right_bottom_gap:
+        rightMetrics && runMetrics ? Math.round(rightMetrics.bottom - runMetrics.bottom) : null,
+    };
+  }
+
   async function prepareRoleCreationProbe(caseId, output) {
     const probeCase = safe(caseId).trim().toLowerCase();
     if (!probeCase.startsWith('rc_')) return;
@@ -352,7 +89,11 @@
       throw new Error('role creation probe session missing');
     }
     await selectRoleCreationSession(sessionId, { force: true, skipRender: true });
-    setRoleCreationDetailTab(probeCase === 'rc_profile_tab' ? 'profile' : 'evolution');
+    setRoleCreationDetailTab(
+      probeCase === 'rc_profile_tab' || probeCase === 'rc_failure'
+        ? 'profile'
+        : 'evolution'
+    );
     if (typeof clearRoleCreationTaskPreview === 'function') {
       clearRoleCreationTaskPreview();
     }
@@ -418,6 +159,8 @@
     output.rc_role_goal = safe(profile.role_goal).trim();
     output.rc_core_capability_count = Array.isArray(profile.core_capabilities) ? profile.core_capabilities.length : 0;
     output.rc_missing_field_count = Array.isArray(profile.missing_fields) ? profile.missing_fields.length : 0;
+    output.rc_start_gate_blocker_count = Array.isArray(profile.start_gate_blockers) ? profile.start_gate_blockers.length : 0;
+    output.rc_can_start = !!profile.can_start;
     output.rc_stage_count = stages.length;
     output.rc_message_count = messages.length;
     output.rc_message_attachment_count = messages.reduce((total, message) => {
@@ -434,6 +177,22 @@
     }).length;
     output.rc_profile_card_count = document.querySelectorAll('#rcDetailPaneProfile .rc-profile-card').length;
     output.rc_profile_visible = !!($('rcDetailPaneProfile') && $('rcDetailPaneProfile').classList.contains('active'));
+    output.rc_profile_section_titles = Array.from(document.querySelectorAll('#rcDetailPaneProfile [data-rc-profile-title]'))
+      .map((node) => safe(node.getAttribute('data-rc-profile-title')).trim())
+      .filter(Boolean);
+    output.rc_structured_section_titles = Array.from(document.querySelectorAll('#rcDetailPaneProfile [data-rc-structured-section]'))
+      .map((node) => safe(node.getAttribute('data-rc-structured-section')).trim())
+      .filter(Boolean);
+    output.rc_profile_summary_exists = !!document.querySelector("#rcDetailPaneProfile [data-rc-profile-kind='summary']");
+    output.rc_progress_step_count = document.querySelectorAll('#rcDetailPaneProfile [data-rc-progress-step]').length;
+    output.rc_recent_change_count = document.querySelectorAll('#rcDetailPaneProfile [data-rc-recent-change]').length;
+    output.rc_pending_question_count = document.querySelectorAll('#rcDetailPaneProfile [data-rc-pending-question]').length;
+    output.rc_seed_capability_count = document.querySelectorAll('#rcDetailPaneProfile [data-rc-seed-capability]').length;
+    output.rc_seed_task_count = document.querySelectorAll('#rcDetailPaneProfile [data-rc-seed-task]').length;
+    output.rc_knowledge_asset_count = document.querySelectorAll('#rcDetailPaneProfile [data-rc-knowledge-asset]').length;
+    output.rc_failure_visible = !!document.querySelector('#rcFailureCardHost .codex-failure-card');
+    output.rc_failure_retry_visible = !!Array.from(document.querySelectorAll('#rcFailureCardHost button'))
+      .find((node) => safe(node && node.textContent).trim() === '重试本轮分析');
     output.rc_message_image_count = document.querySelectorAll('#rcMessages .rc-message-asset img').length;
     output.rc_task_card_count = taskCards.length;
     output.rc_task_card_ids = taskCards.map((node) => safe(node.getAttribute('data-node-id')).trim()).filter(Boolean);
@@ -506,6 +265,20 @@
       role_profile_source_release_id: '',
       role_profile_first_person_summary: '',
       active_role_profile_ref: '',
+      portrait_section_keys: [],
+      portrait_section_labels: [],
+      portrait_item_count: 0,
+      portrait_has_source_section: false,
+      portrait_is_single_column: false,
+      portrait_layout_display: '',
+      portrait_layout_direction: '',
+      portrait_meta_contains_source: false,
+      portrait_release_history_title_visible: false,
+      avatar_preview_count: 0,
+      avatar_image_count: 0,
+      avatar_fallback_svg_count: 0,
+      avatar_trigger_count: 0,
+      avatar_file_input_count: 0,
       rc_module: '',
       rc_detail_tab: '',
       rc_selected_session_id: '',
@@ -519,6 +292,8 @@
       rc_role_goal: '',
       rc_core_capability_count: 0,
       rc_missing_field_count: 0,
+      rc_start_gate_blocker_count: 0,
+      rc_can_start: false,
       rc_stage_count: 0,
       rc_message_count: 0,
       rc_message_attachment_count: 0,
@@ -526,6 +301,16 @@
       rc_system_task_update_count: 0,
       rc_profile_card_count: 0,
       rc_profile_visible: false,
+      rc_profile_section_titles: [],
+      rc_structured_section_titles: [],
+      rc_progress_step_count: 0,
+      rc_recent_change_count: 0,
+      rc_pending_question_count: 0,
+      rc_seed_capability_count: 0,
+      rc_seed_task_count: 0,
+      rc_knowledge_asset_count: 0,
+      rc_failure_visible: false,
+      rc_failure_retry_visible: false,
       rc_message_image_count: 0,
       rc_task_card_count: 0,
       rc_task_card_ids: [],
@@ -605,6 +390,11 @@
 
       if (probeCase.startsWith('rc_')) {
         await prepareRoleCreationProbe(probeCase, output);
+      } else if (probeCase.startsWith('ac_rp_')) {
+        setTrainingCenterModule('agents');
+        if (selectedId) {
+          await refreshTrainingCenterSelectedAgentContext(selectedId);
+        }
       } else if (probeCase === 'ac_uo_01') {
         setTrainingCenterModule('agents');
       } else if (probeCase === 'ac_uo_02' || probeCase === 'ac_uo_03' || probeCase === 'ac_uo_04') {
@@ -943,7 +733,33 @@
       output.role_profile_source_release_id = safe(roleProfile.source_release_id).trim();
       output.role_profile_first_person_summary = safe(roleProfile.first_person_summary).trim();
       output.active_role_profile_ref = safe(selectedDetail.active_role_profile_ref || '').trim();
+      const portraitFieldsNode = $('tcPortraitFields');
+      const portraitItems = Array.from(document.querySelectorAll('#tcPortraitFields .tc-portrait-item'));
+      const portraitLabels = portraitItems
+        .map((node) => safe(node && node.querySelector ? node.querySelector('.tc-portrait-k') && node.querySelector('.tc-portrait-k').textContent : '').trim())
+        .filter((text) => !!text);
+      const portraitKeys = portraitItems
+        .map((node) => safe(node && node.getAttribute ? node.getAttribute('data-portrait-key') : '').trim())
+        .filter((text) => !!text);
+      const portraitStyle = portraitFieldsNode ? window.getComputedStyle(portraitFieldsNode) : null;
+      output.portrait_section_labels = portraitLabels;
+      output.portrait_section_keys = portraitKeys;
+      output.portrait_item_count = portraitItems.length;
+      output.portrait_has_source_section = portraitLabels.includes('角色详情来源');
+      output.portrait_layout_display = safe(portraitStyle && portraitStyle.display).trim().toLowerCase();
+      output.portrait_layout_direction = safe(portraitStyle && portraitStyle.flexDirection).trim().toLowerCase();
+      output.portrait_is_single_column =
+        output.portrait_layout_display === 'flex' && output.portrait_layout_direction === 'column';
+      output.portrait_meta_contains_source = safe($('tcAgentDetailMeta') ? $('tcAgentDetailMeta').textContent : '').includes('角色详情来源=');
+      output.portrait_release_history_title_visible = Array.from(document.querySelectorAll('#tcAgentDetailBody .card-title'))
+        .some((node) => safe(node && node.textContent).trim() === '发布历史与操作');
+      output.avatar_preview_count = document.querySelectorAll('#tcPortraitCard #tcAvatarPreview').length;
+      output.avatar_image_count = document.querySelectorAll('#tcPortraitCard #tcAvatarPreview img').length;
+      output.avatar_fallback_svg_count = document.querySelectorAll('#tcPortraitCard #tcAvatarPreview svg').length;
+      output.avatar_trigger_count = document.querySelectorAll('#tcPortraitCard .tc-avatar-trigger').length;
+      output.avatar_file_input_count = document.querySelectorAll('#tcPortraitCard .tc-avatar-file-input').length;
       collectRoleCreationProbeState(output);
+      collectTrainingLoopLayoutProbe(output);
       if ((probeCase === 'ac_ar_rr_12' || probeCase === 'ac_ar_rr_19') && output.release_report_button_count >= 1) {
         const requestedReleaseVersion = safe(queryParam('tc_probe_release_version')).trim();
         const releaseReportBtn = Array.from(document.querySelectorAll('#tcReleaseList button'))
@@ -1000,8 +816,21 @@
                             ? output.rc_module === 'create-role' &&
                               output.rc_detail_tab === 'profile' &&
                               output.rc_profile_visible &&
-                              output.rc_profile_card_count >= 4 &&
+                              output.rc_profile_card_count >= 7 &&
+                              output.rc_profile_summary_exists &&
+                              output.rc_progress_step_count >= 4 &&
+                              output.rc_recent_change_count >= 1 &&
+                              output.rc_seed_capability_count >= 1 &&
+                              output.rc_seed_task_count >= 1 &&
+                              output.rc_knowledge_asset_count >= 1 &&
+                              ['角色画像', '能力包', '知识沉淀', '首批任务'].every((title) => output.rc_structured_section_titles.includes(title)) &&
                               !!output.rc_role_name
+                            : probeCase === 'rc_failure'
+                              ? output.rc_module === 'create-role' &&
+                                output.rc_detail_tab === 'profile' &&
+                                output.rc_profile_visible &&
+                                output.rc_failure_visible &&
+                                output.rc_failure_retry_visible
                             : probeCase === 'rc_task_hover'
                               ? output.rc_module === 'create-role' &&
                                 output.rc_preview_visible &&

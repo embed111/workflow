@@ -56,6 +56,7 @@
     }
     if (tabName === 'settings') {
       updateArtifactRootMeta();
+      updateDeveloperWorkspaceMeta();
       updateAssignmentExecutionSettingsMeta();
     }
   }
@@ -336,6 +337,7 @@
     };
     $('tcEnterOpsBtn').onclick = () => {
       setTrainingCenterModule('ops');
+      enterTrainingLoopCreateMode();
     };
     $('tcLoopTaskSearchInput').addEventListener('input', () => {
       renderTrainingCenterQueue();

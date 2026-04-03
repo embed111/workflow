@@ -1,7 +1,15 @@
 from __future__ import annotations
 
+from workflow_app.server.services.codex_failure_contract import (
+    build_codex_failure,
+    build_retry_action,
+    infer_codex_failure_detail_code,
+)
+
 
 def _assignment_task_visible(task_record: dict[str, Any], *, include_test_data: bool) -> bool:
+    if str(task_record.get("record_state") or "active").strip().lower() == "deleted":
+        return False
     if include_test_data:
         return True
     return not bool(task_record.get("is_test_data"))
@@ -104,7 +112,7 @@ def _assignment_apply_edges_to_nodes(
 
 
 def _assignment_live_run_keys_from_files(root: Path, *, ticket_id: str = "") -> set[tuple[str, str]]:
-    ticket_filter = safe_token(str(ticket_id or ""), "", 160)
+    ticket_filter = _assignment_resolve_graph_ticket_id(root, ticket_id)
     active_run_ids = {
         str(run_id or "").strip()
         for run_id in _active_assignment_run_ids()
@@ -112,8 +120,15 @@ def _assignment_live_run_keys_from_files(root: Path, *, ticket_id: str = "") -> 
     }
     now_dt = now_local()
     live_keys: set[tuple[str, str]] = set()
+    canonical_workflow_ui_ticket = _assignment_ensure_workflow_ui_global_graph_ticket(root)
     for current_ticket_id in _assignment_list_ticket_ids_lightweight(root):
         if ticket_filter and current_ticket_id != ticket_filter:
+            continue
+        if _assignment_is_hidden_workflow_ui_graph_ticket(
+            root,
+            current_ticket_id,
+            canonical_ticket_id=canonical_workflow_ui_ticket,
+        ):
             continue
         for run in _assignment_load_run_records(root, ticket_id=current_ticket_id):
             status = str(run.get("status") or "").strip().lower()
@@ -436,6 +451,7 @@ def _assignment_snapshot_from_files(
     include_scheduler: bool = True,
     include_serialized_nodes: bool = True,
 ) -> dict[str, Any]:
+    ticket_id = _assignment_resolve_graph_ticket_id(root, ticket_id)
     task_record = _assignment_load_task_record(root, ticket_id)
     if not _assignment_task_visible(task_record, include_test_data=include_test_data):
         raise AssignmentCenterError(
@@ -507,12 +523,25 @@ def _assignment_find_ticket_by_source_request(
     request_text = str(external_request_id or "").strip()
     if not source_text or not request_text:
         return ""
+    if (
+        source_text == ASSIGNMENT_GLOBAL_GRAPH_SOURCE_WORKFLOW
+        and request_text == ASSIGNMENT_GLOBAL_GRAPH_REQUEST_ID
+    ):
+        return _assignment_ensure_workflow_ui_global_graph_ticket(root)
+    canonical_workflow_ui_ticket = _assignment_ensure_workflow_ui_global_graph_ticket(root)
     for ticket_id in _assignment_list_ticket_ids(root):
         try:
             task_record = _assignment_load_task_record(root, ticket_id)
         except AssignmentCenterError:
             continue
         if str(task_record.get("record_state") or "active").strip().lower() == "deleted":
+            continue
+        if _assignment_is_hidden_workflow_ui_graph_ticket(
+            root,
+            ticket_id,
+            ticket_record=task_record,
+            canonical_ticket_id=canonical_workflow_ui_ticket,
+        ):
             continue
         if str(task_record.get("source_workflow") or "").strip() != source_text:
             continue
@@ -533,6 +562,52 @@ def _assignment_load_runs(
     return rows[: max(1, int(limit))]
 
 
+def _assignment_selected_node_codex_failure(
+    *,
+    ticket_id: str,
+    selected_node: dict[str, Any],
+    latest_run: dict[str, Any],
+    run_count: int,
+) -> dict[str, Any]:
+    current_run = latest_run if isinstance(latest_run, dict) else {}
+    stored = current_run.get("codex_failure") if isinstance(current_run.get("codex_failure"), dict) else {}
+    if stored:
+        return stored
+    failure_text = str(selected_node.get("failure_reason") or "").strip()
+    if not failure_text:
+        return {}
+    return build_codex_failure(
+        feature_key="assignment_node_execution",
+        attempt_id=str(current_run.get("run_id") or selected_node.get("node_id") or "").strip(),
+        attempt_count=max(1, int(run_count or 0)),
+        failure_detail_code=infer_codex_failure_detail_code(
+            failure_text,
+            fallback="assignment_execution_failed",
+        ),
+        failure_message=failure_text,
+        retry_action=build_retry_action(
+            "rerun_assignment_node",
+            payload={
+                "ticket_id": str(ticket_id or "").strip(),
+                "node_id": str(selected_node.get("node_id") or "").strip(),
+                "run_id": str(current_run.get("run_id") or "").strip(),
+            },
+        ),
+        trace_refs={
+            "prompt": str(current_run.get("prompt_ref") or "").strip(),
+            "stdout": str(current_run.get("stdout_ref") or "").strip(),
+            "stderr": str(current_run.get("stderr_ref") or "").strip(),
+            "result": str(current_run.get("result_ref") or "").strip(),
+        },
+        failed_at=str(
+            current_run.get("finished_at")
+            or current_run.get("updated_at")
+            or selected_node.get("completed_at")
+            or ""
+        ).strip(),
+    )
+
+
 def _assignment_run_summary(root: Path, row: dict[str, Any], *, include_content: bool) -> dict[str, Any]:
     run_id = str(row.get("run_id") or "").strip()
     ticket_id = str(row.get("ticket_id") or "").strip()
@@ -547,6 +622,7 @@ def _assignment_run_summary(root: Path, row: dict[str, Any], *, include_content:
     stderr_ref = str(row.get("stderr_ref") or (stderr_path.as_posix() if isinstance(stderr_path, Path) else "")).strip()
     result_ref = str(row.get("result_ref") or (result_path.as_posix() if isinstance(result_path, Path) else "")).strip()
     events = _tail_assignment_run_events(events_path) if isinstance(events_path, Path) else []
+    codex_failure = row.get("codex_failure") if isinstance(row.get("codex_failure"), dict) else {}
     return {
         "run_id": run_id,
         "ticket_id": ticket_id,
@@ -571,6 +647,7 @@ def _assignment_run_summary(root: Path, row: dict[str, Any], *, include_content:
         "updated_at": str(row.get("updated_at") or "").strip(),
         "event_count": len(events),
         "events": events,
+        "codex_failure": codex_failure,
         "prompt_text": _read_assignment_run_text(prompt_ref) if include_content else "",
         "stdout_text": _read_assignment_run_text(stdout_ref) if include_content else "",
         "stderr_text": _read_assignment_run_text(stderr_ref) if include_content else "",
@@ -649,6 +726,7 @@ def _assignment_status_detail_payload(
         include_scheduler=False,
         include_serialized_nodes=False,
     )
+    ticket_id = str(snapshot["graph_row"].get("ticket_id") or ticket_id).strip()
     selected_node = snapshot["node_map_by_id"].get(node_id) or (snapshot["nodes"][0] if snapshot["nodes"] else {})
     selected_serialized = (
         _serialize_node(
@@ -705,6 +783,14 @@ def _assignment_status_detail_payload(
         )
         for run_summary in run_summaries
     ]
+    node_codex_failure = _assignment_selected_node_codex_failure(
+        ticket_id=ticket_id,
+        selected_node=selected_serialized,
+        latest_run=run_summaries[0] if run_summaries else {},
+        run_count=len(run_summaries),
+    )
+    if isinstance(selected_serialized, dict) and selected_serialized:
+        selected_serialized["codex_failure"] = node_codex_failure
     return {
         "ticket_id": ticket_id,
         "graph_overview": _graph_overview_payload(
@@ -716,6 +802,7 @@ def _assignment_status_detail_payload(
         "blocking_reasons": blocking_reasons,
         "available_actions": management_actions,
         "audit_refs": audit_refs,
+        "codex_failure": node_codex_failure,
         "execution_chain": {
             "poll_mode": assignment_execution_refresh_mode(),
             "poll_interval_ms": DEFAULT_ASSIGNMENT_EXECUTION_POLL_INTERVAL_MS,
@@ -809,11 +896,19 @@ def list_assignments(
     else:
         page_limit = 0
     items: list[dict[str, Any]] = []
+    canonical_workflow_ui_ticket = _assignment_ensure_workflow_ui_global_graph_ticket(root)
     for ticket_id in _assignment_list_ticket_ids_lightweight(root):
         graph_row = _assignment_load_task_record_lightweight(root, ticket_id)
         if not graph_row:
             continue
         if not _assignment_task_visible(graph_row, include_test_data=include_test_data):
+            continue
+        if _assignment_is_hidden_workflow_ui_graph_ticket(
+            root,
+            ticket_id,
+            ticket_record=graph_row,
+            canonical_ticket_id=canonical_workflow_ui_ticket,
+        ):
             continue
         if source_filter and str(graph_row.get("source_workflow") or "").strip() != source_filter:
             continue
@@ -897,6 +992,7 @@ def get_assignment_overview(root: Path, ticket_id_text: str, *, include_test_dat
         reconcile_running=True,
         include_serialized_nodes=False,
     )
+    ticket_id = str(snapshot["graph_row"].get("ticket_id") or ticket_id).strip()
     return {
         "graph_overview": _graph_overview_payload(
             snapshot["graph_row"],
@@ -921,6 +1017,7 @@ def get_assignment_graph(
     history_loaded: Any = 0,
     history_batch_size: Any = 12,
     include_test_data: bool = True,
+    focus_node_ids: Any = None,
 ) -> dict[str, Any]:
     ticket_id = safe_token(str(ticket_id_text or ""), "", 160)
     if not ticket_id:
@@ -948,7 +1045,17 @@ def get_assignment_graph(
         reconcile_running=True,
         include_serialized_nodes=False,
     )
-    raw_nodes = list(snapshot["nodes"] or [])
+    ticket_id = str(snapshot["graph_row"].get("ticket_id") or ticket_id).strip()
+    focus_node_id_set = {
+        safe_token(str(item or ""), "", 160)
+        for item in list(focus_node_ids or [])
+        if safe_token(str(item or ""), "", 160)
+    }
+    raw_nodes = [
+        dict(row)
+        for row in list(snapshot["nodes"] or [])
+        if not focus_node_id_set or str((row or {}).get("node_id") or "").strip() in focus_node_id_set
+    ]
     completed_rows = _assignment_sort_completed_rows(
         [
             row
@@ -1042,6 +1149,7 @@ def get_assignment_scheduler_state(root: Path, ticket_id_text: str, *, include_t
         reconcile_running=True,
         include_serialized_nodes=False,
     )
+    ticket_id = str(snapshot["graph_row"].get("ticket_id") or ticket_id).strip()
     scheduler = snapshot["scheduler"]
     return {
         "ticket_id": ticket_id,
@@ -1072,7 +1180,7 @@ def get_assignment_status_detail(
         raise AssignmentCenterError(400, "ticket_id required", "ticket_id_required")
     return _assignment_status_detail_payload(
         root,
-        ticket_id=ticket_id,
+        ticket_id=_assignment_resolve_graph_ticket_id(root, ticket_id),
         node_id=node_id,
         include_test_data=include_test_data,
     )

@@ -26,6 +26,8 @@
       publish_version: '',
       publish_status: '',
       publish_error: '',
+      codex_failure: null,
+      publish_codex_failure: null,
       execution_logs: [],
       fallback: {},
       created_at: '',
@@ -78,6 +80,8 @@
     review.release_review_state = safe(review.release_review_state || 'idle').trim() || 'idle';
     review.review_decision = safe(review.review_decision).trim();
     review.publish_status = safe(review.publish_status).trim();
+    review.codex_failure = normalizeCodexFailure(rawReview && rawReview.codex_failure);
+    review.publish_codex_failure = normalizeCodexFailure(rawReview && rawReview.publish_codex_failure);
     review.lifecycle_state = safe(review.lifecycle_state || detail.lifecycle_state || 'released').trim().toLowerCase() || 'released';
     review.can_enter = !!review.can_enter;
     review.can_discard = !!review.can_discard;

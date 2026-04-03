@@ -29,22 +29,38 @@
 - 禁止把 `.codex/MEMORY.md`、`.codex/memory/**/*.md` 当成产品运行态、配置文件或审计日志使用。
 
 ## Project Structure & Module Organization
-- `../workflow_code/`：唯一正式代码根仓（code-only），承载 `src/`、`scripts/`、`run_workflow.bat` 与正式 Git 历史。
+- `../workflow_code/`：唯一正式代码根仓（code-only），承载 `src/`、`scripts/` 与正式 Git 历史，不再承载便捷启动 wrapper。
 - `.repository/<developer_id>/`：本地临时代码开发工作区；实际代码修改、验证、提交都在这里进行，并推送回 `../workflow_code`。
+- `run_workflow.bat`：当前 PM 仓顶层便捷启动入口，只负责把用户带到当前默认开发工作区/当前 `prod` 部署副本，不属于正式代码真相源。
 - `.codex/`：agent 工作记忆、内部工作文档、本地技能入口（如 `.codex/skills/*/SKILL.md`）。
 - `docs/workflow/`：需求、门禁和证据矩阵文档，先读这里再改流程。
 - `logs/`：运行与审计留痕。重点子目录：`events/`（JSONL 事件流）、`runs/`（执行记录）、`decisions/`（决策日志）、`summaries/`（汇总）。
 - `state/`：运行态数据（如 `state/workflow.db`、`session-snapshot.md`、`change-log.md`）。
 - `.running/` 与 `.runtime/`：运行态、副本与部署控制数据。
 - `metrics/` 与 `incidents/`：性能基线和故障记录。
-- `src/`、`scripts/`、`run_workflow.bat` 不再属于当前 PM 仓；若这些路径在 `workflow` 中重新出现，应视为误放的代码副本而不是合法治理文件。
+- `src/`、`scripts/` 不再属于当前 PM 仓；若这些路径在 `workflow` 中重新出现，应视为误放的代码副本而不是合法治理文件。
+
+## Current Collaboration Workflow
+- 当前 `workflow` 项目仍处于单人维护阶段，默认由当前 Codex 同时承担开发、测试、发布候选生成与部署协助；后续新增协作者时，再为其分配各自独立的 `.repository/<developer_id>/` 工作区。
+- 当前默认开发主体固定为 `pm-main`；若无额外说明，代码同步、修改、验证、提交与推送都在 `.repository/pm-main/` 中完成。
+- 每次进入代码工作前，先将 `../workflow_code` 的最新代码同步到对应开发工作区；若该工作区存在未提交改动，必须先保护现场，不得直接覆盖。
+- 用户提到 `./run_workflow.bat` 时，默认指当前 PM 仓顶层的便捷入口；该入口默认代理到 `.repository/pm-main` 的启动脚本，并复用 PM 顶层统一的 `.running/dev|test|prod` 运行态。
+- 当前默认协作顺序固定为：
+  1. 同步 `../workflow_code` 最新代码；
+  2. 在 `.repository/<developer_id>/` 中开发、验证并跑门禁；
+  3. 将通过验证的代码推回 `../workflow_code`；
+  4. 生成或刷新 `prod` 升级候选；
+  5. 仅当用户明确要求“更新生产环境代码”或“部署生产环境”时，才执行正式环境升级或等效生产代码更新。
 
 ## Build, Test, and Development Commands
+- `.\run_workflow.bat`：从当前 PM 仓顶层启动默认 `prod` 入口；内部代理到 `.repository/pm-main` 的启动脚本，并落到 PM 顶层 `.running/prod`。
 - `powershell -NoProfile -ExecutionPolicy Bypass -File .repository/<developer_id>/scripts/launch_workflow.ps1 -OpenBrowser`：从本地开发工作区启动当前代码版本。
 - `python .repository/<developer_id>/scripts/workflow_web_server.py --host 127.0.0.1 --port 8090`：仅启动开发工作区中的 Web 服务。
 - `python .repository/<developer_id>/scripts/workflow_entry_cli.py --mode status`：刷新并查看待分析/待训练状态。
 - `python .repository/<developer_id>/scripts/workflow_entry_cli.py --mode backfill`：将 `logs/events/*.jsonl` 回填到 SQLite。
 - `python .repository/<developer_id>/scripts/acceptance/run_acceptance_workflow_gate.py --root .repository/<developer_id> --host 127.0.0.1 --port 8098`：执行开发工作区门禁验收。
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .repository/<developer_id>/scripts/deploy_workflow_env.ps1 -Environment test`：将已验证版本部署到 `test` 并生成或刷新 `prod` 候选。
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .repository/<developer_id>/scripts/deploy_workflow_env.ps1 -Environment prod -AllowDirectProdDeploy`：仅在用户明确要求更新生产环境时使用。
 - `git -C .repository/<developer_id> status --short --branch`：检查当前开发分支与工作区状态。
 
 ## Coding Style & Naming Conventions
@@ -61,6 +77,7 @@
 ## Default Release Rule
 - 默认发布约束文件：`docs/workflow/governance/默认发布约束.md`。
 - 只要存在实际代码改动，且已完成验证并跑完门禁通过，默认继续执行：
+  - 先同步 `../workflow_code` 最新代码到对应开发工作区
   - 部署 `test`
   - 生成/刷新 `prod` 升级候选
   - 由用户手动升级 `prod`
@@ -70,6 +87,7 @@
 
 ## Architecture & Workflow Notes
 - 当前 PM 仓只保留治理、留痕与本地开发工作区壳；实际实现位于 `../workflow_code/` 或 `.repository/<developer_id>/`。
+- 当前 PM 仓顶层 `run_workflow.bat` 只是便捷代理，不承载正式代码；真正实现仍来自 `.repository/<developer_id>/scripts/*` 与部署到 PM 顶层 `.running/*` 的副本。
 - 典型链路仍是 `workflow_web_server.py` 接收请求 -> `task_agent_runner.py` 执行任务 -> 事件与消息写入 `state/workflow.db` 与 `logs/events/*.jsonl`，但相关实现文件位于代码根仓或开发工作区，不再位于当前 PM 仓根目录。
 - 前端资源由后端直接托管，核心交互脚本位于 `../workflow_code/src/workflow_app/web_client/*.js` 或对应开发工作区副本，修改 UI 时需同步检查 API 字段兼容性。
 - 训练相关状态通过队列与事件表回放，调试时优先对照 `logs/runs/` 报告与 `state/change-log.md`。

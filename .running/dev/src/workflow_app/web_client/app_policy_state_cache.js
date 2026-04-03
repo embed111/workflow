@@ -366,3 +366,10 @@
     }
     if (open) {
       if (!wasOpen && trigger) {
+        state.agentDropdownPanelWidth = Math.max(1, Math.floor(trigger.getBoundingClientRect().width));
+      }
+      positionAgentDropdownPanel();
+    } else {
+      resetAgentDropdownPanelPosition();
+    }
+  }

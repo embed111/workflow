@@ -848,3 +848,8 @@
 
 .tc-loop-meta-card {
   border: 1px solid #e5e6eb;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 8px 10px;
+  min-width: 0;
+}

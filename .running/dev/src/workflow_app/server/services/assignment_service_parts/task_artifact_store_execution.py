@@ -19,6 +19,7 @@ def dispatch_assignment_next(
         include_test_data=include_test_data,
         reconcile_running=True,
     )
+    ticket_id = str(snapshot["graph_row"].get("ticket_id") or ticket_id).strip()
     task_record = dict(snapshot["graph_row"])
     node_records = [dict(item) for item in list(snapshot["all_nodes"] or [])]
     scheduler_state = str(task_record.get("scheduler_state") or "").strip().lower()
@@ -258,6 +259,7 @@ def pause_assignment_scheduler(
         include_test_data=include_test_data,
         reconcile_running=True,
     )
+    ticket_id = str(snapshot["graph_row"].get("ticket_id") or ticket_id).strip()
     task_record = dict(snapshot["graph_row"])
     node_records = [dict(item) for item in list(snapshot["all_nodes"] or [])]
     running_count = sum(
@@ -321,6 +323,7 @@ def resume_assignment_scheduler(
         include_test_data=include_test_data,
         reconcile_running=True,
     )
+    ticket_id = str(snapshot["graph_row"].get("ticket_id") or ticket_id).strip()
     task_record = dict(snapshot["graph_row"])
     node_records = [dict(item) for item in list(snapshot["all_nodes"] or [])]
     task_record["scheduler_state"] = "running"
@@ -399,6 +402,7 @@ def clear_assignment_graph(
         include_test_data=include_test_data,
         reconcile_running=True,
     )
+    ticket_id = str(snapshot["graph_row"].get("ticket_id") or ticket_id).strip()
     task_record = dict(snapshot["graph_row"])
     node_records = [dict(item) for item in list(snapshot["all_nodes"] or [])]
     active_nodes = _assignment_active_node_records(node_records)

@@ -1,5 +1,8 @@
 
 
+from workflow_app.server.services.codex_failure_contract import build_codex_failure, build_retry_action
+
+
 def _ensure_workspace_git_ready_for_publish(
     cfg: AppConfig,
     *,
@@ -471,6 +474,53 @@ def _update_release_review_row(root: Path, review_id: str, fields: dict[str, Any
         conn.close()
 
 
+def _release_review_trace_refs(analysis_chain: dict[str, Any]) -> dict[str, str]:
+    chain = analysis_chain if isinstance(analysis_chain, dict) else {}
+    refs: dict[str, str] = {}
+    for key in ("trace_dir", "prompt_path", "stdout_path", "stderr_path", "report_path", "raw_result_path"):
+        value = str(chain.get(key) or "").strip()
+        if value:
+            refs[key] = value
+    return refs
+
+
+def _latest_failed_execution_log(execution_logs: list[dict[str, Any]]) -> dict[str, Any]:
+    for item in reversed(list(execution_logs or [])):
+        if str((item or {}).get("status") or "").strip().lower() == "failed":
+            return dict(item or {})
+    return {}
+
+
+def _release_publish_trace_refs(
+    execution_logs: list[dict[str, Any]],
+    fallback: dict[str, Any],
+) -> dict[str, str]:
+    refs: dict[str, str] = {}
+    failed_log = _latest_failed_execution_log(execution_logs)
+    failed_path = str(failed_log.get("path") or "").strip()
+    failed_phase = str(failed_log.get("phase") or "publish").strip()
+    if failed_path:
+        refs[failed_phase] = failed_path
+    fallback_chain = fallback.get("analysis_chain") if isinstance(fallback.get("analysis_chain"), dict) else {}
+    for key, value in _release_review_trace_refs(fallback_chain).items():
+        refs[f"fallback_{key}"] = value
+    retry_result = fallback.get("retry_result") if isinstance(fallback.get("retry_result"), dict) else {}
+    retry_note_path = str(retry_result.get("release_note_path") or "").strip()
+    if retry_note_path:
+        refs["retry_release_note"] = retry_note_path
+    return refs
+
+
+def _release_publish_attempt_count(execution_logs: list[dict[str, Any]]) -> int:
+    count = sum(
+        1
+        for item in list(execution_logs or [])
+        if str((item or {}).get("phase") or "").strip().lower() == "prepare"
+        and str((item or {}).get("status") or "").strip().lower() in {"done", "failed"}
+    )
+    return max(1, int(count or 0))
+
+
 def _release_review_payload(agent: dict[str, Any], row: dict[str, Any] | None) -> dict[str, Any]:
     lifecycle_state = normalize_lifecycle_state(agent.get("lifecycle_state"))
     current_state = str((row or {}).get("release_review_state") or "idle").strip() or "idle"
@@ -488,9 +538,63 @@ def _release_review_payload(agent: dict[str, Any], row: dict[str, Any] | None) -
         for item in (analysis_chain.get("report_missing_fields") or [])
         if str(item or "").strip()
     ] if isinstance(analysis_chain.get("report_missing_fields"), list) else []
+    review_id = str((row or {}).get("review_id") or "").strip()
+    agent_id = str(agent.get("agent_id") or "").strip()
+    report_error = str((row or {}).get("report_error") or "").strip()
+    publish_error = str((row or {}).get("publish_error") or "").strip()
+    report_detail_code = str(report_error_code or analysis_chain.get("error") or "").strip().lower()
+    if not report_detail_code and report_error:
+        report_detail_code = "release_review_report_failed"
+    report_codex_failure = (
+        build_codex_failure(
+            feature_key="release_review",
+            attempt_id=review_id or agent_id,
+            attempt_count=1,
+            failure_detail_code=report_detail_code,
+            failure_message=report_error,
+            retry_action=build_retry_action(
+                "retry_release_review",
+                payload={"agent_id": agent_id},
+            ),
+            trace_refs=_release_review_trace_refs(analysis_chain),
+            failed_at=str((row or {}).get("updated_at") or "").strip(),
+        )
+        if report_detail_code
+        else {}
+    )
+    publish_detail_code = publish_error.lower()
+    fallback_detail_code = str(
+        ((fallback.get("analysis_chain") or {}).get("error") if isinstance(fallback.get("analysis_chain"), dict) else "")
+        or fallback.get("error")
+        or ""
+    ).strip().lower()
+    if not publish_detail_code and publish_status.lower() == "failed":
+        publish_detail_code = fallback_detail_code or "publish_failed"
+    publish_codex_failure = (
+        build_codex_failure(
+            feature_key="release_publish",
+            attempt_id=review_id or agent_id,
+            attempt_count=_release_publish_attempt_count(execution_logs),
+            failure_detail_code=publish_detail_code,
+            failure_message=str(
+                fallback.get("failure_reason")
+                or fallback.get("next_action_suggestion")
+                or publish_error
+                or ""
+            ).strip(),
+            retry_action=build_retry_action(
+                "retry_publish",
+                payload={"agent_id": agent_id},
+            ),
+            trace_refs=_release_publish_trace_refs(execution_logs, fallback),
+            failed_at=str((row or {}).get("updated_at") or "").strip(),
+        )
+        if publish_detail_code
+        else {}
+    )
     payload = {
-        "review_id": str((row or {}).get("review_id") or "").strip(),
-        "agent_id": str(agent.get("agent_id") or "").strip(),
+        "review_id": review_id,
+        "agent_id": agent_id,
         "agent_name": str(agent.get("agent_name") or "").strip(),
         "release_review_state": current_state,
         "target_version": str((row or {}).get("target_version") or "").strip(),
@@ -498,7 +602,7 @@ def _release_review_payload(agent: dict[str, Any], row: dict[str, Any] | None) -
         "prompt_version": str((row or {}).get("prompt_version") or "").strip(),
         "analysis_chain": analysis_chain,
         "report": report,
-        "report_error": str((row or {}).get("report_error") or "").strip(),
+        "report_error": report_error,
         "report_error_code": report_error_code,
         "report_missing_fields": report_missing_fields,
         "required_report_fields": list(RELEASE_REVIEW_REQUIRED_FIELDS),
@@ -508,13 +612,15 @@ def _release_review_payload(agent: dict[str, Any], row: dict[str, Any] | None) -
         "reviewed_at": str((row or {}).get("reviewed_at") or "").strip(),
         "publish_version": str((row or {}).get("publish_version") or "").strip(),
         "publish_status": publish_status,
-        "publish_error": str((row or {}).get("publish_error") or "").strip(),
+        "publish_error": publish_error,
         "execution_logs": execution_logs,
         "fallback": fallback,
         "public_profile_markdown_path": str((row or {}).get("public_profile_markdown_path") or "").strip(),
         "capability_snapshot_json_path": str((row or {}).get("capability_snapshot_json_path") or "").strip(),
         "created_at": str((row or {}).get("created_at") or "").strip(),
         "updated_at": str((row or {}).get("updated_at") or "").strip(),
+        "codex_failure": report_codex_failure,
+        "publish_codex_failure": publish_codex_failure,
         "can_enter": _can_enter_release_review(lifecycle_state, current_state),
         "can_discard": _can_discard_release_review(lifecycle_state, current_state, str((row or {}).get("review_id") or "").strip()),
         "can_review": current_state == "report_ready",

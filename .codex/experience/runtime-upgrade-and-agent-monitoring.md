@@ -8,6 +8,7 @@
 
 ## 稳定经验
 - 长任务 agent 调用不要使用固定总超时。只要子进程仍在正常运行并持续有状态，就继续等待；只有进程异常或无结果且无运行迹象时才判失败。
+- 长耗时验收脚本不能只依赖底层默认 HTTP 超时或静默轮询。只要单步可能超过几十秒，就要补阶段 checkpoint、heartbeat 日志和 partial summary 落盘；否则用户体感会变成“Codex 直接退了”，即使真实问题只是脚本无输出或请求超时。
 - 开发环境验证 agent 调用时，优先通过环境变量覆写注入 mock，并在验收脚本或开发环境内隔离，禁止让 mock 配置进入 `test/prod` 正式链路。
 - 正式升级优先走受支持接口 `POST /api/runtime-upgrade/apply`，由 `scripts/start_workflow_env.ps1` 托管进程接管切换、健康检查与回滚，不要手工拷贝覆盖运行目录。
 - 部署副本启动前，要用 manifest/runtime descriptor 回写 `.runtime` 内的关键配置，尤其是 `agent_search_root`、`artifact_root`、`task_artifact_root`，否则部署副本容易沿用旧路径。
@@ -34,6 +35,10 @@
   - 避免方式：出现这类反馈时，不要继续微调 `padding/gap/max-height`；直接把训练优化 create 态改成创建角色同款的“头部固定 + 中间滚动 + 底部贴底 composer / 右侧 outer panel + inner scroll”结构，再重新截图验证。
 - 坑 8：已经把 `start_workflow_env.ps1` 的升级健康检查超时修到磁盘了，但正式环境仍然继续按旧的 60 秒逻辑回滚，原因不是补丁没生效，而是当前 `prod` supervisor 进程早就把旧脚本加载进内存了。
   - 避免方式：凡是修正式升级 supervisor 逻辑，补丁落盘后都要先重启 `prod` 的 `start_workflow_env.ps1` 进程，再重试 `/api/runtime-upgrade/apply`；不要直接假设现网 supervisor 会热加载脚本改动。
+- 坑 9：角色创建 creating 清理删除链路里，脚本先补做 starter task 的交付/完成，再等待 delete 开放；如果这段没有 heartbeat，十分钟内都可能没有任何输出，外部观察者会误判成“整体退出”。
+  - 避免方式：验收脚本对“本地慢步骤 + 慢 HTTP 请求”都加 heartbeat；同时不要复用底层固定 180 秒 HTTP 超时，改用可配置长超时。
+- 坑 10：验收脚本继续断言“cleanup 后 assignment graph 必须 404”，但产品真实语义已经变成“图可能为空而非物理删除”，会制造假失败。
+  - 避免方式：每次优化产品清理语义后，同步回看 acceptance 断言；只断言用户可感知/契约级结果，不把历史内部实现细节当成稳定门禁。
 
 ## 最小检查清单
 1. 升级前确认 `/api/runtime-upgrade/status` 返回 `can_upgrade=true` 且 `running_task_count=0`。

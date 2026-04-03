@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import uuid
 from datetime import datetime
@@ -64,6 +65,27 @@ DEFECT_STATUS_TEXT = {
 
 DEFECT_PROCESS_ACTION_KIND = "process"
 DEFECT_REVIEW_ACTION_KIND = "review"
+DEFECT_QUEUE_SETTINGS_ID = "default"
+DEFECT_DEFAULT_TASK_PRIORITY = "P1"
+DEFECT_QUEUE_ELIGIBLE_STATUSES = {
+    DEFECT_STATUS_UNRESOLVED,
+    DEFECT_STATUS_DISPUTE,
+}
+DEFECT_QUEUE_TERMINAL_STATUSES = {
+    DEFECT_STATUS_RESOLVED,
+    DEFECT_STATUS_CLOSED,
+}
+_DEFECT_TABLES_READY_ROOTS: set[str] = set()
+DEFECT_QUEUE_SETTINGS_ID = "default"
+DEFECT_DEFAULT_TASK_PRIORITY = "P1"
+DEFECT_QUEUE_ELIGIBLE_STATUSES = {
+    DEFECT_STATUS_UNRESOLVED,
+    DEFECT_STATUS_DISPUTE,
+}
+DEFECT_QUEUE_TERMINAL_STATUSES = {
+    DEFECT_STATUS_RESOLVED,
+    DEFECT_STATUS_CLOSED,
+}
 
 
 def _now_text() -> str:
@@ -83,6 +105,27 @@ def _safe_token(value: Any, *, max_len: int = 160) -> str:
         if ch.isalnum() or ch in {"-", "_", ".", ":"}:
             out.append(ch)
     return "".join(out)
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, column_def: str) -> None:
+    existing = {
+        str((row["name"] if isinstance(row, sqlite3.Row) else row[1]) or "").strip()
+        for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+    if str(column or "").strip() in existing:
+        return
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, column_def: str) -> None:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    existing = {
+        str((row["name"] if isinstance(row, sqlite3.Row) else row[1]) or "").strip()
+        for row in rows
+    }
+    if str(column or "").strip() in existing:
+        return
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
 
 
 def _json_dumps(payload: Any, fallback: str) -> str:
@@ -119,6 +162,180 @@ def _bool_flag(value: Any) -> bool:
         return value
     text = str(value or "").strip().lower()
     return text in {"1", "true", "yes", "y", "on"}
+
+
+def _normalize_task_priority(value: Any, *, default: str = DEFECT_DEFAULT_TASK_PRIORITY) -> str:
+    text = str(value or "").strip().upper()
+    if not text:
+        return str(default or DEFECT_DEFAULT_TASK_PRIORITY).strip().upper() or DEFECT_DEFAULT_TASK_PRIORITY
+    if text.startswith("P") and len(text) == 2 and text[1].isdigit():
+        label = text
+    else:
+        try:
+            label = f"P{int(text)}"
+        except Exception as exc:
+            raise DefectCenterError(
+                400,
+                "task_priority only allows P0/P1/P2/P3 or 0/1/2/3",
+                "defect_task_priority_invalid",
+            ) from exc
+    if label not in {"P0", "P1", "P2", "P3"}:
+        raise DefectCenterError(
+            400,
+            "task_priority only allows P0/P1/P2/P3 or 0/1/2/3",
+            "defect_task_priority_invalid",
+        )
+    return label
+
+
+def _task_priority_rank(value: Any) -> int:
+    label = _normalize_task_priority(value, default=DEFECT_DEFAULT_TASK_PRIORITY)
+    return int(label[1])
+
+
+def _infer_task_priority(
+    report_text: Any,
+    *,
+    decision: dict[str, Any] | None = None,
+    status: Any = "",
+) -> str:
+    combined = " ".join(
+        [
+            str(report_text or "").strip().lower(),
+            str((decision or {}).get("title") or "").strip().lower(),
+            str((decision or {}).get("summary") or "").strip().lower(),
+        ]
+    )
+    if any(token in combined for token in ("崩溃", "卡死", "白屏", "无法", "不能", "不可用", "连接不上", "连不上", "中断", "退出", "消失", "丢失")):
+        return "P0"
+    if any(token in combined for token in ("失败", "报错", "异常", "阻塞", "超时", "不生效", "错位", "遮挡", "回退", "404", "500")):
+        return "P1"
+    if str(status or "").strip().lower() == DEFECT_STATUS_NOT_FORMAL:
+        return "P3"
+    return "P2"
+
+
+_EXPLICIT_PRIORITY_PATTERNS = (
+    re.compile(r"[\[【(]\s*(P[0-3]|[0-3])\s*[\]】)]", re.IGNORECASE),
+    re.compile(r"(?:建议)?优先级\s*[:：]?\s*(P[0-3]|[0-3])\b", re.IGNORECASE),
+)
+
+
+def _extract_explicit_task_priority(
+    value: Any,
+    *,
+    field: str,
+    strict: bool,
+) -> str:
+    text = str(value or "")
+    if not text.strip():
+        return ""
+    for pattern in _EXPLICIT_PRIORITY_PATTERNS:
+        matched = pattern.search(text)
+        if matched is not None:
+            return _normalize_task_priority(matched.group(1), default=DEFECT_DEFAULT_TASK_PRIORITY)
+    if not strict:
+        return ""
+    upper = text.upper()
+    candidates: list[str] = []
+    for matched in re.finditer(r"[\[【(]\s*([^\s\]】)]+)\s*[\]】)]", upper):
+        token = str(matched.group(1) or "").strip()
+        if token.startswith("P"):
+            candidates.append(token)
+    for matched in re.finditer(r"(?:建议)?优先级\s*[:：]?\s*([A-Z0-9]+)\b", upper):
+        token = str(matched.group(1) or "").strip()
+        if token:
+            candidates.append(token)
+    for token in candidates:
+        try:
+            return _normalize_task_priority(token, default=DEFECT_DEFAULT_TASK_PRIORITY)
+        except DefectCenterError as exc:
+            raise DefectCenterError(
+                400,
+                f"{field} contains invalid explicit task_priority",
+                "defect_task_priority_invalid",
+                {"field": field, "explicit_token": token},
+            ) from exc
+    return ""
+
+
+def _resolve_explicit_task_priority(
+    explicit_value: Any,
+    defect_summary: Any,
+    report_text: Any,
+    *,
+    strict: bool,
+) -> tuple[str, str]:
+    explicit_text = str(explicit_value or "").strip()
+    if explicit_text:
+        return _normalize_task_priority(explicit_text, default=DEFECT_DEFAULT_TASK_PRIORITY), "field"
+    for field_name, value in (
+        ("defect_summary", defect_summary),
+        ("report_text", report_text),
+    ):
+        parsed = _extract_explicit_task_priority(value, field=field_name, strict=strict)
+        if parsed:
+            return parsed, field_name
+    return "", ""
+
+
+def _resolve_task_priority_truth(
+    *,
+    explicit_value: Any = "",
+    defect_summary: Any = "",
+    report_text: Any = "",
+    stored_priority: Any = "",
+    decision: dict[str, Any] | None = None,
+    status: Any = "",
+    strict: bool,
+) -> tuple[str, str]:
+    explicit_priority, explicit_source = _resolve_explicit_task_priority(
+        explicit_value,
+        defect_summary,
+        report_text,
+        strict=strict,
+    )
+    if explicit_priority:
+        return explicit_priority, explicit_source
+    fallback = stored_priority or _infer_task_priority(report_text, decision=decision, status=status)
+    return _normalize_task_priority(fallback, default=DEFECT_DEFAULT_TASK_PRIORITY), "inferred"
+
+
+def _normalize_reported_at(value: Any, *, fallback: str = "") -> str:
+    text = str(value or "").strip()
+    if text:
+        return text[:64]
+    return str(fallback or _now_text()).strip()[:64]
+
+
+def _reported_at_sort_text(item: dict[str, Any]) -> str:
+    return str(item.get("reported_at") or item.get("created_at") or "").strip()
+
+
+def _report_sort_key(item: dict[str, Any]) -> tuple[Any, ...]:
+    dts_sequence = int(item.get("dts_sequence") or 0)
+    dts_marker = dts_sequence if dts_sequence > 0 else 10**9
+    return (
+        _task_priority_rank(item.get("task_priority")),
+        _reported_at_sort_text(item),
+        dts_marker,
+        str(item.get("report_id") or "").strip(),
+    )
+
+
+def _defect_order_by_sql() -> str:
+    return (
+        " ORDER BY "
+        "CASE UPPER(COALESCE(task_priority,'')) "
+        "WHEN 'P0' THEN 0 "
+        "WHEN 'P1' THEN 1 "
+        "WHEN 'P2' THEN 2 "
+        "WHEN 'P3' THEN 3 "
+        "ELSE 9 END ASC, "
+        "COALESCE(reported_at,'') ASC, "
+        "CASE WHEN COALESCE(dts_sequence,0)>0 THEN dts_sequence ELSE 1000000000 END ASC, "
+        "COALESCE(report_id,'') ASC"
+    )
 
 
 def _defect_report_id() -> str:
@@ -202,7 +419,11 @@ def _normalize_image_evidence(raw: Any) -> list[dict[str, Any]]:
 
 
 def _ensure_defect_tables(root: Path) -> None:
-    conn = connect_db(root)
+    root_path = Path(root).resolve(strict=False)
+    cache_key = root_path.as_posix()
+    if cache_key in _DEFECT_TABLES_READY_ROOTS:
+        return
+    conn = connect_db(root_path)
     try:
         conn.execute(
             """
@@ -213,6 +434,8 @@ def _ensure_defect_tables(root: Path) -> None:
                 defect_summary TEXT NOT NULL DEFAULT '',
                 report_text TEXT NOT NULL DEFAULT '',
                 evidence_images_json TEXT NOT NULL DEFAULT '[]',
+                task_priority TEXT NOT NULL DEFAULT 'P1',
+                reported_at TEXT NOT NULL DEFAULT '',
                 is_formal INTEGER NOT NULL DEFAULT 0,
                 status TEXT NOT NULL DEFAULT 'not_formal',
                 discovered_iteration TEXT NOT NULL DEFAULT '',
@@ -226,8 +449,13 @@ def _ensure_defect_tables(root: Path) -> None:
             )
             """
         )
+        _ensure_column(conn, "defect_reports", "dts_id", "dts_id TEXT NOT NULL DEFAULT ''")
+        _ensure_column(conn, "defect_reports", "dts_sequence", "dts_sequence INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(conn, "defect_reports", "task_priority", "task_priority TEXT NOT NULL DEFAULT 'P1'")
+        _ensure_column(conn, "defect_reports", "reported_at", "reported_at TEXT NOT NULL DEFAULT ''")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_defect_reports_updated ON defect_reports(updated_at DESC)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_defect_reports_status ON defect_reports(is_formal,status,updated_at DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_defect_reports_queue_sort ON defect_reports(status,task_priority,reported_at,dts_sequence,report_id)")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_defect_reports_dts_id ON defect_reports(dts_id) WHERE dts_id<>''")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_defect_reports_dts_sequence ON defect_reports(dts_sequence) WHERE dts_sequence>0")
         conn.execute(
@@ -261,14 +489,81 @@ def _ensure_defect_tables(root: Path) -> None:
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_defect_task_refs_report_time ON defect_task_refs(report_id,updated_at DESC)")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_defect_task_refs_unique ON defect_task_refs(report_id,ticket_id,focus_node_id,external_request_id)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS defect_queue_settings (
+                settings_id TEXT PRIMARY KEY,
+                sequential_task_creation_enabled INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        _ensure_defect_queue_settings_row(conn)
+        _backfill_defect_report_defaults(conn)
         conn.commit()
     finally:
         conn.close()
+    _DEFECT_TABLES_READY_ROOTS.add(cache_key)
+
+
+def _ensure_defect_queue_settings_row(conn: sqlite3.Connection) -> None:
+    row = conn.execute(
+        "SELECT settings_id FROM defect_queue_settings WHERE settings_id=? LIMIT 1",
+        (DEFECT_QUEUE_SETTINGS_ID,),
+    ).fetchone()
+    if row is not None:
+        return
+    conn.execute(
+        """
+        INSERT INTO defect_queue_settings(settings_id,sequential_task_creation_enabled,updated_at)
+        VALUES (?,?,?)
+        """,
+        (DEFECT_QUEUE_SETTINGS_ID, 0, _now_text()),
+    )
+
+
+def _backfill_defect_report_defaults(conn: sqlite3.Connection) -> None:
+    rows = conn.execute(
+        """
+        SELECT report_id,defect_summary,report_text,current_decision_json,status,task_priority,reported_at,created_at
+        FROM defect_reports
+        WHERE COALESCE(task_priority,'')=''
+           OR COALESCE(reported_at,'')=''
+           OR COALESCE(defect_summary,'') LIKE '%[P%'
+           OR COALESCE(report_text,'') LIKE '%优先级%'
+        """
+    ).fetchall()
+    for row in rows:
+        decision = _json_loads_object(row["current_decision_json"])
+        priority, _source = _resolve_task_priority_truth(
+            defect_summary=row["defect_summary"],
+            report_text=row["report_text"],
+            stored_priority=row["task_priority"],
+            decision=decision,
+            status=row["status"],
+            strict=False,
+        )
+        reported_at = _normalize_reported_at(row["reported_at"], fallback=str(row["created_at"] or "").strip())
+        report_id = str(row["report_id"] or "").strip()
+        if priority != str(row["task_priority"] or "").strip() or reported_at != str(row["reported_at"] or "").strip():
+            conn.execute(
+                "UPDATE defect_reports SET task_priority=?, reported_at=? WHERE report_id=?",
+                (priority, reported_at, report_id),
+            )
 
 
 def _report_row_to_payload(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
     item = dict(row or {})
     status = str(item.get("status") or DEFECT_STATUS_NOT_FORMAL).strip().lower()
+    task_priority, _source = _resolve_task_priority_truth(
+        defect_summary=item.get("defect_summary"),
+        report_text=item.get("report_text"),
+        stored_priority=item.get("task_priority"),
+        decision=_json_loads_object(item.get("current_decision_json")),
+        status=status,
+        strict=False,
+    )
+    reported_at = _normalize_reported_at(item.get("reported_at"), fallback=str(item.get("created_at") or "").strip())
     payload = {
         "report_id": str(item.get("report_id") or "").strip(),
         "dts_id": str(item.get("dts_id") or "").strip(),
@@ -277,6 +572,8 @@ def _report_row_to_payload(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
         "defect_summary": str(item.get("defect_summary") or "").strip(),
         "report_text": str(item.get("report_text") or "").strip(),
         "evidence_images": _normalize_image_evidence(_json_loads_list(item.get("evidence_images_json"))),
+        "task_priority": task_priority,
+        "reported_at": reported_at,
         "is_formal": bool(item.get("is_formal")),
         "status": status,
         "status_text": _status_text(status),
@@ -292,6 +589,7 @@ def _report_row_to_payload(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
     payload["decision_title"] = str(payload["current_decision"].get("title") or "").strip()
     payload["decision_summary"] = str(payload["current_decision"].get("summary") or "").strip()
     payload["decision_source"] = str(payload["current_decision"].get("decision_source") or "").strip()
+    payload["task_ref_total"] = int(item.get("task_ref_total") or 0)
     return payload
 
 
@@ -363,6 +661,201 @@ def _load_task_ref_rows(conn: sqlite3.Connection, report_id: str) -> list[dict[s
         (report_id,),
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+def _load_task_ref_counts(conn: sqlite3.Connection, report_ids: list[str]) -> dict[str, int]:
+    keys = [str(report_id or "").strip() for report_id in report_ids if str(report_id or "").strip()]
+    if not keys:
+        return {}
+    placeholders = ",".join(["?"] * len(keys))
+    rows = conn.execute(
+        f"""
+        SELECT report_id,COUNT(*) AS total
+        FROM defect_task_refs
+        WHERE report_id IN ({placeholders})
+        GROUP BY report_id
+        """,
+        tuple(keys),
+    ).fetchall()
+    return {
+        str(row["report_id"] or "").strip(): int(row["total"] or 0)
+        for row in rows
+    }
+
+
+def _defect_queue_state_payload(root: Path, *, include_test_data: bool = True) -> dict[str, Any]:
+    _ensure_defect_tables(root)
+    conn = connect_db(root)
+    try:
+        enabled_row = conn.execute(
+            """
+            SELECT sequential_task_creation_enabled,updated_at
+            FROM defect_queue_settings
+            WHERE settings_id=?
+            LIMIT 1
+            """,
+            (DEFECT_QUEUE_SETTINGS_ID,),
+        ).fetchone()
+        enabled = bool(enabled_row["sequential_task_creation_enabled"]) if enabled_row is not None else False
+        updated_at = str(enabled_row["updated_at"] or "").strip() if enabled_row is not None else ""
+        sql = "SELECT * FROM defect_reports WHERE status IN (?,?)"
+        params: list[Any] = [DEFECT_STATUS_UNRESOLVED, DEFECT_STATUS_DISPUTE]
+        if not include_test_data:
+            sql += " AND is_test_data=0"
+        rows = conn.execute(sql, tuple(params)).fetchall()
+        counts = _load_task_ref_counts(conn, [str(row["report_id"] or "").strip() for row in rows])
+    finally:
+        conn.close()
+    candidates = []
+    for row in rows:
+        payload = _report_row_to_payload({**dict(row), "task_ref_total": counts.get(str(row["report_id"] or "").strip(), 0)})
+        payload["queue_eligible"] = payload["status"] in DEFECT_QUEUE_ELIGIBLE_STATUSES
+        if payload["queue_eligible"]:
+            candidates.append(payload)
+    candidates.sort(key=_report_sort_key)
+    active = next((item for item in candidates if int(item.get("task_ref_total") or 0) > 0), None)
+    next_pending = next(
+        (
+            item
+            for item in candidates
+            if str(item.get("report_id") or "").strip() != str((active or {}).get("report_id") or "").strip()
+            and int(item.get("task_ref_total") or 0) <= 0
+        ),
+        None,
+    )
+    head_candidate = candidates[0] if candidates else None
+    return {
+        "enabled": enabled,
+        "updated_at": updated_at,
+        "candidate_total": len(candidates),
+        "active_slot_busy": bool(active),
+        "head_report_id": str((head_candidate or {}).get("report_id") or "").strip(),
+        "active_report_id": str((active or {}).get("report_id") or "").strip(),
+        "active_display_id": str((active or {}).get("display_id") or "").strip(),
+        "active_summary": str((active or {}).get("defect_summary") or "").strip(),
+        "active_task_priority": str((active or {}).get("task_priority") or "").strip(),
+        "next_report_id": str((next_pending or {}).get("report_id") or "").strip(),
+        "next_display_id": str((next_pending or {}).get("display_id") or "").strip(),
+        "next_summary": str((next_pending or {}).get("defect_summary") or "").strip(),
+        "next_task_priority": str((next_pending or {}).get("task_priority") or "").strip(),
+        "next_reported_at": str((next_pending or {}).get("reported_at") or "").strip(),
+    }
+
+
+def _annotate_report_queue_state(
+    report: dict[str, Any],
+    *,
+    queue_state: dict[str, Any],
+) -> dict[str, Any]:
+    payload = dict(report or {})
+    report_id = str(payload.get("report_id") or "").strip()
+    task_ref_total = int(payload.get("task_ref_total") or 0)
+    queue_eligible = str(payload.get("status") or "").strip().lower() in DEFECT_QUEUE_ELIGIBLE_STATUSES
+    queue_enabled = bool(queue_state.get("enabled"))
+    active_report_id = str(queue_state.get("active_report_id") or "").strip()
+    next_report_id = str(queue_state.get("next_report_id") or "").strip()
+    if queue_eligible and report_id and report_id == active_report_id:
+        queue_mode = "active"
+        queue_mode_text = "当前主动处理位"
+    elif queue_eligible and not queue_enabled:
+        queue_mode = "manual"
+        queue_mode_text = "手动建单模式"
+    elif queue_eligible and report_id and report_id == next_report_id:
+        queue_mode = "next"
+        queue_mode_text = "下一条待建单"
+    elif queue_eligible:
+        queue_mode = "queued"
+        queue_mode_text = "排队中"
+    else:
+        queue_mode = "out_of_queue"
+        queue_mode_text = "不在顺序建单队列"
+    payload["queue_eligible"] = queue_eligible
+    payload["has_task_chain"] = task_ref_total > 0
+    payload["queue_mode"] = queue_mode
+    payload["queue_mode_text"] = queue_mode_text
+    return payload
+
+
+def get_defect_queue_state(root: Path, *, include_test_data: bool = True) -> dict[str, Any]:
+    return _defect_queue_state_payload(root, include_test_data=include_test_data)
+
+
+def _defect_manual_task_gate(
+    root: Path,
+    report_id: str,
+    *,
+    include_test_data: bool = True,
+) -> dict[str, Any]:
+    queue_state = get_defect_queue_state(root, include_test_data=include_test_data)
+    if not bool(queue_state.get("enabled")):
+        return {"allowed": True, "queue": queue_state, "reason": "manual_mode"}
+    active_report_id = str(queue_state.get("active_report_id") or "").strip()
+    target_report_id = str(report_id or "").strip()
+    if active_report_id and active_report_id != target_report_id:
+        return {
+            "allowed": False,
+            "queue": queue_state,
+            "reason": "active_slot_busy",
+            "active_report_id": active_report_id,
+        }
+    head_report_id = str(queue_state.get("head_report_id") or "").strip()
+    if not active_report_id and head_report_id and head_report_id != target_report_id:
+        return {
+            "allowed": False,
+            "queue": queue_state,
+            "reason": "not_queue_head",
+            "head_report_id": head_report_id,
+        }
+    return {"allowed": True, "queue": queue_state, "reason": "queue_gate_pass"}
+
+
+def set_defect_queue_mode(
+    cfg: Any,
+    *,
+    enabled: bool,
+) -> dict[str, Any]:
+    root = Path(cfg.root)
+    _ensure_defect_tables(root)
+    now_text = _now_text()
+    conn = connect_db(root)
+    try:
+        conn.execute("BEGIN")
+        _ensure_defect_queue_settings_row(conn)
+        conn.execute(
+            """
+            UPDATE defect_queue_settings
+            SET sequential_task_creation_enabled=?, updated_at=?
+            WHERE settings_id=?
+            """,
+            (1 if enabled else 0, now_text, DEFECT_QUEUE_SETTINGS_ID),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return get_defect_queue_state(root, include_test_data=True)
+
+
+def ensure_defect_auto_queue(
+    cfg: Any,
+    *,
+    include_test_data: bool = True,
+) -> dict[str, Any]:
+    root = Path(cfg.root)
+    queue_state = get_defect_queue_state(root, include_test_data=include_test_data)
+    if (not bool(queue_state.get("enabled"))) or bool(queue_state.get("active_slot_busy")):
+        return queue_state
+    head_report_id = str(queue_state.get("head_report_id") or "").strip()
+    if not head_report_id:
+        return queue_state
+    detail = get_defect_detail(root, head_report_id, include_test_data=include_test_data)
+    report = dict(detail.get("report") or {})
+    status = str(report.get("status") or "").strip().lower()
+    body = {"operator": "defect-auto-queue", "auto_queue": True}
+    if status == DEFECT_STATUS_DISPUTE:
+        create_defect_review_task(cfg, head_report_id, body, include_test_data=include_test_data)
+    elif status == DEFECT_STATUS_UNRESOLVED:
+        create_defect_process_task(cfg, head_report_id, body, include_test_data=include_test_data)
+    return get_defect_queue_state(root, include_test_data=include_test_data)
 
 
 def _next_dts_identity(conn: sqlite3.Connection) -> tuple[int, str]:
@@ -451,52 +944,134 @@ def _default_assignee(cfg: Any) -> str:
     return names[0]
 
 
-def _enrich_task_ref(root: Path, row: dict[str, Any], *, include_test_data: bool) -> dict[str, Any]:
-    payload = {
-        "ref_id": str(row.get("ref_id") or "").strip(),
-        "report_id": str(row.get("report_id") or "").strip(),
-        "ticket_id": str(row.get("ticket_id") or "").strip(),
-        "focus_node_id": str(row.get("focus_node_id") or "").strip(),
-        "action_kind": str(row.get("action_kind") or "").strip(),
-        "title": str(row.get("title") or "").strip(),
-        "external_request_id": str(row.get("external_request_id") or "").strip(),
-        "created_at": str(row.get("created_at") or "").strip(),
-        "updated_at": str(row.get("updated_at") or "").strip(),
-        "graph_name": "",
-        "scheduler_state": "",
-        "scheduler_state_text": "",
-        "node_name": "",
-        "node_status": "",
-        "node_status_text": "",
-    }
-    ticket_id = payload["ticket_id"]
-    if not ticket_id:
-        return payload
-    try:
-        overview = assignment_service.get_assignment_overview(root, ticket_id, include_test_data=include_test_data)
-        graph = dict(overview.get("graph") or {})
-        payload["graph_name"] = str(graph.get("graph_name") or graph.get("ticket_id") or "").strip()
-        payload["scheduler_state"] = str(graph.get("scheduler_state") or "").strip()
-        payload["scheduler_state_text"] = str(graph.get("scheduler_state_text") or "").strip()
-    except Exception:
-        return payload
-    node_id = payload["focus_node_id"]
-    if not node_id:
-        return payload
-    try:
-        status_detail = assignment_service.get_assignment_status_detail(
-            root,
-            ticket_id,
-            node_id_text=node_id,
-            include_test_data=include_test_data,
+class _DefectTaskRefEnricher:
+    def __init__(self, root: Path, *, include_test_data: bool) -> None:
+        self.root = Path(root)
+        self.include_test_data = bool(include_test_data)
+        self._snapshot_cache: dict[str, dict[str, Any]] = {}
+        self._detail_cache: dict[tuple[str, str], dict[str, Any]] = {}
+
+    def _snapshot(self, ticket_id: str) -> dict[str, Any]:
+        cache_key = str(ticket_id or "").strip()
+        cached = self._snapshot_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        snapshot = assignment_service._assignment_snapshot_from_files(
+            self.root,
+            cache_key,
+            include_test_data=self.include_test_data,
+            reconcile_running=True,
+            include_scheduler=False,
+            include_serialized_nodes=False,
         )
-        selected_node = dict(status_detail.get("selected_node") or {})
-        payload["node_name"] = str(selected_node.get("node_name") or node_id).strip()
-        payload["node_status"] = str(selected_node.get("status") or "").strip()
-        payload["node_status_text"] = str(selected_node.get("status_text") or "").strip()
-    except Exception:
-        payload["node_name"] = node_id
-    return payload
+        self._snapshot_cache[cache_key] = snapshot
+        return snapshot
+
+    def _audit_refs(self, ticket_id: str, node_id: str) -> list[dict[str, Any]]:
+        audit_refs = []
+        for row in assignment_service._assignment_load_audit_records(
+            self.root,
+            ticket_id=ticket_id,
+            node_id=node_id,
+            limit=12,
+        ):
+            audit_refs.append(
+                {
+                    "audit_id": str(row.get("audit_id") or "").strip(),
+                    "action": str(row.get("action") or "").strip(),
+                    "operator": str(row.get("operator") or "").strip(),
+                    "reason": str(row.get("reason") or "").strip(),
+                    "target_status": str(row.get("target_status") or "").strip(),
+                    "ref": str(row.get("ref") or "").strip(),
+                    "created_at": str(row.get("created_at") or "").strip(),
+                    "detail": dict(row.get("detail") or {}),
+                }
+            )
+        return audit_refs
+
+    def _detail_payload(self, ticket_id: str, node_id: str) -> dict[str, Any]:
+        cache_key = (str(ticket_id or "").strip(), str(node_id or "").strip())
+        cached = self._detail_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        snapshot = self._snapshot(cache_key[0])
+        graph_row = dict(snapshot.get("graph_row") or {})
+        selected_node = snapshot["node_map_by_id"].get(cache_key[1]) or (snapshot["nodes"][0] if snapshot["nodes"] else {})
+        selected_serialized = (
+            assignment_service._serialize_node(
+                selected_node,
+                node_map_by_id=snapshot["node_map_by_id"],
+                upstream_map=snapshot["upstream_map"],
+                downstream_map=snapshot["downstream_map"],
+            )
+            if selected_node
+            else {}
+        )
+        blocking_reasons = list(selected_serialized.get("blocking_reasons") or [])
+        available_actions = assignment_service._assignment_management_actions(
+            selected_serialized,
+            blocking_reasons=blocking_reasons,
+        )
+        if isinstance(selected_serialized, dict) and selected_serialized:
+            selected_serialized["management_actions"] = list(available_actions)
+        payload = {
+            "graph_name": str(graph_row.get("graph_name") or graph_row.get("ticket_id") or "").strip(),
+            "scheduler_state": str(graph_row.get("scheduler_state") or "").strip().lower(),
+            "scheduler_state_text": assignment_service._scheduler_state_text(graph_row.get("scheduler_state") or "idle"),
+            "selected_node": selected_serialized,
+            "available_actions": list(available_actions),
+            "audit_refs": self._audit_refs(
+                cache_key[0],
+                str(selected_serialized.get("node_id") or cache_key[1]).strip(),
+            ) if selected_serialized else [],
+            "blocking_reasons": blocking_reasons,
+            "node_name": str(selected_serialized.get("node_name") or cache_key[1]).strip(),
+            "node_status": str(selected_serialized.get("status") or "").strip(),
+            "node_status_text": str(selected_serialized.get("status_text") or "").strip(),
+        }
+        self._detail_cache[cache_key] = payload
+        return payload
+
+    def enrich_row(self, row: dict[str, Any]) -> dict[str, Any]:
+        payload = {
+            "ref_id": str(row.get("ref_id") or "").strip(),
+            "report_id": str(row.get("report_id") or "").strip(),
+            "ticket_id": str(row.get("ticket_id") or "").strip(),
+            "focus_node_id": str(row.get("focus_node_id") or "").strip(),
+            "action_kind": str(row.get("action_kind") or "").strip(),
+            "title": str(row.get("title") or "").strip(),
+            "external_request_id": str(row.get("external_request_id") or "").strip(),
+            "created_at": str(row.get("created_at") or "").strip(),
+            "updated_at": str(row.get("updated_at") or "").strip(),
+            "graph_name": "",
+            "scheduler_state": "",
+            "scheduler_state_text": "",
+            "node_name": "",
+            "node_status": "",
+            "node_status_text": "",
+            "selected_node": {},
+            "available_actions": [],
+            "audit_refs": [],
+            "blocking_reasons": [],
+        }
+        ticket_id = payload["ticket_id"]
+        if not ticket_id:
+            return payload
+        try:
+            payload.update(self._detail_payload(ticket_id, payload["focus_node_id"]))
+        except Exception:
+            if payload["focus_node_id"]:
+                payload["node_name"] = payload["focus_node_id"]
+        return payload
+
+
+def _enrich_task_ref(root: Path, row: dict[str, Any], *, include_test_data: bool) -> dict[str, Any]:
+    return _DefectTaskRefEnricher(root, include_test_data=include_test_data).enrich_row(row)
+
+
+def _enrich_task_refs(root: Path, rows: list[dict[str, Any]], *, include_test_data: bool) -> list[dict[str, Any]]:
+    enricher = _DefectTaskRefEnricher(root, include_test_data=include_test_data)
+    return [enricher.enrich_row(item) for item in list(rows or [])]
 
 
 def list_defect_reports(
@@ -505,43 +1080,66 @@ def list_defect_reports(
     include_test_data: bool = True,
     status_filter: str = "",
     keyword: str = "",
-    limit: int = 200,
+    limit: int = 100,
+    offset: int = 0,
 ) -> dict[str, Any]:
     _ensure_defect_tables(root)
-    limit_value = max(1, min(500, int(limit or 200)))
+    limit_value = max(1, min(200, int(limit or 100)))
+    offset_value = max(0, int(offset or 0))
     status_key = str(status_filter or "").strip().lower()
     keyword_text = str(keyword or "").strip().lower()
-    sql = "SELECT * FROM defect_reports WHERE 1=1"
+    sql = " FROM defect_reports WHERE 1=1"
     params: list[Any] = []
     if not include_test_data:
         sql += " AND is_test_data=0"
     if status_key and status_key != "all":
         sql += " AND status=?"
         params.append(status_key)
-    sql += " ORDER BY updated_at DESC, created_at DESC, report_id DESC LIMIT ?"
-    params.append(limit_value)
+    if keyword_text:
+        keyword_like = f"%{keyword_text}%"
+        sql += (
+            " AND ("
+            "LOWER(COALESCE(report_id,'')) LIKE ?"
+            " OR LOWER(COALESCE(dts_id,'')) LIKE ?"
+            " OR LOWER(COALESCE(defect_summary,'')) LIKE ?"
+            " OR LOWER(COALESCE(report_text,'')) LIKE ?"
+            " OR LOWER(COALESCE(current_decision_json,'')) LIKE ?"
+            ")"
+        )
+        params.extend([keyword_like] * 5)
     conn = connect_db(root)
     try:
-        rows = conn.execute(sql, tuple(params)).fetchall()
-        items = [_report_row_to_payload(row) for row in rows]
-        if keyword_text:
-            items = [
-                item
-                for item in items
-                if keyword_text in "\n".join(
-                    [
-                        str(item.get("report_id") or ""),
-                        str(item.get("dts_id") or ""),
-                        str(item.get("defect_summary") or ""),
-                        str(item.get("report_text") or ""),
-                        str(item.get("decision_title") or ""),
-                        str(item.get("decision_summary") or ""),
-                    ]
-                ).lower()
-            ]
-        return {"items": items, "total": len(items), "status_filter": status_key, "keyword": keyword_text}
+        total_row = conn.execute("SELECT COUNT(*) AS total" + sql, tuple(params)).fetchone()
+        total = int(total_row["total"] if total_row is not None and total_row["total"] is not None else 0)
+        page_rows = conn.execute(
+            "SELECT *" + sql + _defect_order_by_sql() + " LIMIT ? OFFSET ?",
+            (*params, limit_value, offset_value),
+        ).fetchall()
+        count_map = _load_task_ref_counts(conn, [str(row["report_id"] or "").strip() for row in page_rows])
     finally:
         conn.close()
+    queue_state = get_defect_queue_state(root, include_test_data=include_test_data)
+    items = [
+        _annotate_report_queue_state(
+            _report_row_to_payload({**dict(row), "task_ref_total": count_map.get(str(row["report_id"] or "").strip(), 0)}),
+            queue_state=queue_state,
+        )
+        for row in page_rows
+    ]
+    returned = len(items)
+    next_offset = offset_value + returned
+    return {
+        "items": items,
+        "total": total,
+        "returned": returned,
+        "offset": offset_value,
+        "limit": limit_value,
+        "next_offset": next_offset,
+        "has_more": next_offset < total,
+        "status_filter": status_key,
+        "keyword": keyword_text,
+        "queue": queue_state,
+    }
 
 
 def get_defect_detail(
@@ -555,20 +1153,25 @@ def get_defect_detail(
     conn = connect_db(root)
     try:
         row = _load_report_row(conn, report_key, include_test_data=include_test_data)
-        report = _report_row_to_payload(row)
+        task_ref_rows = _load_task_ref_rows(conn, report_key)
+        report = _report_row_to_payload({**dict(row), "task_ref_total": len(task_ref_rows)})
         history = _load_history_rows(conn, report_key)
-        task_refs = [_enrich_task_ref(root, item, include_test_data=include_test_data) for item in _load_task_ref_rows(conn, report_key)]
+        task_refs = _enrich_task_refs(root, task_ref_rows, include_test_data=include_test_data)
     finally:
         conn.close()
+    queue_state = get_defect_queue_state(root, include_test_data=include_test_data)
+    report = _annotate_report_queue_state(report, queue_state=queue_state)
+    queue_enabled = bool(queue_state.get("enabled"))
     return {
         "report": report,
         "history": history,
         "task_refs": task_refs,
         "history_total": len(history),
         "task_ref_total": len(task_refs),
+        "queue": queue_state,
         "show_re_review_input": report["status"] in {DEFECT_STATUS_DISPUTE, DEFECT_STATUS_RESOLVED, DEFECT_STATUS_NOT_FORMAL},
-        "can_process": bool(report["is_formal"]) and report["status"] in {DEFECT_STATUS_UNRESOLVED, DEFECT_STATUS_DISPUTE},
-        "can_review": report["status"] in {DEFECT_STATUS_DISPUTE, DEFECT_STATUS_RESOLVED, DEFECT_STATUS_NOT_FORMAL},
+        "can_process": (not queue_enabled) and bool(report["is_formal"]) and report["status"] in {DEFECT_STATUS_UNRESOLVED, DEFECT_STATUS_DISPUTE},
+        "can_review": (not queue_enabled) and report["status"] in {DEFECT_STATUS_DISPUTE, DEFECT_STATUS_RESOLVED, DEFECT_STATUS_NOT_FORMAL},
         "can_close": report["status"] == DEFECT_STATUS_RESOLVED,
     }
 
@@ -580,7 +1183,12 @@ def get_defect_history(
     include_test_data: bool = True,
 ) -> dict[str, Any]:
     detail = get_defect_detail(root, report_id, include_test_data=include_test_data)
-    return {"report_id": str(detail["report"]["report_id"]), "history": list(detail["history"]), "total": len(detail["history"])}
+    return {
+        "report_id": str(detail["report"]["report_id"]),
+        "history": list(detail["history"]),
+        "total": len(detail["history"]),
+        "queue": dict(detail.get("queue") or {}),
+    }
 
 
 def _write_report_update(
@@ -589,6 +1197,8 @@ def _write_report_update(
     *,
     status: str | None = None,
     is_formal: bool | None = None,
+    task_priority: str | None = None,
+    reported_at: str | None = None,
     discovered_iteration: str | None = None,
     resolved_version: str | None = None,
     current_decision: dict[str, Any] | None = None,
@@ -597,18 +1207,28 @@ def _write_report_update(
     row = _load_report_row(conn, report_id, include_test_data=True)
     next_status = str(status if status is not None else row["status"] or "").strip().lower()
     next_is_formal = bool(row["is_formal"] if is_formal is None else is_formal)
+    next_task_priority = _normalize_task_priority(
+        task_priority if task_priority is not None else row["task_priority"],
+        default=DEFECT_DEFAULT_TASK_PRIORITY,
+    )
+    next_reported_at = _normalize_reported_at(
+        reported_at if reported_at is not None else row["reported_at"],
+        fallback=str(row["created_at"] or "").strip(),
+    )
     next_discovered = str(row["discovered_iteration"] or "").strip() if discovered_iteration is None else str(discovered_iteration or "").strip()
     next_resolved = str(row["resolved_version"] or "").strip() if resolved_version is None else str(resolved_version or "").strip()
     next_decision = _json_loads_object(row["current_decision_json"]) if current_decision is None else dict(current_decision or {})
     conn.execute(
         """
         UPDATE defect_reports
-        SET status=?, is_formal=?, discovered_iteration=?, resolved_version=?, current_decision_json=?, updated_at=?
+        SET status=?, is_formal=?, task_priority=?, reported_at=?, discovered_iteration=?, resolved_version=?, current_decision_json=?, updated_at=?
         WHERE report_id=?
         """,
         (
             next_status,
             1 if next_is_formal else 0,
+            next_task_priority,
+            next_reported_at,
             next_discovered,
             next_resolved,
             _json_dumps(next_decision, "{}"),
@@ -670,4 +1290,5 @@ from .defect_service_record_commands import (  # noqa: E402
 from .defect_service_task_commands import (  # noqa: E402
     create_defect_process_task,
     create_defect_review_task,
+    repair_defect_assignment_state,
 )

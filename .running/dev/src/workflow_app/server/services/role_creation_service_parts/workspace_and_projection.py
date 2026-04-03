@@ -1,6 +1,6 @@
 def _workspace_dir_name(role_name: str) -> str:
     raw = _normalize_text(role_name, max_len=60) or "new-agent"
-    safe_name = re.sub(r'[<>:"/\\\\|?*\\x00-\\x1f]+', "-", raw).strip().strip(".")
+    safe_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "-", raw).strip().strip(".")
     return safe_name or f"new-agent-{uuid.uuid4().hex[:6]}"
 
 
@@ -386,51 +386,101 @@ def _current_agent_runtime_payload(root: Path, agent_id: str) -> dict[str, Any]:
     }
 
 
+def _role_creation_expected_artifact_name(raw_name: str, *, fallback: str, suffix: str = ".html") -> str:
+    name = safe_token(raw_name, fallback, 80).replace("_", "-").strip("-") or fallback
+    return name + suffix
+
+
 def _starter_task_blueprint(role_spec: dict[str, Any], *, agent_id: str, agent_name: str) -> list[dict[str, Any]]:
     role_name = _role_creation_title_from_spec(role_spec, "")
     ts_suffix = uuid.uuid4().hex[:6]
-    items = [
-        {
-            "stage_key": "persona_collection",
-            "stage_index": 2,
-            "node_id": f"rc-{ts_suffix}-collect",
-            "node_name": f"收集{role_name or '新角色'}行业案例资料",
-            "node_goal": f"围绕{role_name or '新角色'}收集真实案例、参考材料和约束依据，作为后续画像收口输入。",
-            "expected_artifact": "行业案例资料汇总.html",
-            "priority": "P0",
-            "upstream_node_ids": [],
-        },
-        {
-            "stage_key": "persona_collection",
-            "stage_index": 2,
-            "node_id": f"rc-{ts_suffix}-profile",
-            "node_name": f"沉淀{role_name or '新角色'}角色画像资料",
-            "node_goal": f"把当前对话收口为{role_name or '新角色'}的角色画像、边界和协作说明。",
-            "expected_artifact": "角色画像资料包.html",
-            "priority": "P0",
-            "upstream_node_ids": [f"rc-{ts_suffix}-collect"],
-        },
-        {
-            "stage_key": "capability_generation",
-            "stage_index": 3,
-            "node_id": f"rc-{ts_suffix}-capability",
-            "node_name": f"生成{role_name or '新角色'}能力样例草案",
-            "node_goal": f"根据画像资料生成{role_name or '新角色'}的关键能力样例和执行模板。",
-            "expected_artifact": "能力样例草案.html",
-            "priority": "P1",
-            "upstream_node_ids": [f"rc-{ts_suffix}-profile"],
-        },
+    seed_delivery_plan = dict(role_spec.get("seed_delivery_plan") or {})
+    knowledge_asset_plan = dict(role_spec.get("knowledge_asset_plan") or {})
+    task_suggestions = [dict(item) for item in list(seed_delivery_plan.get("task_suggestions") or []) if isinstance(item, dict)]
+    capability_objects = [dict(item) for item in list(seed_delivery_plan.get("capability_objects") or []) if isinstance(item, dict)]
+    knowledge_assets = [dict(item) for item in list(knowledge_asset_plan.get("assets") or []) if isinstance(item, dict)]
+    items: list[dict[str, Any]] = []
+    previous_node_ids: list[str] = []
+
+    persona_suggestions = [item for item in task_suggestions if str(item.get("stage_key") or "").strip() == "persona_collection"]
+    if not persona_suggestions and knowledge_assets:
+        for asset in knowledge_assets[:2]:
+            topic = str(asset.get("asset_topic") or "").strip()
+            asset_type = str(asset.get("asset_type") or "").strip()
+            persona_suggestions.append(
+                {
+                    "task_name": f"沉淀{topic}{asset_type}",
+                    "linked_target": topic,
+                    "task_type": "knowledge_asset",
+                    "priority": str(asset.get("priority") or "P0").strip() or "P0",
+                }
+            )
+    for index, suggestion in enumerate(persona_suggestions[:2], start=1):
+        task_name = str(suggestion.get("task_name") or "").strip() or f"沉淀{role_name or '新角色'}知识资产"
+        linked_target = str(suggestion.get("linked_target") or "").strip() or role_name or "当前角色"
+        node_id = f"rc-{ts_suffix}-persona-{index}"
+        items.append(
+            {
+                "stage_key": "persona_collection",
+                "stage_index": 2,
+                "node_id": node_id,
+                "node_name": task_name,
+                "node_goal": f"围绕{linked_target}整理首批资料、方法说明和约束依据，并回传结构化摘要。",
+                "expected_artifact": _role_creation_expected_artifact_name(task_name, fallback=f"persona-{index}"),
+                "priority": str(suggestion.get("priority") or "P0").strip() or "P0",
+                "upstream_node_ids": list(previous_node_ids),
+            }
+        )
+        previous_node_ids = [node_id]
+
+    capability_suggestions = [item for item in task_suggestions if str(item.get("stage_key") or "").strip() == "capability_generation"]
+    if not capability_suggestions and capability_objects:
+        for capability in capability_objects[:3]:
+            capability_name = str(capability.get("capability_name") or "").strip()
+            capability_suggestions.append(
+                {
+                    "task_name": f"生成{capability_name}能力对象",
+                    "linked_target": capability_name,
+                    "task_type": "capability_object",
+                    "priority": "P0",
+                }
+            )
+    for index, suggestion in enumerate(capability_suggestions[:3], start=1):
+        task_name = str(suggestion.get("task_name") or "").strip() or f"生成{role_name or '新角色'}能力对象"
+        linked_target = str(suggestion.get("linked_target") or "").strip() or role_name or "当前角色"
+        node_id = f"rc-{ts_suffix}-capability-{index}"
+        items.append(
+            {
+                "stage_key": "capability_generation",
+                "stage_index": 3,
+                "node_id": node_id,
+                "node_name": task_name,
+                "node_goal": f"基于{linked_target}生成首批能力对象、执行模板和最小验收示例。",
+                "expected_artifact": _role_creation_expected_artifact_name(task_name, fallback=f"capability-{index}"),
+                "priority": str(suggestion.get("priority") or "P1").strip() or "P1",
+                "upstream_node_ids": list(previous_node_ids),
+            }
+        )
+        previous_node_ids = [node_id]
+
+    review_target = ""
+    if capability_objects:
+        review_target = str(capability_objects[0].get("capability_name") or "").strip()
+    elif knowledge_assets:
+        review_target = str(knowledge_assets[0].get("asset_topic") or "").strip()
+    review_name = f"回看{review_target or (role_name or '新角色')}首批交付"
+    items.append(
         {
             "stage_key": "review_and_alignment",
             "stage_index": 4,
             "node_id": f"rc-{ts_suffix}-review",
-            "node_name": f"整理{role_name or '新角色'}回看材料",
-            "node_goal": f"整理{role_name or '新角色'}的样例结果、预览截图和回看摘要，便于当前会话验收。",
-            "expected_artifact": "回看材料包.html",
+            "node_name": review_name,
+            "node_goal": f"整理{review_target or (role_name or '新角色')}的首批能力对象、知识沉淀和回看摘要，便于当前会话验收。",
+            "expected_artifact": _role_creation_expected_artifact_name(review_name, fallback="review"),
             "priority": "P1",
-            "upstream_node_ids": [f"rc-{ts_suffix}-capability"],
-        },
-    ]
+            "upstream_node_ids": list(previous_node_ids),
+        }
+    )
     return [
         {
             "node_id": str(item["node_id"]),
@@ -561,11 +611,13 @@ def _project_stages(
     preferred_stage_key = str(session_summary.get("current_stage_key") or "").strip().lower()
     if session_summary.get("status") == "completed":
         current_stage_key = "complete_creation"
+    elif str(session_summary.get("workspace_init_status") or "").strip() != "completed":
+        current_stage_key = "workspace_init"
     elif preferred_stage_key in ROLE_CREATION_STAGE_BY_KEY:
         current_stage_key = preferred_stage_key
     else:
         current_stage_key = auto_stage_key
-    current_stage_index = int((ROLE_CREATION_STAGE_BY_KEY.get(current_stage_key) or {}).get("index") or 2)
+    current_stage_index = int((ROLE_CREATION_STAGE_BY_KEY.get(current_stage_key) or {}).get("index") or 1)
     stage_rows: list[dict[str, Any]] = []
     archive_total = 0
     active_total = 0
@@ -636,6 +688,11 @@ def _project_stages(
 
 
 def _role_profile_payload(role_spec: dict[str, Any], missing_fields: list[str], session_summary: dict[str, Any]) -> dict[str, Any]:
+    start_gate = dict(role_spec.get("start_gate") or {})
+    role_profile_spec = dict(role_spec.get("role_profile_spec") or {})
+    capability_package_spec = dict(role_spec.get("capability_package_spec") or {})
+    knowledge_asset_plan = dict(role_spec.get("knowledge_asset_plan") or {})
+    seed_delivery_plan = dict(role_spec.get("seed_delivery_plan") or {})
     return {
         "role_name": _role_creation_title_from_spec(role_spec, session_summary.get("session_title") or ""),
         "role_goal": _normalize_text(role_spec.get("role_goal"), max_len=280),
@@ -646,5 +703,17 @@ def _role_profile_payload(role_spec: dict[str, Any], missing_fields: list[str], 
         "example_assets": list(role_spec.get("example_assets") or []),
         "missing_fields": list(missing_fields),
         "missing_labels": _missing_field_labels(missing_fields),
-        "can_start": _session_can_start(role_spec),
+        "can_start": bool(start_gate.get("can_start")) if start_gate else _session_can_start(role_spec),
+        "profile_ready": bool(start_gate.get("profile_ready")),
+        "capability_package_ready": bool(start_gate.get("capability_package_ready")),
+        "knowledge_asset_ready": bool(start_gate.get("knowledge_asset_ready")),
+        "seed_delivery_ready": bool(start_gate.get("seed_delivery_ready")),
+        "start_gate": start_gate,
+        "start_gate_blockers": [str(item).strip() for item in list(start_gate.get("blockers") or []) if str(item).strip()],
+        "role_profile_spec": role_profile_spec,
+        "capability_package_spec": capability_package_spec,
+        "knowledge_asset_plan": knowledge_asset_plan,
+        "seed_delivery_plan": seed_delivery_plan,
+        "recent_changes": list(role_spec.get("recent_changes") or []),
+        "pending_questions": list(role_spec.get("pending_questions") or []),
     }

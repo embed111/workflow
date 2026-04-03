@@ -4,5 +4,6 @@
   "workspace_and_projection.py",
   "analyst_bridge.py",
   "session_queries_and_internal_tasks.py",
+  "role_creation_message_runtime.py",
   "session_commands.py"
 ]

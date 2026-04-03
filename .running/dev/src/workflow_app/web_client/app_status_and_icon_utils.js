@@ -78,6 +78,19 @@
     currentAgentSearchRoot: '',
     agentSearchRootReady: false,
     agentSearchRootError: '',
+    pmWorkspacePath: '',
+    pmWorkspaceExists: false,
+    codeRootPath: '',
+    codeRootReady: false,
+    codeRootError: '',
+    codeRootIsGitRepo: false,
+    developmentWorkspaceRoot: '',
+    agentRuntimeRoot: '',
+    workspaceBoundaryReady: false,
+    workspaceBoundaryError: '',
+    developerWorkspaceRegistryPath: '',
+    developerWorkspaceCount: 0,
+    developerWorkspaces: [],
     agentDropdownOpen: false,
     agentDropdownPanelWidth: 0,
     policyConfirmGateOpen: false,
@@ -112,6 +125,7 @@
     tcLoopSelectedNodeId: '',
     tcLoopCreateTab: 'basic', // basic | workset | launch
     tcLoopStatusTab: 'overview', // overview | workset | eval | history
+    tcLoopRightTab: 'tasks', // tasks | baseline
     tcLoopQueueFilter: 'all',
     tcLoopRoundIndexByQueueTaskId: {},
     tcLoopQueryApplied: false,
@@ -127,11 +141,14 @@
     tcRoleCreationLoading: false,
     tcRoleCreationError: '',
     tcRoleCreationOptimisticMessages: {},
+    tcRoleCreationMessagesRenderedSessionId: '',
     tcRoleCreationPoller: 0,
     tcRoleCreationPollBusy: false,
     tcRoleCreationDetailTab: 'evolution',
     tcRoleCreationDraftAttachments: [],
     tcRoleCreationDraftCollapsed: false,
+    tcRoleCreationQuery: '',
+    tcRoleCreationStatusFilter: 'all',
     tcRoleCreationTaskPreview: {
       kind: '',
       stage_key: '',
@@ -147,10 +164,23 @@
     defectDetailLoading: false,
     defectError: '',
     defectSubmitError: '',
+    defectQueueSummary: null,
+    defectQueueSaving: false,
     defectStatusFilter: 'all',
     defectKeyword: '',
+    defectComposerCollapsed: false,
+    defectComposerTouched: false,
+    defectListTotal: 0,
+    defectListLimit: 20,
+    defectListNextOffset: 0,
+    defectListHasMore: false,
     defectDraftImages: [],
     defectSupplementDraftImages: [],
+    defectTaskDraftAction: '',
+    defectTaskDraftReportId: '',
+    defectTaskDraftBaseName: '',
+    defectTaskDraftDefaultBaseName: '',
+    defectTaskDraftError: '',
     assignmentGraphs: [],
     assignmentSelectedTicketId: '',
     assignmentGraphData: null,
@@ -391,6 +421,7 @@
   }
 
   const startupOverlayStages = ['shell', 'connect', 'agents', 'sessions', 'workspace', 'ready'];
+  const startupOverlayRevealDelayMs = 1400;
   let startupOverlayState = {
     active: false,
     startedAt: 0,
@@ -404,6 +435,7 @@
     failed: false,
     hideTimer: 0,
     tickTimer: 0,
+    revealTimer: 0,
   };
 
   function ensureStartupOverlayRefs() {
@@ -414,7 +446,6 @@
       root: node,
       title: $('startupOverlayTitle'),
       detail: $('startupOverlayDetail'),
-      bar: $('startupOverlayBar'),
       percent: $('startupOverlayPercent'),
       elapsed: $('startupOverlayElapsed'),
       hint: $('startupOverlayHint'),
@@ -443,6 +474,16 @@
       clearInterval(startupOverlayState.tickTimer);
       startupOverlayState.tickTimer = 0;
     }
+    if (startupOverlayState.revealTimer) {
+      clearTimeout(startupOverlayState.revealTimer);
+      startupOverlayState.revealTimer = 0;
+    }
+  }
+
+  function clearStartupOverlayRevealTimer() {
+    if (!startupOverlayState.revealTimer) return;
+    clearTimeout(startupOverlayState.revealTimer);
+    startupOverlayState.revealTimer = 0;
   }
 
   function ensureStartupOverlayTicker() {
@@ -454,6 +495,25 @@
       }
       renderStartupOverlay();
     }, 500);
+  }
+
+  function scheduleStartupOverlayReveal() {
+    if (startupOverlayState.active || startupOverlayState.ready || startupOverlayState.failed) return;
+    if (startupOverlayState.revealTimer) return;
+    const startedAt = Number(startupOverlayState.startedAt || 0) || Date.now();
+    const remainingMs = Math.max(0, startupOverlayRevealDelayMs - (Date.now() - startedAt));
+    const reveal = () => {
+      startupOverlayState.revealTimer = 0;
+      if (startupOverlayState.active || startupOverlayState.ready || startupOverlayState.failed) return;
+      startupOverlayState.active = true;
+      ensureStartupOverlayTicker();
+      renderStartupOverlay();
+    };
+    if (remainingMs <= 0) {
+      reveal();
+      return;
+    }
+    startupOverlayState.revealTimer = window.setTimeout(reveal, remainingMs);
   }
 
   function renderStartupOverlay() {
@@ -468,7 +528,6 @@
     refs.root.classList.toggle('is-error', !!stateNode.failed);
     if (refs.title) refs.title.textContent = safe(stateNode.title);
     if (refs.detail) refs.detail.textContent = safe(stateNode.detail);
-    if (refs.bar) refs.bar.style.width = String(safePercent) + '%';
     if (refs.percent) refs.percent.textContent = String(Math.round(safePercent)) + '%';
     if (refs.elapsed) refs.elapsed.textContent = formatStartupOverlayElapsed(elapsedMs);
     if (refs.hint) {
@@ -493,20 +552,42 @@
   function setStartupProgress(payload) {
     const next = payload && typeof payload === 'object' ? payload : {};
     const stage = safe(next.stage).trim().toLowerCase();
-    clearTimeout(startupOverlayState.hideTimer);
+    if (startupOverlayState.hideTimer) {
+      clearTimeout(startupOverlayState.hideTimer);
+      startupOverlayState.hideTimer = 0;
+    }
     startupOverlayState = Object.assign({}, startupOverlayState, next, {
-      active: true,
+      active: !!startupOverlayState.active,
       startedAt: startupOverlayState.startedAt || Date.now(),
       stage: startupOverlayStages.includes(stage) ? stage : startupOverlayState.stage,
       ready: !!next.ready,
       failed: !!next.failed,
       error: safe(next.error || ''),
     });
-    ensureStartupOverlayTicker();
+    if (startupOverlayState.failed) {
+      clearStartupOverlayRevealTimer();
+      startupOverlayState.active = true;
+      ensureStartupOverlayTicker();
+      renderStartupOverlay();
+      return;
+    }
+    if (startupOverlayState.ready) {
+      clearStartupOverlayRevealTimer();
+      renderStartupOverlay();
+      return;
+    }
+    if (startupOverlayState.active) {
+      ensureStartupOverlayTicker();
+      renderStartupOverlay();
+      return;
+    }
+    startupOverlayState.active = false;
     renderStartupOverlay();
+    scheduleStartupOverlayReveal();
   }
 
   function finishStartupProgress(detail) {
+    const wasVisible = !!startupOverlayState.active;
     setStartupProgress({
       stage: 'ready',
       title: '工作台已准备完成',
@@ -517,6 +598,12 @@
       error: '',
       hint: '页面已就绪，后续角色分析和局部模块刷新会在后台继续进行。',
     });
+    if (!wasVisible) {
+      startupOverlayState.active = false;
+      renderStartupOverlay();
+      clearStartupOverlayTimers();
+      return;
+    }
     startupOverlayState.hideTimer = window.setTimeout(() => {
       startupOverlayState.active = false;
       renderStartupOverlay();
@@ -803,4 +890,3 @@
     setIconOnlyButton('clearAllPolicyCacheBtn', 'clear_all');
     setIconOnlyButton('regeneratePolicyCacheBtn', 'cache');
   }
-
