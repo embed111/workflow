@@ -28,13 +28,13 @@
 ## 3. 版本总览
 | 版本 | 状态 | 主焦点 | 当前判断 |
 | --- | --- | --- | --- |
-| `V0.1` 工程质量基线与运行稳态 | `active` | 先把 7x24 连续运行、工程边界和基础治理做稳 | 当前主线 |
-| `V0.2` 项目规范与设计规范固化 | `planned` | 把规范、目录、设计约束和协作护栏系统化 | 下一版本 |
-| `V0.3` 可观测性与运行真实性 | `queued` | 把 dashboard / workboard / runs / schedule detail 真相统一 | 等 V0.1 收口 |
-| `V0.4` 持续唤醒与任务编排闭环 | `queued` | 把 PM 唤醒、自派单、任务接力做成稳定闭环 | 等 V0.2/V0.3 完成 |
-| `V0.5` 功能扩展批次 | `backlog` | 再回到更明显的新特性和体验增长 | 暂缓 |
+| `V1` 工程质量基线与运行稳态 | `active` | 先把 7x24 连续运行、工程边界和基础治理做稳 | 当前主线 |
+| `V2` 项目规范与设计规范固化 | `planned` | 把规范、目录、设计约束和协作护栏系统化 | 下一版本 |
+| `V3` 可观测性与运行真实性 | `queued` | 把 dashboard / workboard / runs / schedule detail 真相统一 | 等 V1 收口 |
+| `V4` 持续唤醒与任务编排闭环 | `queued` | 把 PM 唤醒、自派单、任务接力做成稳定闭环 | 等 V2/V3 完成 |
+| `V5` 功能扩展批次 | `backlog` | 再回到更明显的新特性和体验增长 | 暂缓 |
 
-## 4. 当前活跃版本：`V0.1` 工程质量基线与运行稳态
+## 4. 当前活跃版本：`V1` 工程质量基线与运行稳态
 
 ### 4.1 本版目标
 - 把 `workflow` 从“能跑”推进到“连续跑、可恢复、可验证、可继续派下一轮”。
@@ -74,11 +74,17 @@
 ### 4.6 本版任务包
 | 任务包 | 默认负责人 | 类型 | 状态 | 说明 |
 | --- | --- | --- | --- | --- |
-| `V0.1-P0` 连续运行链止血与真相收口 | `workflow(pm)` | 稳定性 | `in_progress` | prod 入口、stale run、schedule 接力、计划真相源 |
-| `V0.1-P1` 发布链与工作区边界守护 | `workflow_devmate` | 工程质量 | `planned` | remote 漂移、防脏工作区、候选发布安全 |
-| `V0.1-P2` 7x24 巡检与质量结论模板 | `workflow_qualitymate` | 质量 | `planned` | prod 巡检、任务中心/定时链质量清单 |
-| `V0.1-P3` 自迭代链 smoke 与回归组 | `workflow_testmate` | 测试 | `planned` | self-iteration / schedule / dispatch / upgrade smoke |
-| `V0.1-P4` 运行失败高频根因收敛 | `workflow_bugmate` | 缺陷治理 | `planned` | 运行句柄缺失、路径漂移、编码/重试类残留问题 |
+| `V1-P0` 连续运行链止血与真相收口 | `workflow(pm)` | 稳定性 | `in_progress` | prod 入口、stale run、schedule 接力、计划真相源 |
+| `V1-P1` 运行链真相源与保活收口 | `workflow_bugmate` | 稳定性 | `in_progress` | prod 入口、运行句柄、schedule/detail 真相源一致性 |
+| `V1-P2` 发布链与工作区防漂移收口 | `workflow_devmate` | 工程质量 | `in_progress` | remote / runtime-config / source_root / deploy 防漂移 |
+| `V1-P3` 自迭代链 smoke 与回归组 | `workflow_testmate` | 测试 | `blocked` | self-iteration / schedule / dispatch / upgrade smoke |
+| `V1-P4` 7x24 巡检与质量结论模板 | `workflow_qualitymate` | 质量 | `blocked` | prod 巡检、任务中心/定时链质量清单 |
+
+### 4.6.1 当前现场更新
+1. `[持续迭代] workflow` 与 `pm持续唤醒 - workflow 主线巡检` 已经改成引用本文件。
+2. `V1-P1` 与 `V1-P2` 已经在任务中心真实补单，后续由 `workflow_bugmate / workflow_devmate` 接力推进。
+3. `workflow_testmate / workflow_qualitymate` 当前仍受 `creating` 锁定影响，等角色可接普通任务后再补 `V1-P3 / V1-P4` 的真实任务。
+4. `prod` 当前已恢复在线，但 `[持续迭代] workflow` 在 `2026-04-06 12:07` 的首次触发命中过一次 `dispatch_failed`；目前已手动续挂下一次唤醒，后续继续盯真相。
 
 ### 4.7 退出门槛
 1. `prod` 连续运行链恢复到“停机可拉回、假 running 可收口、下一轮可续排”。
@@ -86,7 +92,7 @@
 3. 版本计划、任务中心和定时唤醒至少有一条稳定接力链。
 4. 发布链恢复到“小步已验证推根仓 -> test -> candidate”的稳定节奏。
 
-## 5. 下一版本：`V0.2` 项目规范与设计规范固化
+## 5. 下一版本：`V2` 项目规范与设计规范固化
 
 ### 5.1 本版目标
 - 把当前已经反复踩过的工程问题，收成明确规范和设计约束，而不是继续靠日记与口头记忆兜底。
@@ -115,14 +121,14 @@
 
 ## 6. 后续版本预告
 
-### `V0.3` 可观测性与运行真实性
+### `V3` 可观测性与运行真实性
 - 目标：把 `dashboard / workboard / run.json / events.log / schedule detail` 的真相源关系统一，减少“页面看起来像 A，文件真相其实是 B”。
 
-### `V0.4` 持续唤醒与任务编排闭环
+### `V4` 持续唤醒与任务编排闭环
 - 目标：让 PM 的版本推进形成“计划 -> 任务 -> 验证 -> 下一轮唤醒”的稳定闭环。
 - 重点：自派单策略、下一轮自动接力、失败后的恢复建议。
 
-### `V0.5` 功能扩展批次
+### `V5` 功能扩展批次
 - 目标：在工程质量基线稳定后，再系统推进更明显的新特性与体验增长。
 
 ## 7. PM 执行口径
