@@ -9,6 +9,7 @@
    1. 详细设计文档（与需求主题对应）。
 4. `governance/`
    1. 执行门禁、验收证据、截图规范、启动留痕、治理清单。
+   2. PM 持续维护的滚动版本计划真相源：`docs/workflow/governance/PM版本推进计划.md`。
 5. `reports/`
    1. 重构映射与行数预算等分析报告。
 6. `prompts/`
@@ -19,14 +20,15 @@
 ## 2. 当前主入口
 1. 主入口：`docs/workflow/overview/需求概述.md`
 2. 历史增量：`docs/workflow/overview/需求概述-增量历史-20260225-20260304.md`
-3. 展示参考图：
+3. 版本推进真相源：`docs/workflow/governance/PM版本推进计划.md`
+4. 展示参考图：
    1. `docs/workflow/prototypes/训练闭环监控系统-Phase0/训练闭环监控系统参考图.html`
    2. `docs/workflow/prototypes/统一入口与训练优化模块/统一入口与训练优化参考图.html`
    3. `docs/workflow/prototypes/角色画像发布格式与预发布判定/角色画像发布格式与预发布判定参考图.html`
    4. `docs/workflow/prototypes/测试数据展示全局开关统一/测试数据展示全局开关统一参考图.html`
    5. `docs/workflow/prototypes/agent发布管理与版本切换/发布评审分层展示参考图.html`
    6. `docs/workflow/prototypes/任务中心与依赖可视化编排/任务中心参考图.html`
-4. 原型/参考图治理：
+5. 原型/参考图治理：
    1. 按功能目录维护，如：`docs/workflow/prototypes/<功能主题>/`
    2. 每个功能默认维护单份参考图，不在文件名中追加日期
 
