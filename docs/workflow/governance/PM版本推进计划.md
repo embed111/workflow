@@ -30,8 +30,8 @@
 | --- | --- | --- | --- |
 | `V1` 工程质量基线与运行稳态 | `active` | 先把 7x24 连续运行、工程边界和基础治理做稳 | 当前主线 |
 | `V2` 项目规范与设计规范固化 | `planned` | 把规范、目录、设计约束和协作护栏系统化 | 下一版本 |
-| `V3` 可观测性与运行真实性 | `queued` | 把 dashboard / workboard / runs / schedule detail 真相统一 | 等 V1 收口 |
-| `V4` 持续唤醒与任务编排闭环 | `queued` | 把 PM 唤醒、自派单、任务接力做成稳定闭环 | 等 V2/V3 完成 |
+| `V3` 可观测性、运行真实性与网络保活 | `queued` | 把 dashboard / workboard / runs / schedule detail 真相统一，并补心跳/网络保活 | 等 V1 收口 |
+| `V4` 持续唤醒、任务编排与网络容灾闭环 | `queued` | 把 PM 唤醒、自派单、任务接力和网络容灾恢复做成稳定闭环 | 等 V2/V3 完成 |
 | `V5` 功能扩展批次 | `backlog` | 再回到更明显的新特性和体验增长 | 暂缓 |
 
 ## 4. 当前活跃版本：`V1` 工程质量基线与运行稳态
@@ -79,12 +79,21 @@
 | `V1-P2` 发布链与工作区防漂移收口 | `workflow_devmate` | 工程质量 | `in_progress` | remote / runtime-config / source_root / deploy 防漂移 |
 | `V1-P3` 自迭代链 smoke 与回归组 | `workflow_testmate` | 测试 | `blocked` | self-iteration / schedule / dispatch / upgrade smoke |
 | `V1-P4` 7x24 巡检与质量结论模板 | `workflow_qualitymate` | 质量 | `blocked` | prod 巡检、任务中心/定时链质量清单 |
+| `V1-P5` 升级 drain 模式与升级前冻结新派发 | `workflow_devmate` | 升级连续性 | `planned` | 先做到升级不丢 trigger、升级时不继续放新 dispatch |
+| `V1-P6` schedule trigger 持久化恢复模型 | `workflow_bugmate` | 升级连续性 | `planned` | 把 trigger processing 从进程内线程推进到可恢复 job/lease 模型 |
+| `V1-P7` 正式升级连续性回归矩阵 | `workflow_testmate` | 测试 | `planned` | 无任务升级、drain 升级、trigger 命中时升级、回滚后恢复 |
+| `V1-P8` 升级前后运行真相一致性巡检 | `workflow_qualitymate` | 质量 | `planned` | 顶栏、workboard、run 文件、schedule detail 四处口径一致 |
 
 ### 4.6.1 当前现场更新
 1. `[持续迭代] workflow` 与 `pm持续唤醒 - workflow 主线巡检` 已经改成引用本文件。
 2. `V1-P1` 与 `V1-P2` 已经在任务中心真实补单，后续由 `workflow_bugmate / workflow_devmate` 接力推进。
 3. `workflow_testmate / workflow_qualitymate` 当前仍受 `creating` 锁定影响，等角色可接普通任务后再补 `V1-P3 / V1-P4` 的真实任务。
-4. `prod` 当前已恢复在线，但 `[持续迭代] workflow` 在 `2026-04-06 12:07` 的首次触发命中过一次 `dispatch_failed`；目前已手动续挂下一次唤醒，后续继续盯真相。
+4. 当前 `prod` 已在 `2026-04-06 18:49:43+08:00` 升到 `20260406-184906`，最新 `prod candidate` 已刷新到 `20260406-193047`；版本推进真相源必须从这组现网事实继续承接，不能再沿用中午的 `120621/123444` 现场。
+5. 当前最高优先未完成问题仍在 `V1-P0 / V1-P1`：`envs/prod.json` 已记录 `prod=127.0.0.1:8090`，但 `instances/prod.json` 仍残留 `8098`；同时 `dashboard / workboard / schedule detail / node.json / run.json` 之间仍存在真相分叉，不能只看单一接口判定“是否在跑”。
+6. `[持续迭代] workflow` 的 `sti-20260406-1636431e -> node-sti-20260406-1636431e` 已经在 `2026-04-06 21:23:24+08:00` 被系统按“运行句柄缺失或 workflow 已重启”收口成 `failed`；而 `2026-04-06 20:39` 的下一次 `[持续迭代] workflow` 触发又被 `smoke baseline expired` 拦成 `dispatch_failed`，说明主链仍未稳定。
+7. `2026-04-06 20:43` 的 smoke trigger `sti-20260406-6b3e899a` 和 `2026-04-06 20:53` 的保底唤醒 trigger `sti-20260406-4e3ff2f4` 都已经命中并建出节点，但现场暴露出“trigger 已 hit / node 已建出 / detail 仍 queued / worker 线程可能丢失”的恢复缺口；因此本轮优先继续收口 schedule trigger recovery，而不是提前切到 `V1-P5`。
+8. 当前下一轮可执行入口仍然存在：任务中心里至少保留了 `node-20260406-213016-899b6a`、`node-sti-20260406-6b3e899a`、`node-sti-20260406-4e3ff2f4` 三条 `ready` 任务；但未来触发时间已经不再可靠，因此必须优先把“非终态 trigger 的 worker 自恢复”和“多处真相源一致性”修稳。
+9. 关于“正式升级是否无痛”，当前结论仍然收口到 `docs/workflow/design/详细设计-prod无痛升级与连续运行保障.md`：现在还做不到“不影响运行中任务”的升级，当前应先推进 `V1-P5 ~ V1-P8`，但前提仍是先把 `V1-P0 / V1-P1` 的真相收口和恢复能力打稳。
 
 ### 4.7 退出门槛
 1. `prod` 连续运行链恢复到“停机可拉回、假 running 可收口、下一轮可续排”。
@@ -121,12 +130,22 @@
 
 ## 6. 后续版本预告
 
-### `V3` 可观测性与运行真实性
-- 目标：把 `dashboard / workboard / run.json / events.log / schedule detail` 的真相源关系统一，减少“页面看起来像 A，文件真相其实是 B”。
+### `V3` 可观测性、运行真实性与网络保活
+- 目标：把 `dashboard / workboard / run.json / events.log / schedule detail` 的真相源关系统一，并补上长任务 heartbeat、网络抖动宽限和恢复判定。
+- 重点：
+  - `Codex API` / 本地网络波动下的 heartbeat 与宽限窗口
+  - 任务状态细分：业务失败 / 网络待恢复 / 真失败
+  - 重启后优先恢复真实终态而不是误判 `running/failed`
+  - 网络/API 恢复后自动把 7x24 主线续跑，而不是等人工再次点火
 
-### `V4` 持续唤醒与任务编排闭环
-- 目标：让 PM 的版本推进形成“计划 -> 任务 -> 验证 -> 下一轮唤醒”的稳定闭环。
-- 重点：自派单策略、下一轮自动接力、失败后的恢复建议。
+### `V4` 持续唤醒、任务编排与网络容灾闭环
+- 目标：让 PM 的版本推进形成“计划 -> 任务 -> 验证 -> 下一轮唤醒”的稳定闭环，并能跨单次网络故障继续接力。
+- 重点：
+  - 自派单策略
+  - 下一轮自动接力
+  - 网络故障后的恢复建议与保底唤醒
+  - `Codex API` 连续性不足时的容灾切换与保活心跳
+  - 检测到网络/API 恢复后自动恢复 `pm持续唤醒` / `[持续迭代] workflow` 的接力
 
 ### `V5` 功能扩展批次
 - 目标：在工程质量基线稳定后，再系统推进更明显的新特性与体验增长。

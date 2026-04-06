@@ -36,6 +36,7 @@ DEFAULT_ASSIGNMENT_EXECUTION_POLL_INTERVAL_MS = 450
 DEFAULT_ASSIGNMENT_EXECUTION_TIMEOUT_S = 1200
 DEFAULT_ASSIGNMENT_FINAL_RESULT_EXIT_GRACE_SECONDS = 15
 DEFAULT_ASSIGNMENT_STALE_RUN_GRACE_SECONDS = 15
+DEFAULT_ASSIGNMENT_PROVIDER_START_GRACE_SECONDS = 180
 DEFAULT_ASSIGNMENT_EVENT_STREAM_RETRY_MS = 1500
 DEFAULT_ASSIGNMENT_EVENT_STREAM_KEEPALIVE_S = 15
 DEFAULT_ASSIGNMENT_EVENT_HISTORY_LIMIT = 512
@@ -64,9 +65,24 @@ ASSIGNMENT_TEST_GRAPH_UPDATED_AT = "2026-03-14T12:20:30+08:00"
 
 _ASSIGNMENT_ACTIVE_RUN_LOCK = threading.Lock()
 _ASSIGNMENT_ACTIVE_RUN_PROCESSES: dict[str, subprocess.Popen[str]] = {}
+_ASSIGNMENT_DISPATCH_LOCK_GUARD = threading.Lock()
+_ASSIGNMENT_DISPATCH_LOCKS: dict[str, threading.Lock] = {}
 _ASSIGNMENT_EVENT_CONDITION = threading.Condition()
 _ASSIGNMENT_EVENT_SEQ = 0
 _ASSIGNMENT_EVENT_HISTORY: deque[dict[str, Any]] = deque(maxlen=DEFAULT_ASSIGNMENT_EVENT_HISTORY_LIMIT)
+
+
+def _assignment_ticket_dispatch_lock(ticket_id: str) -> threading.Lock:
+    ticket_key = safe_token(str(ticket_id or ""), "", 160)
+    if not ticket_key:
+        return _ASSIGNMENT_ACTIVE_RUN_LOCK
+    with _ASSIGNMENT_DISPATCH_LOCK_GUARD:
+        existing = _ASSIGNMENT_DISPATCH_LOCKS.get(ticket_key)
+        if existing is not None:
+            return existing
+        created = threading.Lock()
+        _ASSIGNMENT_DISPATCH_LOCKS[ticket_key] = created
+        return created
 
 
 def _assignment_execution_timeout_s() -> int:

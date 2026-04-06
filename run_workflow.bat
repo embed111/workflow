@@ -13,23 +13,29 @@ set "PM_ROOT=%CD%\workflow"
 set "DEFAULT_DEVELOPER_ID=pm-main"
 set "DEVELOPER_ID=%WORKFLOW_DEVELOPER_ID%"
 if not defined DEVELOPER_ID set "DEVELOPER_ID=%DEFAULT_DEVELOPER_ID%"
-set "DEPLOYED_LAUNCH=%PM_ROOT%\.running\prod\scripts\launch_workflow.ps1"
+set "DEPLOYED_START=%PM_ROOT%\.running\prod\scripts\start_workflow_env.ps1"
 set "WORKSPACE_LAUNCH=%PM_ROOT%\.repository\%DEVELOPER_ID%\scripts\launch_workflow.ps1"
 
-if exist "%DEPLOYED_LAUNCH%" (
-    set "TARGET_SCRIPT=%DEPLOYED_LAUNCH%"
+if exist "%DEPLOYED_START%" (
+    set "TARGET_SCRIPT=%DEPLOYED_START%"
+    set "TARGET_MODE=deployed"
 ) else if exist "%WORKSPACE_LAUNCH%" (
     set "TARGET_SCRIPT=%WORKSPACE_LAUNCH%"
+    set "TARGET_MODE=workspace"
 ) else (
     echo [workflow-start] launch script not found.
     echo [workflow-start] expected one of:
-    echo   %DEPLOYED_LAUNCH%
+    echo   %DEPLOYED_START%
     echo   %WORKSPACE_LAUNCH%
     set EXIT_CODE=1
     goto :done
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%TARGET_SCRIPT%" -OpenBrowser
+if /I "%TARGET_MODE%"=="deployed" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%TARGET_SCRIPT%" -Environment prod -OpenBrowser
+) else (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%TARGET_SCRIPT%" -OpenBrowser
+)
 set "EXIT_CODE=%ERRORLEVEL%"
 if not "%EXIT_CODE%"=="0" (
     echo [workflow-start] failed with exit code %EXIT_CODE%.

@@ -189,6 +189,130 @@ def _assignment_load_active_node_records_lightweight(root: Path, ticket_id: str)
         return []
 
 
+def _assignment_live_node_ids_for_ticket(root: Path, *, ticket_id: str) -> set[str]:
+    ticket_text = safe_token(str(ticket_id or ""), "", 160)
+    if not ticket_text:
+        return set()
+    active_run_ids = {
+        str(run_id or "").strip()
+        for run_id in _active_assignment_run_ids()
+        if str(run_id or "").strip()
+    }
+    now_dt = now_local()
+    live_node_ids: set[str] = set()
+    for run in _assignment_load_run_records(root, ticket_id=ticket_text):
+        status = str(run.get("status") or "").strip().lower()
+        if status not in {"starting", "running"}:
+            continue
+        if not _assignment_run_row_is_live(
+            run,
+            active_run_ids=active_run_ids,
+            now_dt=now_dt,
+            grace_seconds=DEFAULT_ASSIGNMENT_STALE_RUN_GRACE_SECONDS,
+        ):
+            continue
+        node_id = str(run.get("node_id") or "").strip()
+        if node_id:
+            live_node_ids.add(node_id)
+    return live_node_ids
+
+
+def _assignment_project_live_run_status_for_nodes(
+    root: Path,
+    *,
+    ticket_id: str,
+    node_records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    live_node_ids = _assignment_live_node_ids_for_ticket(root, ticket_id=ticket_id)
+    updated: list[dict[str, Any]] = []
+    for row in list(node_records or []):
+        current = dict(row)
+        if str(current.get("record_state") or "active").strip().lower() == "deleted":
+            updated.append(current)
+            continue
+        node_id = str(current.get("node_id") or "").strip()
+        status = str(current.get("status") or "").strip().lower()
+        if status == "running" and node_id and node_id not in live_node_ids:
+            current["status"] = "failed"
+            current["status_text"] = _node_status_text("failed")
+        updated.append(current)
+    return updated
+
+
+def _assignment_try_recover_terminal_run_from_files(
+    root: Path,
+    *,
+    ticket_id: str,
+    node_id: str,
+    run_record: dict[str, Any],
+) -> bool:
+    run_id = str(run_record.get("run_id") or "").strip()
+    if not run_id:
+        return False
+    refs = _assignment_run_file_paths(root, ticket_id, run_id)
+    result_payload = _assignment_read_json(refs["result"])
+    events = _assignment_read_jsonl(refs["events"])
+    final_event = next(
+        (
+            item
+            for item in reversed(list(events or []))
+            if str((item or {}).get("event_type") or "").strip().lower() == "final_result"
+        ),
+        {},
+    )
+    has_result_payload = bool(result_payload)
+    has_final_event = bool(final_event)
+    if not has_result_payload and not has_final_event:
+        return False
+    stdout_text = _read_assignment_run_text(refs["stdout"].as_posix())
+    stderr_text = _read_assignment_run_text(refs["stderr"].as_posix())
+    detail = dict(final_event.get("detail") or {}) if isinstance(final_event, dict) else {}
+    try:
+        exit_code = int(detail.get("exit_code") or run_record.get("exit_code") or 0)
+    except Exception:
+        exit_code = 0
+    failure_message = ""
+    if exit_code != 0:
+        failure_message = (
+            str(final_event.get("message") or "").strip()
+            or _short_assignment_text(stderr_text, 500)
+            or f"assignment execution failed with exit={exit_code}"
+        )
+    _finalize_assignment_execution_run(
+        root,
+        run_id=run_id,
+        ticket_id=ticket_id,
+        node_id=node_id,
+        exit_code=exit_code,
+        stdout_text=stdout_text,
+        stderr_text=stderr_text,
+        result_payload=result_payload if isinstance(result_payload, dict) else {},
+        failure_message=failure_message,
+    )
+    return True
+
+
+def _assignment_try_recover_terminal_node_from_files(
+    root: Path,
+    *,
+    ticket_id: str,
+    node_id: str,
+) -> bool:
+    recovered = False
+    for run in _assignment_load_run_records(root, ticket_id=ticket_id, node_id=node_id):
+        status = str(run.get("status") or "").strip().lower()
+        if status not in {"starting", "running"}:
+            continue
+        if _assignment_try_recover_terminal_run_from_files(
+            root,
+            ticket_id=ticket_id,
+            node_id=node_id,
+            run_record=run,
+        ):
+            recovered = True
+    return recovered
+
+
 def _assignment_reconcile_stale_task_state_internal(
     root: Path,
     *,
@@ -213,7 +337,24 @@ def _assignment_reconcile_stale_task_state_internal(
             continue
         node_id = str(current.get("node_id") or "").strip()
         status = str(current.get("status") or "").strip().lower()
-        if status == "running" and (ticket_id, node_id) not in live_keys:
+        if (ticket_id, node_id) in live_keys and status in {"pending", "ready", "blocked"}:
+            current["status"] = "running"
+            current["status_text"] = _node_status_text("running")
+            current["updated_at"] = now_text
+            changed = True
+        elif status == "running" and (ticket_id, node_id) not in live_keys:
+            if _assignment_try_recover_terminal_node_from_files(
+                root,
+                ticket_id=ticket_id,
+                node_id=node_id,
+            ):
+                refreshed_task = _assignment_read_json(_assignment_graph_record_path(root, ticket_id))
+                refreshed_nodes = _assignment_load_node_records(root, ticket_id, include_deleted=True)
+                return (
+                    dict(refreshed_task or task_record),
+                    [dict(item) for item in list(refreshed_nodes or node_records)],
+                    True,
+                )
             current["status"] = "failed"
             current["status_text"] = _node_status_text("failed")
             current["completed_at"] = now_text
@@ -245,6 +386,28 @@ def _assignment_reconcile_stale_task_state_internal(
                 detail={},
                 created_at=now_text,
             )
+            try:
+                schedule_result = _assignment_queue_self_iteration_schedule(
+                    root,
+                    task_record=task_record,
+                    node_record=current,
+                    result_summary=str(current.get("failure_reason") or "").strip() or "运行句柄缺失或 workflow 已重启，请手动重跑。",
+                    success=False,
+                )
+                if bool(schedule_result.get("queued")):
+                    _assignment_write_audit_entry(
+                        root,
+                        ticket_id=ticket_id,
+                        node_id=node_id,
+                        action="schedule_self_iteration",
+                        operator="assignment-system",
+                        reason="queued next self-iteration schedule after stale run recovery",
+                        target_status="failed",
+                        detail=schedule_result,
+                        created_at=now_text,
+                    )
+            except Exception:
+                pass
         updated_nodes.append(current)
     return dict(task_record), updated_nodes, changed
 
@@ -648,10 +811,26 @@ def _assignment_run_summary(root: Path, row: dict[str, Any], *, include_content:
         "event_count": len(events),
         "events": events,
         "codex_failure": codex_failure,
-        "prompt_text": _read_assignment_run_text(prompt_ref) if include_content else "",
-        "stdout_text": _read_assignment_run_text(stdout_ref) if include_content else "",
-        "stderr_text": _read_assignment_run_text(stderr_ref) if include_content else "",
-        "result_text": _read_assignment_run_text(result_ref) if include_content else "",
+        "prompt_text": (
+            _read_assignment_run_text(prompt_ref, preview_chars=_assignment_run_preview_chars(prompt_ref))
+            if include_content
+            else ""
+        ),
+        "stdout_text": (
+            _read_assignment_run_text(stdout_ref, preview_chars=_assignment_run_preview_chars(stdout_ref))
+            if include_content
+            else ""
+        ),
+        "stderr_text": (
+            _read_assignment_run_text(stderr_ref, preview_chars=_assignment_run_preview_chars(stderr_ref))
+            if include_content
+            else ""
+        ),
+        "result_text": (
+            _read_assignment_run_text(result_ref, preview_chars=_assignment_run_preview_chars(result_ref))
+            if include_content
+            else ""
+        ),
     }
 
 
@@ -914,7 +1093,11 @@ def list_assignments(
             continue
         if request_filter and str(graph_row.get("external_request_id") or "").strip() != request_filter:
             continue
-        node_records = _assignment_load_active_node_records_lightweight(root, ticket_id)
+        node_records = _assignment_project_live_run_status_for_nodes(
+            root,
+            ticket_id=ticket_id,
+            node_records=_assignment_load_active_node_records_lightweight(root, ticket_id),
+        )
         metrics_summary = _graph_metrics(node_records)
         items.append(
             {
@@ -1184,5 +1367,3 @@ def get_assignment_status_detail(
         node_id=node_id,
         include_test_data=include_test_data,
     )
-
-

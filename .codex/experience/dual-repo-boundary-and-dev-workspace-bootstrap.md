@@ -21,6 +21,10 @@
 - 若 `../workflow_code` 曾经误用 `workflow` 整仓历史初始化，后续即使已收成 code-only 文件树，Git 历史仍会混入 PM/运行态脏语义；这时应在确认文件树正确后直接重建 `workflow_code/.git`，让代码根仓从干净 root commit 重新开始。
 - Windows 下把非 bare 本地仓当 remote 时，默认不要推当前被检出的基线分支；改为每个开发主体使用独立开发分支，例如 `dev/<developer_id>`，再向该分支推送。
 - 开发工作区 refresh 前先检查工作区是否干净；存在未提交改动时，宁可阻塞，也不要自动 `checkout/reset` 覆盖。
+- 跑完会修改开发工作区 Git 元数据的 gate/bootstrap 脚本后，要立刻复核 `.repository/<developer_id>` 的 `remote.origin.url`；如果它被临时指到 gate fixture 或隔离 runtime 下的假 `workflow_code`，后续 `push` 会悄悄送错仓。
+- 如果线上止损时不得不直接改 `.running/prod`，后续第一优先级不是继续叠加热修，而是立即把差异回放到 `.repository/<developer_id>`，再推回 `../workflow_code`；否则多人协作会退化成串行补丁接力。
+- `manage_developer_workspace.py` 这类 bootstrap/状态脚本如果从 runtime root 反推 `workspace_root`，要显式传入真实工作区根；否则它会把 `.running/control/runtime` 误判成协作根，派生出错误的 `pm_root/code_root/.repository` 边界。
+- `workflow_bugmate` 这类 bugfix mirror 如果长期复用，mirror 内很容易夹带旧缺陷残留改动；导出 patch 前必须先看当前 diff。若当前任务只改一两个文件，优先按目标文件生成 scoped patch，不要直接交付 mirror 对 source 的全量差异。
 
 ## 已踩过的坑
 - 坑 1：runtime-config 还指向旧的 `C:/work/J-Agents`，会让系统先报 `workspace_root_missing_workflow_subdir`，掩盖真正的 `workflow_code` 缺失问题。
@@ -37,3 +41,9 @@
   - 避免方式：部署/启动脚本在识别到 `.repository/<developer_id>` 源根时，统一把运行根、控制根和默认产物根派生回 PM 顶层。
 - 坑 7：运行根已经切回 PM 顶层，但 `test` 或 `prod` 的 runtime-config 还保留旧盘符时，release gate 会在旧路径上建目录并直接超时失败。
   - 避免方式：第一次切换后重发 `test/prod` 时，显式传入当前真实 `-AgentSearchRoot/-ArtifactRoot`，并确认 `.running/control/runtime/<env>/state/runtime-config.json` 已更新到当前工作区路径。
+- 坑 8：`workflow_bugmate/scripts/export_bugfix_patch.ps1` 默认会把 mirror 相对 source 的全部差异一起导出；如果 mirror 里还躺着历史任务残留，当前 bug 的 patch 会被无关改动污染。
+  - 避免方式：导出前先审 mirror diff；若发现非本轮文件，先 refresh mirror 或改用 `git diff --no-index` 对本轮目标文件单独切 scoped patch。
+- 坑 9：把 PM 仓里的 `src/`、`scripts/` 当成“暂时还能用的代码副本”继续改，短期看似方便，长期会把代码根仓、运行副本和本地工作区三套真相源重新搅在一起。
+  - 避免方式：只要 `../workflow_code` 和 `.repository/<developer_id>` 已就绪，就立即清掉 PM 仓里的 `src/`、`scripts/` 误放副本，并把后续代码修改全部收口到本地开发工作区。
+- 坑 10：`workflow gate` 或隔离 bootstrap 现场可能把开发工作区的 `origin` 临时改写成 `.test/runtime/.../workflow_code` 这类 fixture 仓；如果跑完 gate 后直接 `git push origin ...`，提交会被送到错误的临时根仓，而且表面上还会显示成功。
+  - 避免方式：凡是跑过会构造隔离代码根仓的 gate/bootstrap 后，正式推根仓前先执行 `git -C .repository/<developer_id> remote -v` 复核；若 remote 漂了，先显式 `git remote set-url origin <真实 workflow_code 路径>` 再 push。
