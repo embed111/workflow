@@ -5,6 +5,11 @@
 - 具体轮次总结不要写在这里，只写入每日日记文件。
 - 把 `.codex/` 视为 agent 记忆和内部指导，不得当成产品运行态。
 
+## 角色工作区适用口径
+- 通过“创建角色”生成的新 agent 工作区，默认沿用这套记忆库结构与归档规范。
+- 角色工作区的 `AGENTS.md` 必须显式引用 `.codex/MEMORY.md`，并把它作为日切、月切、经验读取与日记追加的真相源。
+- 若角色工作区缺少记忆骨架、经验索引或归档汇总，优先使用 `python scripts/manage_codex_memory.py repair-rollups --root .` 修复。
+
 ## 必读顺序
 1. `AGENTS.md`
 2. `.codex/experience/index.md`
@@ -52,5 +57,6 @@
 ## 验证命令
 - `python scripts/manage_codex_memory.py status --root .`
 - `python scripts/manage_codex_memory.py verify-rollups --root .`
+- `python scripts/manage_codex_memory.py repair-rollups --root .`
 - `python scripts/manage_codex_memory.py append --root . --summary "<round summary>"`
 - `python scripts/manage_codex_memory.py append --root . --topic "<topic>" --context "<context>" --actions "<action1|action2>" --decisions "<decision1|decision2>" --validation "<check1|check2>"`

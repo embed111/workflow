@@ -21,10 +21,18 @@
 - 若 `../workflow_code` 曾经误用 `workflow` 整仓历史初始化，后续即使已收成 code-only 文件树，Git 历史仍会混入 PM/运行态脏语义；这时应在确认文件树正确后直接重建 `workflow_code/.git`，让代码根仓从干净 root commit 重新开始。
 - Windows 下把非 bare 本地仓当 remote 时，默认不要推当前被检出的基线分支；改为每个开发主体使用独立开发分支，例如 `dev/<developer_id>`，再向该分支推送。
 - 开发工作区 refresh 前先检查工作区是否干净；存在未提交改动时，宁可阻塞，也不要自动 `checkout/reset` 覆盖。
+- 开发工作区 bootstrap/refresh 时，`origin` 默认应继承 `workflow_code` 自己的 `origin` 远端；只有代码根仓本身没有配置远端时，才回退到本地 `workflow_code` 路径。否则一旦 source repo 是 gate fixture 或隔离 code root，后续 `git push origin ...` 会悄悄送到临时仓。
 - 跑完会修改开发工作区 Git 元数据的 gate/bootstrap 脚本后，要立刻复核 `.repository/<developer_id>` 的 `remote.origin.url`；如果它被临时指到 gate fixture 或隔离 runtime 下的假 `workflow_code`，后续 `push` 会悄悄送错仓。
+- 开发工作区是否“已经是 Git 仓”不能只看 `git rev-parse --is-inside-work-tree`，更不能在目标目录没有独立 `.git` 时默认接受；否则只要目标目录嵌在上层 PM 仓里，Git 会沿父目录向上解析，误把上层仓当成工作区自己。更稳的判定是：目标目录必须存在自己的 `.git`，且 `git rev-parse --show-toplevel` 必须严格等于目标目录本身。
 - 如果线上止损时不得不直接改 `.running/prod`，后续第一优先级不是继续叠加热修，而是立即把差异回放到 `.repository/<developer_id>`，再推回 `../workflow_code`；否则多人协作会退化成串行补丁接力。
 - `manage_developer_workspace.py` 这类 bootstrap/状态脚本如果从 runtime root 反推 `workspace_root`，要显式传入真实工作区根；否则它会把 `.running/control/runtime` 误判成协作根，派生出错误的 `pm_root/code_root/.repository` 边界。
 - `workflow_bugmate` 这类 bugfix mirror 如果长期复用，mirror 内很容易夹带旧缺陷残留改动；导出 patch 前必须先看当前 diff。若当前任务只改一两个文件，优先按目标文件生成 scoped patch，不要直接交付 mirror 对 source 的全量差异。
+- 当 `workflow_code` 被当成本地非 bare remote 使用时，如果用户要求“各工作区直接回推 main”，本地 `workflow_code` 要显式设置 `receive.denyCurrentBranch=updateInstead`；否则从 `.repository/<developer_id>` 直接 `git push origin main` 会被 checked-out 分支保护拒绝，协作链路看起来像“代码已验证，但推不回真相源”。
+- `workflow gate` 这类既会构造隔离 `workflow_code`、又会 bootstrap 开发工作区的 acceptance，默认不要复用固定 `.test/runtime/workflow-gate` 根目录。Windows 下上一轮 run 如果留下半初始化的 `.repository/<developer_id>` 残留，下一轮 `manage_developer_workspace.py` 很容易在预检查阶段误报 `workspace_not_git_repo`；更稳的默认是每轮生成唯一 runtime root，只有显式传 `--runtime-root` 时才复用并自行清理。
+- 当 `.repository/<developer_id>` 已经进入 `ahead/dirty`，且同一批 release boundary 连续跨过多轮 `7x24` 还没推回根仓时，不要继续把它当成“顺手再收”的普通 backlog；更稳的默认是下一轮直接切到“发布边界收口模式”：冻结同工作区新增实现、按可验证小批次推回 `../workflow_code/main`，并显式记录 `root_sync_state / ahead_count / dirty_tracked_count / untracked_count / push_block_reason / next_push_batch`。
+- `V1-P2` 这类“发布链与工作区防漂移”任务包的负责人，不能被误解成所有工作区 dirty/ahead 的统一代持人。真正的第一责任始终绑定到产生改动的那个 `.repository/<developer_id>`；跨工作区接力前，默认先由源工作区完成推根仓，确实推不了时再交 `patch + 证据 + 阻塞说明` 给接力方回放。
+- 对 `7x24` 来说，“已验证但未推根仓”的代码改动不再算已完成轮次。更稳的默认是：只要本轮产生代码改动并完成对应验证，就在同一轮结束前从当前工作区 `commit / push` 回 `../workflow_code/main`；若某轮失败、中断或被打断后遗留 dirty/ahead，下一轮第一优先级先处理这批历史问题，在收口或明确阻塞原因前不要继续基于它扩写。
+- 任务提示里如果写“只允许在当前 `workspace_path` 内写文件”，不能把它误解成“可以不把本工作区已验证提交 push 回根仓”。更稳的理解是：禁止直接去 `../workflow_code` 工作树手改代码，但仍要求从当前 `.repository/<developer_id>` 正常 `commit / push` 回 `../workflow_code/main` 完成发布边界收口。
 
 ## 已踩过的坑
 - 坑 1：runtime-config 还指向旧的 `C:/work/J-Agents`，会让系统先报 `workspace_root_missing_workflow_subdir`，掩盖真正的 `workflow_code` 缺失问题。
@@ -47,3 +55,13 @@
   - 避免方式：只要 `../workflow_code` 和 `.repository/<developer_id>` 已就绪，就立即清掉 PM 仓里的 `src/`、`scripts/` 误放副本，并把后续代码修改全部收口到本地开发工作区。
 - 坑 10：`workflow gate` 或隔离 bootstrap 现场可能把开发工作区的 `origin` 临时改写成 `.test/runtime/.../workflow_code` 这类 fixture 仓；如果跑完 gate 后直接 `git push origin ...`，提交会被送到错误的临时根仓，而且表面上还会显示成功。
   - 避免方式：凡是跑过会构造隔离代码根仓的 gate/bootstrap 后，正式推根仓前先执行 `git -C .repository/<developer_id> remote -v` 复核；若 remote 漂了，先显式 `git remote set-url origin <真实 workflow_code 路径>` 再 push。
+- 坑 11：开发工作区 bootstrap 如果误把“目标目录位于某个上层 Git 仓内部”认成“目标目录自己已经是 Git 仓”，后续 `_ensure_origin_remote()` 和 `git status` 会直接在上层真实工作区上执行。最坏现场不是单纯 gate 失败，而是会把当前 `.repository/<developer_id>` 的 `origin` 悄悄改成 gate fixture 仓。
+  - 避免方式：只在“目标目录存在自己的 `.git` 且 top-level 等于目标目录本身”时才认定它是开发工作区；跑完 gate 后额外复核当前工作区 `remote.origin.url`，一旦漂到 fixture，先修回真实 `workflow_code` 再继续推送。
+- 坑 12：`workflow gate` 如果反复复用固定 `.test/runtime/workflow-gate`，上一次 run 清理不完整时会把残留的半初始化 `.repository/pm-gate` 留在隔离根里；下一轮 `developer_workspace_bootstrap` 还没开始 clone，就会先被这份残留误打成 `workspace_not_git_repo`。
+  - 避免方式：默认给 gate 分配唯一 runtime root，避免不同轮次共用同一份隔离 `.repository`；只有明确调试同一现场时才手工传固定 `--runtime-root` 并自行清理。
+- 坑 13：明明已经发现 `.repository/<developer_id>` 长时间 `ahead/dirty`，`7x24` 却还继续在同一工作区顺手扩功能或 UCD 切片，结果是本地未推改动越来越混，根仓长期停在旧版本，多 agent 协作开始围着过期真相源打转。
+  - 避免方式：把跨轮滞留的 release boundary 本身视为现场异常；下一轮先冻结新增改动面，按最小验证批次推回 `../workflow_code/main`，收口后再恢复功能/UCD 推进。
+- 坑 14：某轮 `7x24` 明明已经把代码改完并验证通过，却只写了日记和结论，没有在同一轮 `commit / push`；结果下一轮又带着历史 dirty 开工，基线判断和责任边界一起变脏。
+  - 避免方式：把“成功轮当轮推根仓”收成硬约束；若某轮失败/中断留下 dirty/ahead，则下一轮第一优先级先处理这批历史问题，未收口前禁止继续在同工作区扩面。
+- 坑 15：把“只允许写当前 `workspace_path`”误读成“不能从工作区 push 回 `../workflow_code/main`”，结果本地提交已经 `ahead_clean`，却还把 release boundary 误记成一个无法执行的阻塞，导致已验证批次被无谓拖延。
+  - 避免方式：把“不能直接去根仓手改代码”和“必须从工作区 push 回根仓”分开理解：前者是边界约束，后者是必须完成的收口动作；只要改动已经在当前工作区完成并验证，通过 `git push origin main` 推回 `../workflow_code/main` 仍然是必做项。

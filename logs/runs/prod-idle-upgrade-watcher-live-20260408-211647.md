@@ -1,0 +1,54 @@
+# Prod Idle Upgrade Watcher
+
+- `2026-04-08T21:16:48+08:00` watcher 启动：base_url=http://127.0.0.1:8090, timeout_seconds=1800.0, poll_seconds=5.0, operator=prod-idle-upgrade-watcher
+- `2026-04-08T21:16:48+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:16:53+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:16:58+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:17:04+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:17:09+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:17:14+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:17:19+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:17:24+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:17:29+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:17:35+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:17:40+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:17:45+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:17:50+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:17:56+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:18:01+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:18:06+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:18:11+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:18:16+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:18:22+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:18:27+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:18:32+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:18:37+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:18:42+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:18:48+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:18:53+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:18:58+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:19:04+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:19:09+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:19:14+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:19:19+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:19:24+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:19:30+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:19:35+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:19:40+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:19:45+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:19:51+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:19:56+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:20:01+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:20:06+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:20:11+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:20:17+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:20:22+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:20:27+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:20:32+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:20:38+08:00` 状态轮询：current=20260408-204603, candidate=20260408-211517, candidate_is_newer=True, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:20:45+08:00` 状态接口不可用：status_code=0 payload={"ok": false, "error": "<urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>", "code": "request_failed"}
+- `2026-04-08T21:20:52+08:00` 状态接口不可用：status_code=0 payload={"ok": false, "error": "<urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>", "code": "request_failed"}
+- `2026-04-08T21:20:59+08:00` 状态接口不可用：status_code=0 payload={"ok": false, "error": "<urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>", "code": "request_failed"}
+- `2026-04-08T21:21:06+08:00` 状态接口不可用：status_code=0 payload={"ok": false, "error": "<urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>", "code": "request_failed"}
+- `2026-04-08T21:21:17+08:00` 状态轮询：current=20260408-211517, candidate=20260408-211517, candidate_is_newer=False, request_pending=False, running_task_count=1, can_upgrade=False
+- `2026-04-08T21:21:17+08:00` candidate 已不比 current 更新，watcher 直接结束。

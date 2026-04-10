@@ -11,17 +11,18 @@
 ## 启动读取顺序
 1. 顶层治理入口固定先读 `AGENTS.md`。
 2. 涉及开发、测试、部署、成员分工或工作区协作时，继续读取顶层 `协作约定.md`。
-3. 每轮正式工作前先读 `.codex/experience/index.md`，并按其中“必读经验”顺序补充读取必读经验文件。
-4. 默认会话按以下顺序继续读取：
+3. 涉及 `7*24` 连续运行、主线唤醒、保底巡检、断链修复或正式升级时，继续读取 `docs/workflow/governance/7x24连续运行机制.md`。
+4. 每轮正式工作前先读 `.codex/experience/index.md`，并按其中“必读经验”顺序补充读取必读经验文件。
+5. 默认会话按以下顺序继续读取：
    - `.codex/SOUL.md`
    - `.codex/USER.md`
    - `.codex/MEMORY.md`
    - `.codex/memory/全局记忆总览.md`
    - `.codex/memory/YYYY-MM/记忆总览.md`
    - `.codex/memory/YYYY-MM/YYYY-MM-DD.md`
-5. 当日日记缺失时，先在对应 `YYYY-MM/` 目录创建当日日记，再进入正式工作。
-6. 工作日切后的首轮工作，先检查“昨日记忆”是否已归档到对应 `.codex/memory/YYYY-MM/记忆总览.md`。
-7. 工作月切后的首轮工作，先检查“上月记忆总览”是否已归档到 `.codex/memory/全局记忆总览.md`。
+6. 当日日记缺失时，先在对应 `YYYY-MM/` 目录创建当日日记，再进入正式工作。
+7. 工作日切后的首轮工作，先检查“昨日记忆”是否已归档到对应 `.codex/memory/YYYY-MM/记忆总览.md`。
+8. 工作月切后的首轮工作，先检查“上月记忆总览”是否已归档到 `.codex/memory/全局记忆总览.md`。
 
 ## 三层职责边界
 - `.codex/`：agent 工作记忆、内部工作文档、本地技能入口（如 `.codex/skills/*/SKILL.md`）。
@@ -51,6 +52,8 @@
 ## Current Collaboration Workflow
 - 顶层协作真相源：`协作约定.md`
 - 当前默认开发主体仍为 `pm-main`。
+- 当前阶段默认直接在 `main` 开发、验证并推回 `../workflow_code/main`，不再使用 `dev/pm-main`。
+- 当前阶段不同小伙伴的已验证代码也统一直接合入 `../workflow_code/main`，确保所有生效代码汇聚在同一主线分支。
 - 完整协作顺序、成员职责、启动口径、推送/部署解释与后续多成员扩展规则，统一以顶层 `协作约定.md` 为准。
 - 若本节与 `协作约定.md` 出现冲突，以 `协作约定.md` 为准。
 
@@ -96,8 +99,9 @@
 
 ## Commit & Pull Request Guidelines
 - 代码提交统一在 `.repository/<developer_id>` 对应 Git 分支完成；当前 PM 仓提交应以治理、文档、留痕与边界收口为主。
-- 代码仓提交建议统一采用 Conventional Commits：`feat:`, `fix:`, `docs:`, `chore:`。
-- 提交信息建议包含作用域，如：`fix(workflow): block $root traversal on write targets`。
+- 当前项目默认统一使用中文提交日志；这条规则适用于所有参与开发的小伙伴，而不只适用于当前执行者。
+- 若需要保留提交类型，建议采用 `feat:`、`fix:`、`docs:`、`chore:` 等前缀 + 中文主句；主句应尽量写清“改动对象 + 行为变化 + 目的”，不要只留过短英文摘要。
+- 提交信息建议包含作用域，如：`fix(schedule): 用新的命中覆盖同一计划里旧的待执行 trigger，避免队列长期积压`。
 - PR 至少包含：变更目的、影响范围、验证命令、关键日志路径；涉及 UI 时附页面截图。
 - 单个 PR 建议聚焦单一主题（例如仅修复路径安全或仅调整训练队列 UI），避免把流程改造与文档重写混在一次提交中。
 

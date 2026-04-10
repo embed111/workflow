@@ -15,19 +15,33 @@
   否则计划明明已经在任务图里建出节点，schedule detail 仍会显示“待触发”，用户无法继续追踪。
 - 半成功现场要允许恢复。只要任务图节点已经带有 `source_schedule_id + trigger_instance_id`，后续扫描或 detail 读取就应能反查这些字段，把 schedule trigger 回写补齐，而不是一直卡在 `trigger_hit`。
 - 只靠 `scan` 或手工打开 detail 做恢复不够稳。worker 本身也要周期扫最近的 `trigger_hit/queued/running/dispatch_failed` 非终态 trigger，把丢失的后台处理线程重新挂起来；否则计划会长期卡在“已建单待调度/运行中”，只有人工点开页面时才继续推进。
+- 当同一张 assignment graph 里已经有别的 `running` 节点时，recovery worker 不该反复重挂另一个只是 `queued/ready` 的 trigger。更稳的做法是让它安静等待当前运行槽释放，再由成功收尾或下一轮恢复去继续 dispatch；否则 `dispatch_requested -> trigger_resume_requested -> recover_assignment_node` 会反复刷爆 `schedules.jsonl`，还会把“其实只是排队等待”伪装成“恢复失败”。
 - schedule trigger 恢复不能无差别地把所有 `dispatch_failed` 一次性重放。像 `[持续迭代] workflow` 这种被 `smoke baseline guard` 挡下来的 trigger，如果每轮都立刻重试，会把 `schedules.jsonl` 刷爆，还会把真正需要优先恢复的 `queued` trigger 挤掉。恢复顺序应该优先 `trigger_hit/queued/running`，`dispatch_failed` 至少要加冷却窗口。
 - schedule trigger 恢复在同一轮里不能并发起太多线程，尤其是这些 trigger 都指向同一张全局任务图时。一次性恢复多条会把任务图快照、run 记录回写和 work-record index 一起挤到同一把 SQLite 锁上，最终表现成 `database is locked`、`/api/status` 超时和恢复线程互相放大。更稳的默认是每轮只启动极小批次恢复，再由下一轮继续补。
 - 对同一条 `[持续迭代] workflow` 来说，旧的 backlog trigger 没必要按历史顺序全部补跑。worker 恢复更稳的口径是“每个 schedule 只恢复最新的一条非终态 trigger”，否则昨天下午的旧唤醒、旧自迭代会重新塞满 ready 队列，把真正最新的一轮挤到后面。
+- 对同一条 schedule 来说，如果新的命中到来时旧 trigger 还停在“待执行/待派发”，默认不应该继续把 backlog 越堆越多。更稳的口径是：同一 schedule 只保留最新的一条 pending trigger；旧的 pending 节点直接删掉，并把旧 trigger 标成 `superseded`，但已经 `running` 的旧节点保持不动。
+- 如果用户要求“先把 7x24 停住，等下一台设备再恢复”，不能只把 `[持续迭代] workflow` 和 `pm持续唤醒` 的 schedule 设成 `enabled=false`。已经命中过并落成 `ready` 的节点仍会继续执行；更稳的默认是先确认当前没有真实 running，再同时删除这些未开始的 ready 节点，最终以 `running_task_count=0`、`queued_task_count=0`、assignment graph `active.total_count=0` 三处一起收口。对 live API 的节点删除不要把超时卡太短，否则会留下“审计已写、节点文件还没收完”的假完成。
 - 当 `workflow` 自迭代节点不是业务失败，而是被系统按“运行句柄缺失 / workflow 已重启”收口时，也要像正常失败一样续挂下一轮 `[持续迭代] workflow`。否则站点虽然能被 watchdog 拉回，但 7x24 连续推进会在这类重启现场悄悄断链。
 - `create_node` 和 `dispatch` 也必须对 `trigger_instance_id` 做幂等保护。否则同一 trigger 会生成多个 assignment node，甚至把 dispatch 打到与计划详情回写不同的节点上，最终留下“计划详情还指着 ready 节点，真实执行却跑在另一个节点”的错位现场。
 - 生产 smoke 验收时，要把用户可见的 `GET /api/schedules/{id}` 详情当成 done_definition 的真相源，而不是只看本地 raw detail。现网里 raw detail 可能还停在 `queued`，但 HTTP detail 已经把 assignment/result 富化到 `running/failed`；同时接口本身也可能有瞬时抖动，所以验收脚本应采用较长超时和重试，并把 raw/http 偏差记成警告而不是直接误判失败。
+- 手工核任务图时，不能只对 `tasks/.../nodes/*.json` 直接 grep `status=ready/running`。节点文件即使已经 `record_state=deleted`，也会保留原来的 `status` 文本；更稳的默认是先按 `record_state=active` 过滤，再看 `status`，否则像历史孤儿 `ready` 节点也会被误当成 live 待派发节点。
+- schedule calendar 的验收不要把“今天已经过去的一次性触发时间”直接断言成 `plans` 里仍然可见。`get_schedule_calendar` 对当天只展示 `_now_bj()` 之后的 future candidates；如果测试要同时断言 `plans` 和 `results`，应冻结 `_now_bj()` 或把样例触发时间放在未来，否则会把已经修好的 list/detail 误报成 calendar 失败。
 - `schedule -> assignment` 桥接层要给同一 `trigger_instance_id` 固定一个稳定 `node_id`，并优先在已知全局主图 ticket 内做恢复扫描；不要每次都全局扫所有任务目录，更不要把“随机新建节点”当成默认恢复策略。
 - `run_schedule_smoke_baseline` 这类自测入口不能直接内联调用 `_process_schedule_trigger_async` 并换一把 thread key。它必须复用正常的 `_start_schedule_trigger_processing` 门闩，否则同一 trigger 会绕过进程内锁，重新触发建单/派发竞争。
 - 读取任务中心全局主图时，若数据库里已经绑定了 canonical ticket，就先直接验证并复用该 ticket；不要每次 list/dashboard 都重新全量扫描所有 workflow-ui 图和全部节点，否则面板很容易从“数据存在”退化成“接口超时后显示 0”。
 - 如果要做 `workflow` 的长期自迭代，不要在 assignment 完成后立即递归再派发一条同类节点；更稳的做法是把“下一轮”写成一个滚动的一次性 schedule，让系统在几分钟后再唤醒，既不断链，也避免瞬时热循环。
 - 对 pm/`workflow` 这类自迭代计划，默认要走低频、分钟粒度、短上下文、低风险目标；不要一上来就做高频自治。
+- 已经终态且 `once` 规则也耗尽的旧计划，不能继续留在 active schedule 视角里。否则 detail 可能已经显示 `succeeded/failed`，但 dashboard / preview / schedule_total 仍把它算作启用中的活跃计划。更稳的做法是读取最新 trigger 已终态且 `next_trigger_at` 为空时，同步修正 `schedule_plans.enabled` 与 `last_result_*`，让 detail、list、preview 三处共用同一份真相。
 - `[持续迭代] workflow` 这类自迭代 schedule 如果挂在 `smoke baseline guard` 后面，可能在计划命中后直接被拦成 `dispatch_failed`，即使版本计划和唤醒文案都已经写对。要保持 7x24 连续推进，不能只依赖这一条滚动 schedule，还要保留一条更低频的 pm 保底唤醒，必要时允许 PM 直接往任务中心补一条当前版本任务。
+- 只改 `[持续迭代] workflow` 的 assignment prompt 还不够。`schedule_service.py` 里 smoke block / 失败补链时创建的 `pm持续唤醒` 保底 schedule 也必须同步更新成同一套“活跃版本推进、周期泳道、生命周期阶段、基线/变更控制、小伙伴派发”口径，并纳入 gate；否则现网一旦走到保底补链，就会重新退回旧的巡检提示，7x24 又会开始围着存活打转。
+- 自迭代补链不能只在 assignment 正常完成路径里续挂。像 `smoke guard`、`dispatch_failed`、`stale running/运行句柄缺失` 这类失败收口，也必须同步补一条更晚的 `pm持续唤醒 - workflow 主线巡检`；否则 once 型主链一旦在失败路径落地，就会重新出现“当前没有 running、未来也没有入口”的静默断链。
 - `smoke baseline guard` 不能只按 `assigned_agent_id=workflow` 粗暴套到所有计划上。真正需要被 smoke 约束的是 `[持续迭代] workflow` 这类滚动自迭代计划；`pm持续唤醒` 这种保底恢复入口必须继续允许建单/补链，否则一旦 smoke 失败，主链和保底链会一起断。
+- 如果 live prod 上 `POST /api/assignments/<ticket>/dispatch-next` 在 ready 节点恢复场景里长时间不返回，不要连续重试把同一节点重复派发。先核 `audit.jsonl` 和 `run.json` 是否完全没有新的 `dispatch`/`run_id`；若只是 HTTP 壳卡住、但当前源码工作区已经验证过同一逻辑，可临时用本地 `workflow_app.server.bootstrap.web_server_runtime.dispatch_assignment_next(root, ...)` 直连当前 prod runtime 做一次止血派发，然后立刻回核 `node status / run_id / future trigger` 三处真相。
+- 如果为了现场止血，必须从一次性本地 Python 进程里直连 `workflow_app.server.bootstrap.web_server_runtime.dispatch_assignment_next(root, ...)`，不能继续让真正的 execution worker 线程保持 `daemon=True`。否则宿主进程一退出，就会稳定留下 `run.json=starting`、`provider_pid=0`、`events.log` 只有 `dispatch` 的假运行，后续 schedule 还会被这条脏 `starting/running` 误挡住并发槽。更稳的默认是：`pm-manual-recovery` 这类一次性恢复入口改成非 daemon，或者进一步演进成独立进程执行；同时 worker 顶层必须有 fail-closed guard，把 `provider_start` 前异常显式收口。
+- schedule -> assignment 桥接层如果遇到的是“graph 并发槽满 / 同 agent 仍在运行”，不能继续把返回文案压成统一的 `dispatch_requested` 或 `resume_scheduler_requested`。要把真实等待原因透传到 schedule detail，这样现场才能区分“需要恢复的半断裂 trigger”和“其实只是正常排队中的 queued 节点”。
+- file-based stale recovery 不能在没有串行门闩和终态预落盘的前提下，直接挂在 `/api/status` / `/api/schedules` 这类高频读链上做副作用。否则多个读请求会同时看到同一份旧的 `node.json=status=running`，反复写出 `recover_stale_running` 与 `schedule_self_iteration`，直到某一次终于把 node 文件改成终态。更稳的默认是：按 `ticket_id + node_id` 串行 stale recovery，锁内先重读最新 node 文件；一旦确认真 stale，就先把 node terminal 状态落盘，再写 audit 和续挂 schedule。
+- assignment finalize 的“收尾后继续派发下一条 ready”不能在 stale recovery / thread-start failure 这类已经持有同 ticket dispatch 门闩的路径里递归执行。否则 `_finalize_assignment_execution_run()` 尾段再次调用 `dispatch_assignment_next()` 时，会把同 ticket 的非重入锁直接卡死，现场表现成 schedule 还在命中、ready 节点持续堆积、真实 workflow run 却停在上一轮。更稳的默认是：恢复态 finalize 只负责收口，follow-up dispatch 改到锁外或外层调度点执行，并把 blocked/failed follow-up dispatch 明确写审计。
+- pm 保底巡检不能只看“还有 future 入口”或“recent trigger 里写着 assigned agent already has running node”就判健康。对 `workflow` 这类 7x24 主线，更稳的口径是：只要出现 `running_task_count=0`、ready 节点已到时堆积，且找不到对应 live `run.json/events.log`，就要直接判定为假健康并立即补链/重派发。
 
 ## 已踩过的坑
 - 坑 1：schedule worker 在 `trigger_hit` 之后同步调用慢建单/慢派发，HTTP `scan` 超时了，但 trigger/plan 状态还没来得及更新，现场就会留下“节点已建出来，schedule detail 却还是 pending”的半断裂状态。
@@ -46,3 +60,17 @@
   - 避免方式：把 guard 范围收窄到真正的 `[持续迭代]` / `continuous-improvement-report.md` 计划；保底唤醒只负责巡检、续挂和补单，不参与这层 smoke 封禁。
 - 坑 8：如果只在 `run_schedule_scan` 里补偿 trigger，worker 一旦在 `trigger_hit -> create_node -> dispatch_requested` 之间重启，旧 trigger 会一直停在 `queued/running` 的中间态；后续虽然能在任务图里看到 node，但计划详情和下一轮接力都不会自动往前走。
   - 避免方式：让 worker 每轮都额外扫一遍最近的非终态 trigger，并基于 `trigger_instance_id` 重挂 `_start_schedule_trigger_processing`；终态 `succeeded/failed` 的 trigger 则直接跳过，避免无意义重试。
+- 坑 9：如果只在 `[持续迭代] workflow` 的“正常完成”路径里续挂 `pm持续唤醒`，一旦现场落到 `smoke guard`、`dispatch_failed` 或“运行句柄缺失”这种失败收口，计划表面上可能只剩一个已结束节点，真正的 future trigger 却已经空了。
+  - 避免方式：把保底唤醒的续挂逻辑同时接到 schedule worker 的失败路径和 assignment stale-running 回收路径；验收至少覆盖“smoke blocked”和“stale running recovered”两条场景。
+- 坑 10：当 live prod 的 `dispatch-next` HTTP 壳卡住时，直接用一次性本地 Python 进程调用 `dispatch_assignment_next(root, operator='pm-manual-recovery')` 虽然会立刻写下 `dispatch` 审计和 `run_id`，但如果 execution worker 线程仍是 daemon，宿主进程退出后线程会被直接带死；现场就会留下 `starting/provider_pid=0/events 只有 dispatch`，并在几十分钟后被 stale recovery 回收成“运行句柄缺失”。
+  - 避免方式：`pm-manual-recovery` 默认改成非 daemon 线程，至少保证一次性宿主不会在 worker 入口前提前退出；同时给 worker 顶层补 `provider_start_failed -> finalize failed` 的显式收口，避免再出现静默 limbo。
+- 坑 11：如果只修 trigger 行而不修 `schedule_plans` 主表，历史 `once` 计划即使已经 `succeeded/failed` 且没有未来触发，也会继续以 `enabled=1` 混进 dashboard / schedule preview，导致 `schedule_total` 和 active 列表持续偏大。
+  - 避免方式：读取最新 trigger 已终态且 `next_trigger_at=''` 时，同步把该计划从 active 视角退场，并新增定向验收覆盖 detail / preview / 数据库行三处一起收口。
+- 坑 12：当 `task_artifact_store_queries._assignment_reconcile_stale_task_state_internal()` 直接在高频 GET 读链里做 stale recovery，而 recovery 前又没有节点级串行锁和“先落 `node.json=failed`”的动作时，同一 stale node 会被多个读请求重复回收，现场表现成 `run.json` 早已 `cancelled`，但 audit 里持续刷 `recover_stale_running`，还会重复续挂同一条自迭代 schedule。
+  - 避免方式：按 `ticket_id + node_id` 做 file-based stale recovery 串行化；锁内先重读 node 真相，若仍是 `running` 才执行 recovery，并把 node terminal 状态先落盘，再放出 audit / schedule side effects。
+- 坑 13：如果只更新 assignment finalize 路径上的 `[持续迭代] workflow` 提示，而没有同步更新 `schedule_service` 在 smoke block/失败补链时创建的 `pm持续唤醒` 保底 schedule，主链一旦走到保底分支，PM 就会重新收到旧口径的巡检任务，结果 7x24 只维持活跃不推进版本。
+  - 避免方式：凡是调整 PM 的 7x24 版本推进职责，都同时修改 assignment self-iteration prompt、pm wake prompt、schedule worker fallback prompt，并用 gate 覆盖主线与保底两条生成路径。
+- 坑 14：如果 stale recovery 在 `dispatch_assignment_next()` 已持锁的上下文里直接调用 `_finalize_assignment_execution_run()`，而 finalize 尾段又无条件递归再调一次 `dispatch_assignment_next()`，同 ticket 的 dispatch 非重入锁会被自己卡住。日志上常见的假象是：最后一条真实 run 已在几十分钟前结束，后续 schedule 仍持续 `trigger_hit -> create_assignment_node`，但再也没有新的 `dispatch_requested/run_id`。
+  - 避免方式：给 finalize 增加 `suppress_followup_dispatch` 这类显式开关；恢复态和启动失败态 finalize 默认禁止递归 follow-up dispatch，真正的下一条 ready 派发改在锁外 helper 执行，并把 blocked/failed follow-up dispatch 落成审计，避免静默卡死。
+- 坑 15：如果保底巡检 done definition 仍把“future 入口还在”当成主要健康信号，就会漏掉一种非常危险的半断链：`running_task_count=0`、ready 队列已堆积、recent trigger/message 还残留 `assigned agent already has running node`，但真实运行记录已经没了。
+  - 避免方式：巡检提示里必须把“ready pileup + no live run”明确列成假健康特征；验收至少覆盖 stale running recovered 后 ready 可继续派发，以及 ready 堆积时 PM 能给出补链/重派发判断。
