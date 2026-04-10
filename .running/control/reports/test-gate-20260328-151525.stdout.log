@@ -1,9 +1,0 @@
-[workflow] workspace: D:\code\AI\J-Agents\workflow\.running\test
-[workflow] runtime root: D:\code\AI\J-Agents\workflow\.running\control\runtime\test
-[workflow] python: C:\Users\jmqj\AppData\Local\Programs\Python\Python313\python.exe
-[workflow] skip backfill.
-[workflow] refresh status ...
-status> pending_analysis=0 pending_training=0
-[workflow] web => http://127.0.0.1:8092
-[workflow] press Ctrl+C to stop.
-web> http://127.0.0.1:8092

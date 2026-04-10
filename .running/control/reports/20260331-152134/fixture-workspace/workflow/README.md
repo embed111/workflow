@@ -1,1 +1,0 @@
-runtime release gate fixture
