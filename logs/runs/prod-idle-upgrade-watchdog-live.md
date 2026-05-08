@@ -8906,3 +8906,7 @@
 
 - `2026-05-08T20:21:36+08:00` watcher 启动：base_url=http://127.0.0.1:8090, timeout_seconds=30.0, poll_seconds=10.0, apply_wait_seconds=600.0, operator=prod-idle-upgrade-watchdog
 - `2026-05-08T20:21:44+08:00` 单次检查读取状态失败：status_code=0 payload={"ok": false, "error": "timed out", "code": "request_failed"}
+# Prod Idle Upgrade Watcher
+
+- `2026-05-08T21:21:37+08:00` watcher 启动：base_url=http://127.0.0.1:8090, timeout_seconds=30.0, poll_seconds=10.0, apply_wait_seconds=600.0, operator=prod-idle-upgrade-watchdog
+- `2026-05-08T21:21:45+08:00` 单次检查读取状态失败：status_code=0 payload={"ok": false, "error": "timed out", "code": "request_failed"}
