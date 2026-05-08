@@ -1,0 +1,22 @@
+# continuous-improvement-report 2026-04-19 19:06:41+08:00
+
+- preference_ref: state/user-preferences.md
+- delta_observation: 你这轮明确要求不能重复上一轮的门禁播报，必须在 `V4-R6` 上做真实推进；当前最合适的高价值动作是直接切首批冻结对象的第一刀，而不是继续复述 `first_batch_targets`。
+- delta_validation: 下轮优先继续 `schedule_service.py` 的第二刀，并在 dirty batch 仍绑定 `V4-R6` 时不提前切到 helper 并发或默认发布。
+- version_transition_decision: `stay(V4)`
+- lane: `工程质量探测`
+- lifecycle_stage: `变更控制`
+- root_sync_state: `ahead_dirty`
+- ahead_count: `0`
+- dirty_tracked_count: `4`
+- untracked_count: `3`
+- push_block_reason: `workspace_dirty + mandatory_gate_fail_closed + schedule_service_first_slice_uncommitted`
+- next_push_batch: `继续沿 schedule_service.py 做第二刀，再视 line-budget 结果决定是否切 assignment_center_render_runtime.js / workflow_env_common.ps1；Mandatory Gate 未转绿前不继续 test/candidate`
+- key_change: 我把 `schedule_service.py` 里的 schedule rule runtime 抽到新的 `src/workflow_app/server/services/schedule_rule_runtime.py`，并新增 `scripts/acceptance/verify_schedule_rule_runtime.py`；line budget 复跑后 `schedule_service.py` 已从 `3841` 降到 `3563` 行。
+- validation_refs:
+  - `.repository/pm-main/.test/20260419-190427-380/report.md`
+  - `.repository/pm-main/.test/20260419-190455-116/report.md`
+  - `.repository/pm-main/.test/20260419-190504-559/report.md`
+  - `.repository/pm-main/.test/20260419-190525-540/report.md`
+  - `.repository/pm-main/.test/reports/WORKSPACE_LINE_BUDGET_REPORT.json`
+  - `.codex/memory/2026-04/2026-04-19.md`

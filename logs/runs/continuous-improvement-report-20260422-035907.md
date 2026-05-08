@@ -1,0 +1,29 @@
+# continuous-improvement-report 2026-04-22 03:59:07+08:00
+
+- ticket: `asg-20260327-223335-b79f27`
+- node: `node-sti-20260422-a4f912c4`
+- version_transition_decision: `stay(V7)`
+- lane: `UCD/设计优化`
+- lifecycle_stage: `开发实现`
+- root_sync_snapshot: `pm-main/workflow_devmate/workflow_testmate/workflow_qualitymate/workflow_bugmate/workflow_ucdmate = clean_synced@165f8e3`
+- release_snapshot: `prod=current=candidate=20260422-020751 / candidate_is_newer=false / request_pending=false / can_upgrade=false / helper_run_state=mainline+2 helper runs active`
+- judgment:
+  - 我这轮没有继续停在“下一步该做 R4/R7”，而是直接把两条剩余切版 blocker 推进到了真实 helper 执行链。
+  - `workflow_ucdmate node-20260422-035257-c70b6c / arun-20260422-035452-7ff6a3` 已进入真实 run，开始产出 `V7-R4` flat-surface brief。
+  - `workflow_qualitymate node-20260422-035358-f321ee / arun-20260422-035616-197670` 也已进入真实 run，开始冻结 `V7-R7` platform ownership plan。
+  - 当前 `version_transition_decision` 仍然只能是 `stay(V7)`；我已经把 blocker 从“尚未起跑”缩成“brief/freeze 尚未交付 + mandatory-lane gate 尚未实现”。
+- next:
+  - 先消费 `v7-r4-flat-surface-brief.md`，据此决定 `workflow_devmate` 的实现首刀和回归口径。
+  - 再消费 `v7-r7-platform-ownership-freeze.md`，把 helper ownership、平台边界和 `V8` activation blockers 写回版本真相。
+  - `next_push_batch=无代码待推；先消费 R4/R7 helper 交付，再决定 implementation/gate batch`
+- evidence:
+  - `aaud-20260422-035531-cb103c` 已把 `node-20260422-035257-c70b6c` dispatch 成 `arun-20260422-035452-7ff6a3`
+  - `aaud-20260422-035653-4a6b42` 已把 `node-20260422-035358-f321ee` dispatch 成 `arun-20260422-035616-197670`
+  - `status-detail` 与 `run.json` 都已出现 `provider_start / turn.started`
+- warnings:
+  - `pm/daily-execution-history/2026-04-20.md`、`pm/daily-execution-history/2026-04-21.md`、`pm/daily-execution-history/2026-04-22.md` 与 `pm/daily-learning-reports/2026-04-22/` 仍未补齐；我这轮没有伪造 daily 完成态。
+  - `V7-R4` 与 `V7-R7` 当前都已起跑，但交付还没落盘；若后续停在 running，我需要按 supported rerun/recovery 继续收口。
+- preference_ref: `state/user-preferences.md`
+- delta_observation: `当 R2/R5 已完成且发布边界 clean 时，当前版本最有价值的动作就是立即把 R4/R7 转成真实 helper run，而不是继续重复 compare/lifecycle 播报。`
+- delta_validation: `下一轮先消费 R4 brief 与 R7 freeze 交付，再决定 implementation/gate batch；若 helper 只剩 running 不出结果，就走 supported rerun/recovery。`
+- memory_ref: `.codex/memory/2026-04/2026-04-22.md`

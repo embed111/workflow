@@ -1,0 +1,25 @@
+# Continuous Improvement Report
+
+- judgment: `version_transition_decision=stay(V5)`；当前更高价值的仍是 `工程质量探测 / 发布边界收口`，不是回去重复 prod/live member-route probe。
+- tradeoff: 我这轮优先切 `training_center_loop_views.js`，因为发布边界已经 `clean_synced`，而 `Mandatory Gate` 的新第三个 blocker 已明确换成它；继续做同质化 live smoke 只会重复上一轮，不会把版本再往前推。
+- next_action: 继续压 `schedule_service.py / workflow_env_common.ps1 / src/workflow_app/server/services/assignment_service_parts/task_artifact_store_queries.py`，待 `line budget / workflow gate / runtime release gate` 再往前走后，再部署 `test`、刷新 `prod candidate`，并重跑 supported live member-route proof。
+- delivered_change: 我新增 `training_center_loop_status_views.js` 与 `training_center_loop_right_pane.js`，把 training loop 的能力卡/状态页渲染和右侧节点判定面板从 `training_center_loop_views.js` 里抽出来；同时新增 `verify_training_center_loop_views_split.py` 并挂进 `workflow_gate_probe_registry.py`。这让 `training_center_loop_views.js` 从 `1110` 行降到 `475` 行，并退出 Mandatory Gate blocker。
+- release_boundary: `root_sync_state=clean_synced / ahead_count=0 / dirty_tracked_count=0 / untracked_count=0 / workspace_head=code_root_head=6338663 / push_block_reason=mandatory_gate_fail_closed / next_push_batch=schedule_service.py / workflow_env_common.ps1 / src/workflow_app/server/services/assignment_service_parts/task_artifact_store_queries.py split + gate/acceptance`
+- live_summary: `/healthz` 正常；`/api/status` 为 `running_task_count=1 / queued_task_count=2 / active_agent_count=1`；`/api/runtime-upgrade/status` 为 `candidate_version=prod=20260419-180446 / candidate_is_newer=false / can_upgrade=false / ghost_running_detected=false`；当前主线和保底出口都还在，不需要我这轮兜底补链。
+- helper_summary: 当前没有 active helper task；`workflow_devmate / workflow_testmate / workflow_qualitymate / workflow_bugmate / workflow_ucdmate` 的 developer workspace 仍停在 `cec137`、相对 `code_root@6338663` 呈 `diverged_or_unknown`，所以这轮继续不强派旧基线 helper。
+- validation_refs:
+  - `.repository/pm-main/.test/20260420-125422-664/report.md`
+  - `.repository/pm-main/.test/20260420-125951-294/report.md`
+  - `.repository/pm-main/.test/20260420-125959-673/report.md`
+  - `.repository/pm-main/.test/reports/WORKSPACE_LINE_BUDGET_REPORT.json`
+  - `git -C .repository/pm-main log -1 --pretty=format:"%H %cI %s"`
+  - `git -C ../workflow_code log -1 --pretty=format:"%H %cI %s"`
+  - `python .repository/pm-main/scripts/manage_developer_workspace.py --root .running/control/runtime/prod status`
+  - `http://127.0.0.1:8090/healthz`
+  - `http://127.0.0.1:8090/api/status`
+  - `http://127.0.0.1:8090/api/schedules`
+  - `http://127.0.0.1:8090/api/runtime-upgrade/status`
+- preference_ref: `state/user-preferences.md`
+- delta_observation: `training_center_loop_views.js` 已退出 first batch targets，`blocking_offender_count` 从 `12` 降到 `11`；新的第三个首批冻结对象已经切到 `task_artifact_store_queries.py`。
+- delta_validation: 下一轮优先继续压 `schedule_service.py / workflow_env_common.ps1 / task_artifact_store_queries.py`，并在 helper 重新 refresh 到 `code_root@6338663` 后再决定是否并行派发。
+- memory_ref: `.codex/memory/2026-04/2026-04-20.md`

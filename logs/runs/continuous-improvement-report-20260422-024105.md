@@ -1,0 +1,22 @@
+# continuous-improvement-report 2026-04-22 02:41:05+08:00
+
+- ticket: `asg-20260327-223335-b79f27`
+- node: `node-sti-20260422-307e707d`
+- version_transition_decision: `stay(V7)`
+- lane: `测试探测`
+- lifecycle_stage: `基于基线测试`
+- root_sync_snapshot: `pm-main/workflow_devmate/workflow_testmate/workflow_qualitymate/workflow_bugmate/workflow_ucdmate = clean_synced@165f8e3`
+- release_snapshot: `prod=current=20260422-020751 / candidate=20260422-020751 / candidate_is_newer=false / drain_active=false / running_task_count=2`
+- summary:
+  - 我先确认 `prod` 已经对齐到 `20260422-020751`，所以旧的“等空窗升级到 020751” blocker 已经失效；当前 compare 仍红，是因为 `api_catalog_live_regression` 还挂在旧 baseline `20260421-145927`。
+  - 我随后创建了两条 P0 helper 节点：`workflow_testmate node-20260422-023504-r2cmp` 负责 `V7-R2` 的 version-matched compare live regression，`workflow_qualitymate node-20260422-023913-r5life` 负责 `V7-R5` 的 prod lifecycle readback。
+  - 创建过程中客户端超时误造了一条重复 compare 节点 `node-20260422-023635-8a0007`，我已经把它删掉，只保留 canonical compare 节点。
+  - 当前新的 live blocker 是：helper `dispatch-next` 客户端调用持续挂起且没有新的 dispatch 审计，同时主线节点 `node-sti-20260422-307e707d` 还持有双 run（`arun-20260422-022919-5c83b4 / arun-20260422-022920-0a7e10`）。
+- next:
+  - 等当前 `workflow` 双 run 收敛后，先看 helper 节点会不会自动 dispatch
+  - 如果 helper 仍只停在 `ready`，把 `duplicate-run / dispatch-next stall` 升级成下一批 fail-closed bug
+  - helper 一旦起跑，优先消费 `V7-R2` 的 compare live artifact，再消费 `V7-R5` 的 lifecycle prod readback
+- preference_ref: `state/user-preferences.md`
+- delta_observation: 当前最值钱的动作已经从“等待 prod 升级”切成“让 helper 节点真正跑起来，并把 duplicate-run/dispatch stall 当成新 blocker 处理”。
+- delta_validation: 下一轮先回读 `audit.jsonl / node.json / run.json`，确认 `node-20260422-023504-r2cmp` 与 `node-20260422-023913-r5life` 是否进入 running；若没有，就直接按当前 live stall 开 bug 批次。
+- memory_ref: `.codex/memory/2026-04/2026-04-22.md`

@@ -1,0 +1,41 @@
+# workflow-pm-wake-summary 2026-04-13 02:20:40
+
+- conclusion: `继续推进`
+- stage: `基于基线测试`
+- lane: `工程质量探测`
+- advancement: `发布推进`
+- live:
+  - `/healthz=ok`
+  - 当前真 running 为 `node-sti-20260413-5d337f7a / pm持续唤醒 - workflow 主线巡检 / 2026-04-13 01:40:00`
+  - 当前 run 为 `arun-20260413-015609-6c7535`，`status=running / latest_event_at=2026-04-13T02:22:55+08:00 / provider_pid=36448`
+  - 当前 ready 队列为：
+    - `node-sti-20260413-38d25210 / pm持续唤醒 - workflow 主线巡检 / 2026-04-13 02:20:00`
+    - `node-sti-20260413-d6c9ed7b / [持续迭代] workflow / 2026-04-13 02:09:00`
+  - 当前不是 `0 running + ready pileup` 的假健康
+- runtime_upgrade:
+  - `current_version=20260413-014801`
+  - `candidate_version=20260413-014801`
+  - `candidate_is_newer=false`
+  - `request_pending=false`
+  - `can_upgrade=false`
+  - `blocking_reason=running_tasks_present`
+- release_boundary:
+  - `root_sync_state=clean_synced`
+  - `ahead_count=0`
+  - `dirty_tracked_count=0`
+  - `untracked_count=0`
+  - `workspace_head=code_root_head=6b8a3e3`
+  - `push_block_reason=-`
+  - `next_push_batch=待切批`
+- action:
+  - 我确认 `014801` 对应的 3 个提示词脏文件已经通过 `test-gate-20260413-014801`
+  - 我在 `.repository/pm-main` 提交了 `6b8a3e3 fix(schedule): 收口持续迭代反空转提示词并推回根仓`
+  - 直接推到本机 `../workflow_code/main` 时，`updateInstead` 返回“Working directory has unstaged changes”的伪阻塞
+  - 我随后执行 `git -C ../workflow_code merge --ff-only 6b8a3e3`，把本机根仓非破坏性快进到同一提交
+- risk:
+  - `workflow_mainline_handoff_pending=true` 仍成立
+  - 新变化是：`01:40 mainline` 已被 `02:09 mainline` 覆盖，而 `02:20 patrol` 又再次排在 `02:09 mainline` 前面；当前 still-running 的 `01:40 patrol` 收尾后，主线是否还能先接棒，已经再次成为首风险
+- preference_ref: `state/user-preferences.md`
+- delta_observation: `prod` 已自动升到 `20260413-014801`，但 `pm-main` 一度留下 3 个已通过 gate 未 commit/push 的提示词脏文件；本轮已收口回 `../workflow_code/main`
+- delta_validation: 下一轮继续确认 `01:40 patrol` 收尾后，`02:09 mainline` 是否先于 `02:20 patrol` 被 dispatch；若仍不接棒，再进入 `schedule refresh/update` 治理
+- memory_ref: `.codex/memory/2026-04/2026-04-13.md`

@@ -7,8 +7,10 @@
 
 ## 角色工作区适用口径
 - 通过“创建角色”生成的新 agent 工作区，默认沿用这套记忆库结构与归档规范。
+- 角色工作区的记忆库不是可有可无的附件，而是该 agent 被唤醒、承接上下文和持续工作的前置条件；缺少这套记忆骨架，就不能视为真正“活过来”。
 - 角色工作区的 `AGENTS.md` 必须显式引用 `.codex/MEMORY.md`，并把它作为日切、月切、经验读取与日记追加的真相源。
-- 若角色工作区缺少记忆骨架、经验索引或归档汇总，优先使用 `python scripts/manage_codex_memory.py repair-rollups --root .` 修复。
+- 角色工作区的 `AGENTS.md` 除了引用 `.codex/MEMORY.md`，还必须明确每轮启动前的必读链路：经验索引、短期记忆、工作区结构与当日日记。
+- 若角色工作区缺少记忆骨架、经验索引或归档汇总，且工作区内实际存在 `scripts/manage_codex_memory.py`，优先使用 `python scripts/manage_codex_memory.py repair-rollups --root .` 修复；若脚本缺失，则按本文件目录模型手工补齐 `全局记忆总览.md`、当月 `记忆总览.md` 与当日日记骨架。
 
 ## 必读顺序
 1. `AGENTS.md`
@@ -32,6 +34,7 @@
 - 经验卡只记录可复用模式、踩坑与规避规则；不要写成逐轮流水账。
 - 出现新的稳定经验时，更新对应 `.codex/experience/*.md`，并同步维护 `index.md`。
 - 每轮工作结束后，都要向当日日记追加一条带时间戳的总结。
+- 记忆库与知识资产只保留高信号内容；过期、重复、误导性内容要持续清理，避免把“知识越多越好”误当成 agent 成长。
 - 每日日记条目默认使用第一人称，写成“我今天 / 我这轮 / 我刚刚确认到”的日记口吻；在不牺牲可检索性的前提下，允许保留一点当时的观察和状态。
 - 每日日记条目优先使用结构化回忆格式：`主题`、`背景`、`动作`、`结论`、`验证`、`产物`、`下一步`；必要时可补一行 `感受/观察`。
 - 当日总结只保留在当日日记中，直到次日开始。
@@ -55,6 +58,8 @@
 - 如果发现必须的总览条目缺失，先补归档，再继续正常工作。
 
 ## 验证命令
+- 当前 `workflow` PM 仓若不存在 `scripts/manage_codex_memory.py`，先人工核对 `.codex/memory/全局记忆总览.md`、`.codex/memory/YYYY-MM/记忆总览.md` 与 `.codex/memory/YYYY-MM/YYYY-MM-DD.md` 是否齐全，再按本文件写入规则补记。
+- 仅当当前工作区实际存在 `scripts/manage_codex_memory.py` 时，再使用以下命令：
 - `python scripts/manage_codex_memory.py status --root .`
 - `python scripts/manage_codex_memory.py verify-rollups --root .`
 - `python scripts/manage_codex_memory.py repair-rollups --root .`

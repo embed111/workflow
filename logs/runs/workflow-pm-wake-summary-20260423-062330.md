@@ -1,0 +1,29 @@
+# workflow-pm-wake-summary 2026-04-23 06:23:30+08:00
+
+- preference_ref: state/user-preferences.md
+- ticket_id: `asg-20260327-223335-b79f27`
+- node_id: `node-sti-20260423-242decfb`
+- version_transition_decision: `switch(V9)`
+- lane: `发布推进`
+- lifecycle_stage: `版本切换完成`
+- root_sync_state: `clean_synced`
+- ahead_count: `0`
+- dirty_tracked_count: `0`
+- untracked_count: `0`
+- push_block_reason: `-`
+- next_push_batch: `pm-main 当前无代码待推；下一批回到 V9 active 主线，优先切 V9-R2 stale compare 清零批次。`
+- summary: `主线健康，prod 已追平 20260423-054953；我没有停在纯观察，而是先把 V9-R3 最后一条 activation blocker 派成 prod 上真实 helper browser acceptance，再在 helper 给出 pass 后同轮完成 V8 -> V9 切版。`
+- active_helper_tasks: `无运行中的 helper；workflow_testmate(node-20260423-061958-c5b407 / arun-20260423-062103-59b300 / succeeded + delivered)`
+- switch_blockers: `无；workflow_testmate 已给出 browser_surface_verdict=pass，activation readback 已由我刷新进版本真相源。`
+- validation_refs:
+  - `http://127.0.0.1:8090/healthz`
+  - `http://127.0.0.1:8090/api/status`
+  - `http://127.0.0.1:8090/api/schedules`
+  - `http://127.0.0.1:8090/api/runtime-upgrade/status`
+  - `http://127.0.0.1:8090/api/assignments/asg-20260327-223335-b79f27/status-detail?node_id=node-20260423-061958-c5b407`
+  - `C:/work/J-Agents/.output/tasks/asg-20260327-223335-b79f27/audit/audit.jsonl#aaud-20260423-062004-caab5f`
+  - `C:/work/J-Agents/.output/tasks/asg-20260327-223335-b79f27/audit/audit.jsonl#aaud-20260423-062205-fac630`
+  - `C:/work/J-Agents/.output/tasks/asg-20260327-223335-b79f27/runs/arun-20260423-062103-59b300/result.json`
+  - `C:/work/J-Agents/.output/tasks/asg-20260327-223335-b79f27/artifacts/node-20260423-061958-c5b407/output/v9-r3-prod-browser-acceptance.md`
+- delta_observation: `当剩余 blocker 只差一条 live browser verdict 时，最小高价值推进是把这条验收直接派成受支持 helper run；一旦 helper 明确说明“只剩 readback 未刷新”，就不该继续停在旧 active 版本。`
+- delta_validation: `已完成 helper 验收消费与切版；下一轮直接按 V9 active 主线推进，不再复读这条 V8 blocker。`

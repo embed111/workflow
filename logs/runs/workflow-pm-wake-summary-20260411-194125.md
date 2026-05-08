@@ -1,0 +1,119 @@
+# workflow-pm-wake-summary
+
+- checked_at: `2026-04-11T19:41:25+08:00`
+- ticket_id: `asg-20260327-223335-b79f27`
+- node_id: `node-sti-20260411-84c3f2c3`
+- run_id: `arun-20260411-193612-84ad80`
+- active_version: `V1`
+- task_package: `V1-P2 发布链与工作区防漂移收口`
+- lane: `架构优化`
+- lifecycle_stage: `基于基线测试`
+- baseline: `prod=20260411-093051`
+- preference_ref: `state/user-preferences.md`
+- delta_observation: 当前现场已经切到 `19:25` 保底巡检 live running、`19:13` 主线 ready waiting handoff，并且 future 已续挂到 `19:51 / 20:21`；当前不是 `ready` 堆积但无 live run 的假健康。
+- delta_validation: 我已重新核对 `pm-main / workflow_code` release boundary、`prod` 的 status/runtime-upgrade/schedules、任务图、当前巡检 run 文件、assignment audit，以及 idle watcher 留痕；并把最新快照回写到版本计划、月度现场和今日日记。
+- memory_ref: `.codex/memory/2026-04/2026-04-11.md`
+- experience_refs:
+  - `.codex/experience/runtime-upgrade-and-agent-monitoring.md`
+  - `.codex/experience/schedule-trigger-closure.md`
+
+## 巡检结论
+
+这轮 `prod` 不是假健康。当前 live 现场已经收口为：
+
+- `running`: 保底巡检 `node-sti-20260411-84c3f2c3 / arun-20260411-193612-84ad80`
+- `ready`: 主线 `node-sti-20260411-2fe5e57d / [持续迭代] workflow / 2026-04-11 19:13:00`
+- `future`: 主线 `sch-20260405-56eee156 -> 2026-04-11T19:51:00+08:00`，保底 `sch-20260405-67a89536 -> 2026-04-11T20:21:00+08:00`
+
+我直接核了当前巡检 run 的磁盘真相：`run.json` 仍是 `status=running / provider_pid=20488 / latest_event_at=2026-04-11T19:38:50+08:00`，`events.log` 里已经有 `dispatch -> provider_start -> thread.started -> turn.started`，对应 dispatch 审计是 `aaud-20260411-193621-3b59d7 @ 2026-04-11T19:36:11+08:00`。当前全局主图也已经收口为 `1 running / 1 ready / 6 pending`，并且 `/api/status` 明确给出 `workflow_mainline_handoff_pending=true`，说明现在只是“保底巡检仍在运行，真正的 [持续迭代] workflow 还在待接棒”，不是“0 running + ready 堆积”的假健康。
+
+当前 active 版本继续是 `V1`，本轮最高价值泳道继续是 `架构优化`，生命周期阶段继续是 `基于基线测试`。这轮最该推进的动作仍不是再挂新 helper，也不是由当前节点自己触发正式升级，而是继续盯住 `19:25` 巡检释放后的主线 handoff 和首个 idle upgrade 空窗。
+
+## 发布边界
+
+当前真正的 release boundary 是：
+
+- `developer_id=pm-main`
+- `root_sync_state=clean_synced`
+- `ahead_count=0`
+- `dirty_tracked_count=0`
+- `untracked_count=0`
+- `push_block_reason=-`
+- `next_push_batch=待切批`
+- `workspace_head=code_root_head=1cd76c8`
+- 上游参考：`pm-main / workflow_code -> ## main...origin/main [ahead 8]`
+
+也就是说，本轮看到的 `ahead 8` 只代表本机 `pm-main / workflow_code` 相对 `origin/main` 仍有 8 个未上推的本地提交；相对本机代码根仓本身仍是 `clean_synced`，不构成当前 dirty/ahead 异常。
+
+## 升级门禁
+
+这轮没有执行 `/api/runtime-upgrade/apply`。当前 `/api/runtime-upgrade/status` 是：
+
+- `current_version=20260411-093051`
+- `candidate_version=20260411-173655`
+- `candidate_is_newer=true`
+- `request_pending=false`
+- `running_task_count=1`
+- `blocking_reason=存在运行中任务，暂不可升级`
+- `can_upgrade=false`
+
+我还补核了托管链：
+
+- `.running/control/prod-last-action.json` 仍显示最后一次成功升级完成于 `2026-04-11T01:35:04Z -> 20260411-093051`
+- `logs/runs/prod-idle-upgrade-watchdog-live.md` 最近一次单次检查仍停在 `2026-04-11T18:46:36+08:00`，当时因为 `running_task_count=1 / can_upgrade=false` 跳过
+- 当前 `start_workflow_env.ps1` supervisor、`launch_workflow.ps1` 子进程和 web 进程仍都在
+
+所以这轮并不存在“watcher 根本没在”或“巡检节点应该自己 apply”的结论；当前仍应继续由 `prod` supervisor 托管的 idle watcher 在真正空窗时发起升级。
+
+## 真相分叉
+
+当前 running/ready 节点与 future schedule prompt 仍在回写旧 release-boundary 语义：
+
+- 当前 running/ready 节点的 prompt 仍带着 `root_sync_state=ahead_clean ; ahead_count=7 ; workspace_head=7822016 ; push_block_reason=unpushed_commits_present`
+- `/api/schedules` 虽已续挂 `19:51 / 20:21` future，但 launch_summary 仍按旧 release boundary 逻辑写成 `ahead_clean / unpushed_commits_present`
+
+我再次确认，这不是本地 release boundary 重新失控，而是 live `prod=20260411-093051` 还没切到包含新真相源逻辑的代码版本。当前工作区同名逻辑已经以 `1cd76c8` 收口为“只以本机 `../workflow_code` clean_synced 为准”；只是 live `prod` 与新的 `test / prod candidate` 还没跟上。
+
+## Helper 判断
+
+这轮我没有新挂 helper 任务，因为当前并不存在“执行者缺位就会断链”的现场：
+
+- `workflow_bugmate / workflow_devmate / workflow_testmate / workflow_qualitymate` 当前都在 `idle`
+- 当前断点不在 helper 缺位，而在当前巡检占着 running 槽，以及 `1cd76c8` 对应的 `test / prod candidate` 刷新仍被健康 `8092` test 实例挡住
+
+因此当前最值得做的不是再补派一个 helper，而是继续盯 `node-sti-20260411-84c3f2c3 -> node-sti-20260411-2fe5e57d` 这一棒，以及首个 idle 窗口里的正式升级。
+
+## 下一次建议
+
+- 主线下一观察点：先等当前巡检 `node-sti-20260411-84c3f2c3 / arun-20260411-193612-84ad80` 释放，再看 `node-sti-20260411-2fe5e57d` 是否自动 dispatch 成真实 run
+- 保底下一观察点：`sch-20260405-67a89536 -> 2026-04-11T20:21:00+08:00` 已经挂上；若当前 ready 主线成功接棒后 future 保底仍消失，就按补链异常继续处理
+- 升级观察点：首个真正 idle 窗口里继续核对 idle watcher 是否把 `candidate=20260411-173655` 接入 live `prod`
+- 异常门槛：
+  - 如果 `node-sti-20260411-2fe5e57d` 在当前巡检收尾后仍长期停在 `ready/queued`，就按 handoff 异常继续处理
+  - 如果首个 idle 窗口后 `current_version` 仍停在 `20260411-093051`，下一轮优先验证 `prod supervisor / idle watcher`
+  - 如果需要把 `1cd76c8` 刷进新的 `test / prod candidate`，先决定是否停掉当前健康 `test=20260411-173655 / PID=19724 / port=8092`
+
+## 证据
+
+- `docs/workflow/governance/PM版本推进计划.md`
+- `docs/workflow/requirements/需求详情-pm持续唤醒与清醒维持.md`
+- `docs/workflow/reports/7x24发布边界收口方案-20260409.md`
+- `docs/workflow/governance/pm-version-live/2026-04/现场更新总览.md`
+- `git -C .repository/pm-main status --short --branch`
+- `git -C .repository/pm-main rev-parse --short HEAD`
+- `git -C .repository/pm-main rev-list --left-right --count origin/main...main`
+- `git -C ../workflow_code status --short --branch`
+- `git -C ../workflow_code rev-parse --short HEAD`
+- `git -C ../workflow_code rev-list --left-right --count origin/main...main`
+- `Invoke-RestMethod 'http://127.0.0.1:8090/healthz'`
+- `Invoke-RestMethod 'http://127.0.0.1:8090/api/status'`
+- `Invoke-RestMethod 'http://127.0.0.1:8090/api/runtime-upgrade/status'`
+- `Invoke-RestMethod 'http://127.0.0.1:8090/api/schedules'`
+- `Invoke-RestMethod 'http://127.0.0.1:8090/api/assignments/asg-20260327-223335-b79f27/graph'`
+- `Invoke-RestMethod 'http://127.0.0.1:8090/api/assignments/asg-20260327-223335-b79f27/status-detail?node_id=node-sti-20260411-84c3f2c3'`
+- `Invoke-RestMethod 'http://127.0.0.1:8090/api/assignments/asg-20260327-223335-b79f27/status-detail?node_id=node-sti-20260411-2fe5e57d'`
+- `C:/work/J-Agents/.output/tasks/asg-20260327-223335-b79f27/runs/arun-20260411-193612-84ad80/run.json`
+- `C:/work/J-Agents/.output/tasks/asg-20260327-223335-b79f27/runs/arun-20260411-193612-84ad80/events.log`
+- `C:/work/J-Agents/.output/tasks/asg-20260327-223335-b79f27/audit/audit.jsonl`
+- `.running/control/prod-last-action.json`
+- `logs/runs/prod-idle-upgrade-watchdog-live.md`

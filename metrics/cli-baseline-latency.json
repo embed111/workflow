@@ -1,6 +1,64 @@
 {
-  "date": "2026-02-24",
-  "status": "blocked",
-  "reason": "baseline not measured yet or real agent not configured",
-  "samples": []
+  "date": "2026-04-22",
+  "updated_at": "2026-04-22T22:36:00+08:00",
+  "status": "ready",
+  "source": "measure_workflow_latency_baseline.py",
+  "environments": {
+    "test": {
+      "status": "ready",
+      "current_version": "20260422-223441",
+      "runtime_root": "D:/code/AI/J-Agents/workflow/.running/control/runtime/test",
+      "sample_count": 1,
+      "success_count": 1,
+      "effective_measurement_path": "task_execute",
+      "measurement_reason": "legacy_chat_real_agent_unconfigured",
+      "overall": {
+        "p50_first_token_ms": null,
+        "p95_first_token_ms": null,
+        "p50_total_ms": 33367,
+        "p95_total_ms": 33367
+      },
+      "modes": {
+        "task_execute": {
+          "count": 1,
+          "success_count": 1,
+          "failure_count": 0,
+          "p50_first_token_ms": null,
+          "p95_first_token_ms": null,
+          "p50_total_ms": 33367,
+          "p95_total_ms": 33367
+        }
+      },
+      "workflow_latency_ref": "D:/code/AI/J-Agents/workflow/.running/control/runtime/test/metrics/workflow-latency-daily.json",
+      "updated_at": "2026-04-22T22:36:00+08:00"
+    },
+    "prod": {
+      "status": "ready",
+      "current_version": "20260422-205203",
+      "runtime_root": "D:/code/AI/J-Agents/workflow/.running/control/runtime/prod",
+      "sample_count": 1,
+      "success_count": 1,
+      "effective_measurement_path": "task_execute",
+      "measurement_reason": "legacy_chat_real_agent_unconfigured",
+      "overall": {
+        "p50_first_token_ms": null,
+        "p95_first_token_ms": null,
+        "p50_total_ms": 33339,
+        "p95_total_ms": 33339
+      },
+      "modes": {
+        "task_execute": {
+          "count": 1,
+          "success_count": 1,
+          "failure_count": 0,
+          "p50_first_token_ms": null,
+          "p95_first_token_ms": null,
+          "p50_total_ms": 33339,
+          "p95_total_ms": 33339
+        }
+      },
+      "workflow_latency_ref": "D:/code/AI/J-Agents/workflow/.running/control/runtime/prod/metrics/workflow-latency-daily.json",
+      "updated_at": "2026-04-22T22:31:46+08:00"
+    }
+  }
 }

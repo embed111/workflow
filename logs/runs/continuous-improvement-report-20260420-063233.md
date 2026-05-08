@@ -1,0 +1,22 @@
+# continuous-improvement-report-20260420-063233
+
+- summary_ref: `continuous-improvement-report.md`
+- preference_ref: `state/user-preferences.md`
+- delta_observation: 用户当前更看重每轮都把最新的 first_batch blocker 真正换成新的对象，不接受代码已经推进了但版本快照和 blocker 还停在上一刀。
+- delta_validation: 下一轮若继续推进 `V5-R5`，我先在 `schedule_service.py / workflow_env_common.ps1 / defect_service.py` 里选最值钱的一刀；若要派发 helper，先把目标 developer workspace refresh 到 `2f0031f`。
+- version_transition_decision: `stay(V5)`
+- lifecycle_stage: `开发实现`
+- focus_lane: `工程质量探测 / 发布边界收口`
+- release_boundary: `root_sync_state=clean_synced / ahead_count=0 / dirty_tracked_count=0 / untracked_count=0 / workspace_head=code_root_head=2f0031f`
+- gate_status: `blocking_offender_count=28 / first_batch_targets=schedule_service.py ; workflow_env_common.ps1 ; src/workflow_app/server/services/defect_service.py`
+- validation_refs:
+  - `.repository/pm-main/.test/20260420-062918-465/report.md`
+  - `.repository/pm-main/.test/20260420-063014-483/report.md`
+  - `.repository/pm-main/.test/20260420-063022-175/report.md`
+  - `git -C .repository/pm-main log -1 --pretty=format:"%H %cI %s"`
+  - `git -C ../workflow_code log -1 --pretty=format:"%H %cI %s"`
+  - `python .repository/pm-main/scripts/manage_developer_workspace.py --root .running/control/runtime/prod status`
+  - `http://127.0.0.1:8090/healthz`
+  - `http://127.0.0.1:8090/api/status`
+  - `http://127.0.0.1:8090/api/schedules`
+  - `http://127.0.0.1:8090/api/runtime-upgrade/status`

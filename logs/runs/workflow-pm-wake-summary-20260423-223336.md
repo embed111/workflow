@@ -1,0 +1,34 @@
+# workflow-pm-wake-summary
+
+- time: `2026-04-23T22:41:51+08:00`
+- judgment: `stay(V9)`；当前不是补链现场，主链健康且仍保留 future/ready 出口。
+- tradeoff:
+  - 我没有重复上一轮的 `V9-R2 batch1` compare hotfix，也没有再做一轮同义播报。
+  - 我先把 `workflow_devmate` 的开发工作区从旧提交刷新到 `45ed9c3`，再把 `V9-R2 batch2 coverage slice` 正式派进 live helper，优先推进 active 版本的下一刀实现。
+  - 我这轮没有并发开启 `V9-R5` 的下一条 sample surface；原因是 batch2 结果更适合决定下一条 compare 面，当前先避免同时拉两条新 compare 线让验收焦点分散。
+- lane_stage: `功能开发 / 开发实现`
+- version_advancement: `当前需求开发`
+- root_sync: `root_sync_state=clean_synced / ahead_count=0 / dirty_tracked_count=0 / untracked_count=0 / push_block_reason=- / next_push_batch=等待 workflow_devmate batch2 helper 形成新的已验证批次`
+- parallel:
+  - `parallel_candidate_count=2`
+  - `parallel_dispatched_count=1`
+  - `active_helper_tasks=workflow_devmate(node-20260423-222846-3404e4 / arun-20260423-222919-8b35db; running)`
+  - `parallel_peak_count=1`
+  - `parallel_peak_duration=进行中`
+  - `parallel_total_active_duration=进行中`
+- live_state:
+  - `prod current=candidate=20260423-213946 / candidate_is_newer=false / drain_active=false / running_task_count=2`
+  - `workflow patrol node-sti-20260423-605b8d49` 仍在运行
+  - `workflow mainline node-sti-20260423-85b842fa` 仍为 ready
+  - `workflow_devmate` 的 batch2 helper 已进入 `running`
+- evidence:
+  - `state/developer-workspaces.json`
+  - `C:/work/J-Agents/.output/tasks/asg-20260327-223335-b79f27/audit/audit.jsonl#aaud-20260423-222857-f93703`
+  - `C:/work/J-Agents/.output/tasks/asg-20260327-223335-b79f27/nodes/node-20260423-222846-3404e4.json`
+  - `C:/work/J-Agents/.output/tasks/asg-20260327-223335-b79f27/runs/arun-20260423-222919-8b35db/run.json`
+  - `C:/work/J-Agents/.output/tasks/asg-20260327-223335-b79f27/runs/arun-20260423-222919-8b35db/events.log`
+- next_action: 等 `workflow_devmate` 回交 batch2 coverage 结果；若形成最小已验证批次，立刻 root-sync，并据此决定是否打开 `V9-R5` 的下一条样本面。
+
+- preference_ref: state/user-preferences.md
+- delta_observation: 用户要求保底巡检在主链健康时也必须完成真实推进修改，不能只输出稳态播报。
+- delta_validation: 后续同类轮次继续优先选择最小 helper 派发、治理动作或代码推进，而不是重复描述“主链健康”。

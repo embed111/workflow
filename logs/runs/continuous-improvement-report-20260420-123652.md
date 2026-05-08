@@ -1,0 +1,22 @@
+# Continuous Improvement Log
+
+- topic: `V5-R5 policy confirm and session task runtime split`
+- version_transition_decision: `stay(V5)`
+- lane: `工程质量探测 / 发布边界收口`
+- summary: 我新增 `session_task_runtime.js` 与 `workflow_queue_plan_runtime.js`，把 `policy_confirm_and_interactions.js` 里的 session task runtime 和 workflow queue plan runtime 抽成显式 support file，同时补上 `verify_policy_confirm_and_interactions_split.py`；最新 `line budget` 让 `policy_confirm_and_interactions.js` 退出 Mandatory Gate blocker，`blocking_offender_count=12`。
+- release_boundary: `root_sync_state=clean_synced / ahead_count=0 / dirty_tracked_count=0 / untracked_count=0 / workspace_head=code_root_head=b6888dc / push_block_reason=mandatory_gate_fail_closed / next_push_batch=schedule_service.py / workflow_env_common.ps1 / src/workflow_app/web_client/training_center_loop_views.js split + gate/acceptance`
+- live_summary: `/healthz` 正常；`/api/status` 为 `running_task_count=1 / queued_task_count=2 / active_agent_count=1`；当前 `mainline running=node-sti-20260420-eb645f3a`、`next_mainline ready=node-sti-20260420-ce592e71`、`patrol ready=node-sti-20260420-b2738bf6 / future=2026-04-20T12:40:00+08:00`；`candidate_version` 仍等于 `prod=20260419-180446`
+- validation_refs:
+  - `.repository/pm-main/.test/20260420-123453-325/report.md`
+  - `.repository/pm-main/.test/20260420-123500-752/report.md`
+  - `.repository/pm-main/.test/reports/WORKSPACE_LINE_BUDGET_REPORT.json`
+  - `git -C .repository/pm-main log -1 --pretty=format:"%H %cI %s"`
+  - `git -C ../workflow_code log -1 --pretty=format:"%H %cI %s"`
+  - `http://127.0.0.1:8090/healthz`
+  - `http://127.0.0.1:8090/api/status`
+  - `http://127.0.0.1:8090/api/schedules`
+  - `http://127.0.0.1:8090/api/runtime-upgrade/status`
+- preference_ref: `state/user-preferences.md`
+- delta_observation: 当前更高价值的第三个 Mandatory Gate blocker 已从 `policy_confirm_and_interactions.js` 切换成 `training_center_loop_views.js`；helper developer workspace 仍落后到 `cec137`，这轮继续强派只会把工程质量主任务丢进旧基线。
+- delta_validation: 继续压 `schedule_service.py / workflow_env_common.ps1 / training_center_loop_views.js`，待 `Mandatory Gate` 再下压后补 `workflow gate / runtime release gate`，随后刷新 `test/prod candidate` 并重跑 supported live member-route proof。
+- memory_ref: `.codex/memory/2026-04/2026-04-20.md`

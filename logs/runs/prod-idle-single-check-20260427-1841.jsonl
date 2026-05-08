@@ -1,0 +1,5 @@
+# Prod Idle Upgrade Watcher
+
+- `2026-04-27T18:48:39+08:00` watcher 启动：base_url=http://127.0.0.1:8090, timeout_seconds=1800.0, poll_seconds=10.0, apply_wait_seconds=600.0, operator=workflow-pm-v12-dts00012-release-boundary-1841
+- `2026-04-27T18:48:41+08:00` 单次检查状态：current=20260427-162745, candidate=20260427-184256, candidate_is_newer=True, request_pending=False, running_task_count=2, can_upgrade=False, ghost_running_detected=False, ghost_running_count=0
+- `2026-04-27T18:48:41+08:00` 当前仍未到可升级空窗，单次检查跳过。

@@ -1,0 +1,22 @@
+# workflow continuous improvement 20260413-090957
+
+- topic: workflow 主线/保底 schedule priority drift 收口
+- summary:
+  - 代码批次 `4968230` 已把 workflow 主线/保底 priority 归一补成双重兜底：
+    - `schedule_service.py` create/update schedule 强制 `mainline=P1 / patrol=P2`
+    - `schedule_assignment_bridge.py` 建节点时对 stale schedule 行继续按 canonical priority 落点
+  - `verify_assignment_self_iteration_schedule_alignment.py` 已扩展覆盖“旧 schedule priority 反转修复 + stale 行建节点仍按 canonical priority”并通过 targeted acceptance 与 `workflow gate`
+  - 本机 `pm-main` 与 `../workflow_code` 已 clean synced 到 `4968230`
+  - `test` 已刷新，`prod candidate=20260413-090855`
+  - live 已收口为 `mainline schedule=P1 / patrol schedule=P2`，并删除错误顺位的 `node-sti-20260413-f202319f / 09:00 patrol ready`
+- live_ref:
+  - `prod current_version=20260413-081107`
+  - `prod candidate_version=20260413-090855`
+  - `queue=07:57 mainline running + 08:54 mainline ready + 09:20 patrol future(P2)`
+- evidence:
+  - `.repository/pm-main/.test/20260413-085729-050/report.md`
+  - `.repository/pm-main/.test/20260413-090116-446/report.md`
+  - `.running/control/logs/test/deploy-20260413-090855.json`
+- preference_ref: state/user-preferences.md
+- delta_observation: 用户更在意“live 风险是否被真正削掉”，不接受只修默认值却放着旧 schedule 行残值继续在现网出错顺位节点。
+- delta_validation: 下一轮优先复核 `090855` 升级后是否还会再出现 `mainline=P2 / patrol=P1` 的 ready 复燃。

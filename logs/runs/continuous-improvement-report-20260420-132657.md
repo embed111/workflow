@@ -1,0 +1,25 @@
+# Continuous Improvement Report
+
+- judgment: `version_transition_decision=stay(V5)`；当前更高价值的仍是 `工程质量探测 / 发布边界收口`，因为 `next_activation_ready=false`，`controller cadence closure` 和 `prod/live member task` 的正向 `project_id/project_ref` 证据仍缺，且 `Mandatory Gate` 仍是 fail-closed。
+- tradeoff: 我这轮不回去重复上一轮的 `training_center_loop_views.js` split，也不去做同质化 live member-route smoke；我直接切新的第三个 blocker `task_artifact_store_queries.py`，因为这条线能在当前 clean head 上最直接地继续压低 Mandatory Gate。
+- next_action: 继续压 `schedule_service.py / workflow_env_common.ps1 / src/workflow_app/server/services/role_creation_service_parts/session_commands.py`；等 `line budget / workflow gate / runtime release gate` 再往前走后，再部署 `test`、刷新 `prod candidate`，并重跑 supported live member-route proof。
+- delivered_change: 我新增 `task_artifact_store_query_support.py` 与 `task_artifact_store_stale_recovery_runtime.py`，把 active-node/lightweight-query helper 和 terminal truth / stale recovery runtime 从 `task_artifact_store_queries.py` 里抽成独立 assignment parts；同时把 runner 压到 `50` 行，仅保留 query surface export 和 source-request lookup，并把新的 split contract 写进 `verify_task_artifact_store_queries_split.py`。
+- release_boundary: `root_sync_state=clean_synced / ahead_count=0 / dirty_tracked_count=0 / untracked_count=0 / workspace_head=code_root_head=02f83ba / push_block_reason=mandatory_gate_fail_closed / next_push_batch=schedule_service.py / workflow_env_common.ps1 / src/workflow_app/server/services/role_creation_service_parts/session_commands.py split + gate/acceptance`
+- live_summary: `/healthz` 正常；`/api/status` 为 `running_task_count=1 / queued_task_count=2 / active_agent_count=1`；`/api/runtime-upgrade/status` 为 `candidate_version=prod=20260419-180446 / candidate_is_newer=false / can_upgrade=false / ghost_running_detected=false`；当前主线仍是 `node-sti-20260420-fbf80b8a (running)`，下一条 mainline 为 `node-sti-20260420-e9974620 (ready)`，保底巡检为 `node-sti-20260420-9c561cad (ready)`，这轮不需要我兜底补链。
+- helper_summary: 当前没有 active helper task；`workflow_devmate / workflow_testmate / workflow_qualitymate / workflow_bugmate / workflow_ucdmate` 的 developer workspace 仍停在 `cec137`、相对 `code_root@02f83ba` 为 `diverged_or_unknown`，所以这轮继续不强派旧基线 helper。
+- validation_refs:
+  - `.repository/pm-main/.test/20260420-131928-595/report.md`
+  - `.repository/pm-main/.test/20260420-132520-313/report.md`
+  - `.repository/pm-main/.test/20260420-132531-049/report.md`
+  - `.repository/pm-main/.test/reports/WORKSPACE_LINE_BUDGET_REPORT.json`
+  - `git -C .repository/pm-main log -1 --pretty=format:"%H %cI %s"`
+  - `git -C ../workflow_code log -1 --pretty=format:"%H %cI %s"`
+  - `python .repository/pm-main/scripts/manage_developer_workspace.py --root .running/control/runtime/prod status`
+  - `http://127.0.0.1:8090/healthz`
+  - `http://127.0.0.1:8090/api/status`
+  - `http://127.0.0.1:8090/api/schedules`
+  - `http://127.0.0.1:8090/api/runtime-upgrade/status`
+- preference_ref: `state/user-preferences.md`
+- delta_observation: `task_artifact_store_queries.py` 已退出 first batch targets，`blocking_offender_count` 从 `11` 降到 `10`；新的第三个首批冻结对象已经切到 `session_commands.py`。
+- delta_validation: 下一轮优先继续压 `schedule_service.py / workflow_env_common.ps1 / session_commands.py`，并在 helper refresh 到 `code_root@02f83ba` 之后再决定是否并行派发。
+- memory_ref: `.codex/memory/2026-04/2026-04-20.md`

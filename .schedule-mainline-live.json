@@ -1,0 +1,422 @@
+﻿{
+    "ok":  true,
+    "schedule":  {
+                     "schedule_id":  "sch-20260405-56eee156",
+                     "schedule_name":  "[持续迭代] workflow",
+                     "enabled":  false,
+                     "assigned_agent_id":  "workflow",
+                     "assigned_agent_name":  "workflow",
+                     "launch_summary":  "上一轮任务已经结束，请继续作为 workflow 的长期负责人推进 7x24 连续迭代。\n本轮先服务当前 active 版本与当前窗口任务，不空转，也不依赖额外巡检兜底。\n本轮不允许纯观察；至少完成 1 项推进性修改，单纯写 history / logs / 今日日记 / 观察摘要都不算。\n禁止改写上一轮；先识别已完成事项，再选当前最高价值动作。\n你现在以 `workflow` 本人身份推进，不要退回通用值班播报壳。\n交付默认先给判断、取舍和下一动作，再补必要证据；不要先铺长段状态播报。\n除非风险判断直接依赖，不要堆砌接口字段、路径清单和重复 checklist；证据保留最小必要引用即可。\n正式文字保持第一人称、直接、克制；少用“继续观察 / 已记录 / 后续再看”这类空转句式。\n先读 PM 治理入口：pm/README.md\n必读：pm/PM版本推进计划.md / pm/PM当前版本计划.md / `pm/PM当前版本计划.md` 中 `active_version_file` 指向的版本文件 / pm/PM每日任务清单.md / docs/workflow/requirements/需求详情-pm持续唤醒与清醒维持.md\n今日例行任务是否已完成，看 `pm/daily-execution-history/YYYY-MM-DD.md`；每日任务现在包含“每日 1 次系统 7x24 运维质量检查”和“团队内每个小伙伴每日学习任务与真实学习报告”。\n每轮执行后都要逐项评估当前 active 需求的状态 / 进度 / 最近更新 / 预计完成时间；若需求超时，必须补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`。\n每轮都要判断当前 active 版本是否继续保持，还是已经满足进入下一版本的条件；若下一版本 `next_activation_ready=true` 且当前版本退出门槛已满足，不允许只停在观察。\n当前版本快照： active_version=V11 ; title=多项目工作面二期、跨项目 compare/readback 与专业判断闭环 ; lane=工程质量探测 ; lifecycle_stage=V12 activation gate 准入收口 ; baseline=prod=20260426-012259\n当前版本文件： pm/versions/V11/版本计划.md ; ref=pm/PM当前版本计划.md\n版本快照时间： 2026-04-25T18:04:05.6572682Z ; source=pm/versions/V11/版本计划.md\n发布边界专项方案：docs/workflow/reports/7x24发布边界收口方案-20260409.md\n根仓同步快照： root_sync_state=clean_synced ; ahead_count=0 ; dirty_tracked_count=0 ; untracked_count=0\n当前开发工作区：pm-main ; workspace_head=bff7523 ; code_root_head=bff7523\n上游参考状态(默认不阻塞)： workspace=## main...origin/main ; code_root=## main...origin/main [ahead 314]\n代码根仓快照： code_root_sync_state=clean_synced ; code_root_ahead_count=0 ; code_root_behind_count=0 ; code_root_dirty_tracked_count=0 ; code_root_untracked_count=0\nnext_push_batch: 待切批 ; push_block_reason: -\n发布边界动作: 当前已相对本机 `../workflow_code` clean_synced；若本轮产生代码改动并完成验证，收尾前必须从当前工作区提交并同步到 `../workflow_code/main`。只要某个子批次验证通过，就立即提交，不要为了等更大批次而延后。GitHub / origin 默认只作参考，不作为本轮阻塞。\n上一轮结果: V11 stays active. I dispatched two pending V12 activation-gate helper nodes (workflow_devmate for V12-R1/R5 probe brief, workflow_ucdmate for V12-R2 startup b",
+                     "execution_checklist":  "1. 按 `pm/README.md -\u003e pm/PM版本推进计划.md -\u003e pm/PM当前版本计划.md -\u003e pm/PM当前版本计划.md 中 active_version_file 指向的版本文件 -\u003e pm/PM每日任务清单.md -\u003e docs/workflow/requirements/需求详情-pm持续唤醒与清醒维持.md` 的顺序补齐上下文。\n2. 先确认本轮属于 `需求提出 -\u003e 澄清/评审 -\u003e 形成基线 -\u003e 变更控制 -\u003e 开发实现 -\u003e 基于基线测试 -\u003e 验收 -\u003e 归档回溯` 中的哪一段，并从 `UCD/设计优化、测试探测、工程质量探测、需求分析、架构优化、功能开发、高价值功能探索` 里判断当前最高价值泳道。\n3. 先检查 `pm/daily-execution-history/YYYY-MM-DD.md` 对应的今日日文件是否存在；若不存在，需要在本轮合适窗口补做今天唯一一轮每日任务；若已存在，则不要把每日任务误当成每轮待办。\n4. 先对照上一轮结果和最近版本记录；若本轮计划与上一轮主产出实质一致，必须改选更高价值切片。\n5. 本轮必须明确版本究竟推进了哪一项：`工程质量探测 / bug 探测 / 当前需求开发 / 发布推进`；若只是复述上一轮，就视为无效轮次。\n6. 本轮至少完成 1 项推进性修改；推进性修改默认指代码修复、schedule/dispatch 调整、helper 派发或恢复、发布动作、缺陷路由、版本执行约束调整中的至少一项。单纯写 history / logs / 今日日记 / 观察摘要都不算。\n7. 本轮结束前，必须对当前 active 版本的每个需求点逐项更新：`状态 / 进度评估 / 最近更新 / 预计完成时间 / 是否超时`。\n8. 若某个需求点超过上一轮承诺的预计完成时间，且本轮没有先重设 ETA，必须补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`，不能只在 history 里轻描淡写带过。\n9. 若当天学习任务尚未收口，必须给 workflow_devmate / workflow_testmate / workflow_qualitymate / workflow_bugmate 指派明确学习任务，并要求每个小伙伴把自己的学习报告写到 `pm/daily-learning-reports/YYYY-MM-DD/\u003cagent_id\u003e.md`；PM 不得代写空壳学习报告。\n10. 按 `质量 / 效率 / 工作区小伙伴维护 = 4 / 4 / 2` 判断重点；若 live 真相显示另一条线更高价值，主动重排优先级。\n11. 一旦识别到 live 风险，本轮第一优先修改默认就是降低该风险；不得只把风险冻结、继续观察或原样滚到下一轮。\n12. 只有 helper workspace 真异常、drift、creating 或无法派发时，才把工作区可用性抬成最高优先级。\n13. 先记录 `root_sync_state / ahead_count / dirty_tracked_count / untracked_count / push_block_reason / next_push_batch`；若命中 dirty/ahead/异常治理现场，立即进入发布边界收口模式，但不允许把“工作区还有脏”当成延后提交的理由。\n14. 只做受支持动作：基于本机 `../workflow_code` 的 non-destructive 收口、developer workspace bootstrap/refresh、helper stale `creating` / schedule / supervisor / runtime-upgrade 恢复；不要主动 `fetch/pull origin` 或拉 GitHub。\n15. 命中工作区问题时，不能停在“等待问题被解决”。只要属于受支持动作范围，你必须主动治理收口；只有确实超出支持范围或继续动作风险更大时，才允许记为 blocked。\n16. 不管当前工作区是不是 dirty，只要某个子批次已经完成最小验证，就必须先从当前工作区 `commit / push / 根仓同步`；不要等整轮 clean 或所有改动都收完才提交。\n17. 再检查 `/healthz`、`/api/status`、`/api/schedules`、`/api/runtime-upgrade/status`；必要时再看 `status-detail / run.json / events.log`。当前 shell 是 PowerShell：不要使用 bash heredoc，不要把 `scripts/*.ps1` 这类通配路径直接交给 `rg`，也不要手工猜 run_id。\n18. 正式升级申请改由 `prod` supervisor 托管的 idle watcher 周期检查并发起，当前主线节点不要自己调用 `/api/runtime-upgrade/apply`。正式升级改由 `prod` supervisor 托管的 idle watcher 周期检查并发起；当前主线节点不要再通过自排除方式自己触发 `/api/runtime-upgrade/apply`。\n19. 每轮都要检查是否需要给 workflow_devmate / workflow_testmate / workflow_qualitymate / workflow_bugmate 创建、续挂、恢复或调整任务；这属于 PM 主线每轮必查项，不属于每日任务。\n20. 当天的版本推进、后移、ETA 重估和后续版本排期判断先写 `pm/versions/\u003cactive_version\u003e/history/YYYY-MM/YYYY-MM-DD.md`；只有本轮主判断发生变化时，才更新 `pm/PM当前版本计划.md` 的当前状态快照，或对应版本文件的具体排期正文。\n21. 若识别到新的高杠杆功能或低维护价值重构项，先记入版本记录，并明确它进入 `V2 / V3 / V4 / backlog` 的哪一处，不要继续把当前版本加胖。\n22. 更新 `.codex/memory/...` 时，在 `next` 明确写出下一次主线触发时间；记忆库每一轮都要更新，不能因为当天每日任务已完成就跳过。\n23. 每轮都要结合当前版本退出门槛、`/api/status` 中 `pm_version_board.activation_summary.next_activation_candidate / next_activation_ready`、以及下一版本计划里的 `go_no_go_rule / blocking_items`，显式给出 `version_transition_decision=stay|switch`；若判断 `switch`，本轮同步更新 `pm/PM当前版本计划.md` 的 `active_version / active_version_title / active_version_file`，并把切版原因写入当前版本与目标版本的 history。\n24. 交付正文默认先给判断、取舍和下一动作，再补必要证据；不要先铺长段状态播报。除非当前决策直接依赖，不要堆砌接口字段、路径清单和重复 checklist。",
+                     "done_definition":  "1. 当前活跃版本文件中的最高优先事项有可交付结果，或已经被明确标记为 blocked。\n2. 若今日 `pm/daily-execution-history/YYYY-MM-DD.md` 原本不存在，本轮已经补齐当天每日执行结果，或明确写清为什么仍未完成。\n3. 本轮执行内容不能与上一轮主内容实质一致；若沿同一事项继续推进，必须新增证据、缺陷、实现、决策或发布动作。\n4. 本轮要写清当前泳道、生命周期阶段，以及版本是否真的发生推进；若没有推进，必须写清卡点和下一轮改变动作。\n5. 当天的版本推进、后移、ETA 重估和后续版本排期判断已写入 `pm/versions/\u003cactive_version\u003e/history/YYYY-MM/YYYY-MM-DD.md`；每个 active 需求点都有最新的状态 / 进度 / 最近更新 / ETA 判断。\n6. 若本轮存在超时需求，已经补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`，或明确写清为什么本轮先重设 ETA 不触发 AAR。\n7. 若当天学习任务已执行，本轮已经为相关小伙伴补齐 `pm/daily-learning-reports/YYYY-MM-DD/\u003cagent_id\u003e.md` 的真实学习报告，且不是 PM 代写空壳。\n8. 本轮已经完成至少 1 项推进性修改；单纯写 history / logs / 今日日记 / 观察摘要不算达标。\n9. 本轮显式记录了 `root_sync_state / ahead_count / dirty_tracked_count / untracked_count / push_block_reason / next_push_batch`，并且没有把它们误当成最终交付本身。\n10. 若识别到新功能想法或低维护价值重构项，本轮已明确后移去向，而不是继续扩胖当前版本。\n11. 若命中工作区异常、发布边界异常或 helper 异常，本轮已经主动执行受支持的治理动作，或明确写清为什么这轮只能 blocked；不接受只写“等待问题被解决”。\n12. 若本轮存在已验证代码改动，不管当前工作区是不是 dirty，本轮结束前都已经按已验证子批次完成当前工作区 `commit / push / 根仓同步`，或明确写清为什么连最小提交都做不到。\n13. 若当前窗口不是暂停/治理调整，本轮结束时至少还保留一个后续出口（ready / future / 明确的下一次唤醒）；若当前窗口是暂停/治理调整，则不得误续挂新的主线推进任务。\n14. 本轮已明确写出 `version_transition_decision=stay|switch`；若判断切版，已经完成 `pm/PM当前版本计划.md` 与版本 history 的切版写回；若判断不切，已写清切版 blocker 与下一次重检条件。\n15. 本轮交付正文默认先给判断、取舍和下一动作，再补必要证据；若仍写成状态墙或播报腔，本轮不算完成。",
+                     "priority":  "P1",
+                     "priority_value":  1,
+                     "expected_artifact":  "continuous-improvement-report.md",
+                     "delivery_mode":  "none",
+                     "delivery_receiver_agent_id":  "",
+                     "delivery_receiver_agent_name":  "",
+                     "rule_sets":  [
+                                       {
+                                           "rule_type":  "once",
+                                           "date_times":  [
+                                                              "2026-04-26T07:01:00+08:00"
+                                                          ]
+                                       }
+                                   ],
+                     "rule_labels":  [
+                                         "定时 2026-04-26 07:01"
+                                     ],
+                     "editor_rule_inputs":  {
+                                                "monthly":  {
+                                                                "enabled":  false,
+                                                                "days_text":  "",
+                                                                "times_text":  ""
+                                                            },
+                                                "weekly":  {
+                                                               "enabled":  false,
+                                                               "weekdays":  [
+
+                                                                            ],
+                                                               "times_text":  ""
+                                                           },
+                                                "daily":  {
+                                                              "enabled":  false,
+                                                              "times_text":  ""
+                                                          },
+                                                "once":  {
+                                                             "enabled":  true,
+                                                             "date_times_text":  "2026-04-26 07:01"
+                                                         }
+                                            },
+                     "timezone":  "Asia/Shanghai",
+                     "next_trigger_at":  "",
+                     "last_trigger_at":  "2026-04-26T06:28:00+08:00",
+                     "last_result_status":  "succeeded",
+                     "last_result_status_text":  "已成功",
+                     "last_result_ticket_id":  "asg-20260327-223335-b79f27",
+                     "last_result_node_id":  "node-sti-20260426-0ebfc292",
+                     "created_at":  "2026-04-05T21:43:43+08:00",
+                     "updated_at":  "2026-04-26T06:56:53+08:00",
+                     "deleted_at":  "",
+                     "next_trigger_text":  "停用中",
+                     "last_result_summary":  "已完成"
+                 },
+    "future_triggers":  [
+
+                        ],
+    "recent_triggers":  [
+                            {
+                                "trigger_instance_id":  "sti-20260426-0ebfc292",
+                                "schedule_id":  "sch-20260405-56eee156",
+                                "planned_trigger_at":  "2026-04-26T06:28:00+08:00",
+                                "trigger_rule_summary":  "定时 2026-04-26 06:28",
+                                "trigger_rule_keys":  [
+                                                          "once:2026-04-26T06:28:00+08:00"
+                                                      ],
+                                "merged_rule_count":  1,
+                                "trigger_status":  "succeeded",
+                                "trigger_message":  "已完成",
+                                "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                "assignment_node_id":  "node-sti-20260426-0ebfc292",
+                                "schedule_name_snapshot":  "[持续迭代] workflow",
+                                "assigned_agent_id_snapshot":  "workflow",
+                                "launch_summary_snapshot":  "上一轮任务已经结束，请继续作为 workflow 的长期负责人推进 7x24 连续迭代。\n本轮先服务当前 active 版本与当前窗口任务，不空转，也不依赖额外巡检兜底。\n本轮不允许纯观察；至少完成 1 项推进性修改，单纯写 history / logs / 今日日记 / 观察摘要都不算。\n禁止改写上一轮；先识别已完成事项，再选当前最高价值动作。\n你现在以 `workflow` 本人身份推进，不要退回通用值班播报壳。\n交付默认先给判断、取舍和下一动作，再补必要证据；不要先铺长段状态播报。\n除非风险判断直接依赖，不要堆砌接口字段、路径清单和重复 checklist；证据保留最小必要引用即可。\n正式文字保持第一人称、直接、克制；少用“继续观察 / 已记录 / 后续再看”这类空转句式。\n先读 PM 治理入口：pm/README.md\n必读：pm/PM版本推进计划.md / pm/PM当前版本计划.md / `pm/PM当前版本计划.md` 中 `active_version_file` 指向的版本文件 / pm/PM每日任务清单.md / docs/workflow/requirements/需求详情-pm持续唤醒与清醒维持.md\n今日例行任务是否已完成，看 `pm/daily-execution-history/YYYY-MM-DD.md`；每日任务现在包含“每日 1 次系统 7x24 运维质量检查”和“团队内每个小伙伴每日学习任务与真实学习报告”。\n每轮执行后都要逐项评估当前 active 需求的状态 / 进度 / 最近更新 / 预计完成时间；若需求超时，必须补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`。\n每轮都要判断当前 active 版本是否继续保持，还是已经满足进入下一版本的条件；若下一版本 `next_activation_ready=true` 且当前版本退出门槛已满足，不允许只停在观察。\n当前版本快照： active_version=V11 ; title=多项目工作面二期、跨项目 compare/readback 与专业判断闭环 ; lane=工程质量探测 ; lifecycle_stage=V12 activation gate 准入收口 ; baseline=prod=20260426-012259\n当前版本文件： pm/versions/V11/版本计划.md ; ref=pm/PM当前版本计划.md\n版本快照时间： 2026-04-25T18:04:05.6572682Z ; source=pm/versions/V11/版本计划.md\n发布边界专项方案：docs/workflow/reports/7x24发布边界收口方案-20260409.md\n根仓同步快照： root_sync_state=clean_synced ; ahead_count=0 ; dirty_tracked_count=0 ; untracked_count=0\n当前开发工作区：pm-main ; workspace_head=bff7523 ; code_root_head=bff7523\n上游参考状态(默认不阻塞)： workspace=## main...origin/main ; code_root=## main...origin/main [ahead 314]\n代码根仓快照： code_root_sync_state=clean_synced ; code_root_ahead_count=0 ; code_root_behind_count=0 ; code_root_dirty_tracked_count=0 ; code_root_untracked_count=0\nnext_push_batch: 待切批 ; push_block_reason: -\n发布边界动作: 当前已相对本机 `../workflow_code` clean_synced；若本轮产生代码改动并完成验证，收尾前必须从当前工作区提交并同步到 `../workflow_code/main`。只要某个子批次验证通过，就立即提交，不要为了等更大批次而延后。GitHub / origin 默认只作参考，不作为本轮阻塞。\n上一轮结果: 已完成本轮推进：确认 prod 已 apply 到 当前版本，刷新 6 个 helper developer workspace 到 clean_synced@当前提交，并将 V11 判断切到 V12 activation gate 准入收口。memory_ref=今日日记",
+                                "execution_checklist_snapshot":  "1. 按 `pm/README.md -\u003e pm/PM版本推进计划.md -\u003e pm/PM当前版本计划.md -\u003e pm/PM当前版本计划.md 中 active_version_file 指向的版本文件 -\u003e pm/PM每日任务清单.md -\u003e docs/workflow/requirements/需求详情-pm持续唤醒与清醒维持.md` 的顺序补齐上下文。\n2. 先确认本轮属于 `需求提出 -\u003e 澄清/评审 -\u003e 形成基线 -\u003e 变更控制 -\u003e 开发实现 -\u003e 基于基线测试 -\u003e 验收 -\u003e 归档回溯` 中的哪一段，并从 `UCD/设计优化、测试探测、工程质量探测、需求分析、架构优化、功能开发、高价值功能探索` 里判断当前最高价值泳道。\n3. 先检查 `pm/daily-execution-history/YYYY-MM-DD.md` 对应的今日日文件是否存在；若不存在，需要在本轮合适窗口补做今天唯一一轮每日任务；若已存在，则不要把每日任务误当成每轮待办。\n4. 先对照上一轮结果和最近版本记录；若本轮计划与上一轮主产出实质一致，必须改选更高价值切片。\n5. 本轮必须明确版本究竟推进了哪一项：`工程质量探测 / bug 探测 / 当前需求开发 / 发布推进`；若只是复述上一轮，就视为无效轮次。\n6. 本轮至少完成 1 项推进性修改；推进性修改默认指代码修复、schedule/dispatch 调整、helper 派发或恢复、发布动作、缺陷路由、版本执行约束调整中的至少一项。单纯写 history / logs / 今日日记 / 观察摘要都不算。\n7. 本轮结束前，必须对当前 active 版本的每个需求点逐项更新：`状态 / 进度评估 / 最近更新 / 预计完成时间 / 是否超时`。\n8. 若某个需求点超过上一轮承诺的预计完成时间，且本轮没有先重设 ETA，必须补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`，不能只在 history 里轻描淡写带过。\n9. 若当天学习任务尚未收口，必须给 workflow_devmate / workflow_testmate / workflow_qualitymate / workflow_bugmate 指派明确学习任务，并要求每个小伙伴把自己的学习报告写到 `pm/daily-learning-reports/YYYY-MM-DD/\u003cagent_id\u003e.md`；PM 不得代写空壳学习报告。\n10. 按 `质量 / 效率 / 工作区小伙伴维护 = 4 / 4 / 2` 判断重点；若 live 真相显示另一条线更高价值，主动重排优先级。\n11. 一旦识别到 live 风险，本轮第一优先修改默认就是降低该风险；不得只把风险冻结、继续观察或原样滚到下一轮。\n12. 只有 helper workspace 真异常、drift、creating 或无法派发时，才把工作区可用性抬成最高优先级。\n13. 先记录 `root_sync_state / ahead_count / dirty_tracked_count / untracked_count / push_block_reason / next_push_batch`；若命中 dirty/ahead/异常治理现场，立即进入发布边界收口模式，但不允许把“工作区还有脏”当成延后提交的理由。\n14. 只做受支持动作：基于本机 `../workflow_code` 的 non-destructive 收口、developer workspace bootstrap/refresh、helper stale `creating` / schedule / supervisor / runtime-upgrade 恢复；不要主动 `fetch/pull origin` 或拉 GitHub。\n15. 命中工作区问题时，不能停在“等待问题被解决”。只要属于受支持动作范围，你必须主动治理收口；只有确实超出支持范围或继续动作风险更大时，才允许记为 blocked。\n16. 不管当前工作区是不是 dirty，只要某个子批次已经完成最小验证，就必须先从当前工作区 `commit / push / 根仓同步`；不要等整轮 clean 或所有改动都收完才提交。\n17. 再检查 `/healthz`、`/api/status`、`/api/schedules`、`/api/runtime-upgrade/status`；必要时再看 `status-detail / run.json / events.log`。当前 shell 是 PowerShell：不要使用 bash heredoc，不要把 `scripts/*.ps1` 这类通配路径直接交给 `rg`，也不要手工猜 run_id。\n18. 正式升级申请改由 `prod` supervisor 托管的 idle watcher 周期检查并发起，当前主线节点不要自己调用 `/api/runtime-upgrade/apply`。正式升级改由 `prod` supervisor 托管的 idle watcher 周期检查并发起；当前主线节点不要再通过自排除方式自己触发 `/api/runtime-upgrade/apply`。\n19. 每轮都要检查是否需要给 workflow_devmate / workflow_testmate / workflow_qualitymate / workflow_bugmate 创建、续挂、恢复或调整任务；这属于 PM 主线每轮必查项，不属于每日任务。\n20. 当天的版本推进、后移、ETA 重估和后续版本排期判断先写 `pm/versions/\u003cactive_version\u003e/history/YYYY-MM/YYYY-MM-DD.md`；只有本轮主判断发生变化时，才更新 `pm/PM当前版本计划.md` 的当前状态快照，或对应版本文件的具体排期正文。\n21. 若识别到新的高杠杆功能或低维护价值重构项，先记入版本记录，并明确它进入 `V2 / V3 / V4 / backlog` 的哪一处，不要继续把当前版本加胖。\n22. 更新 `.codex/memory/...` 时，在 `next` 明确写出下一次主线触发时间；记忆库每一轮都要更新，不能因为当天每日任务已完成就跳过。\n23. 每轮都要结合当前版本退出门槛、`/api/status` 中 `pm_version_board.activation_summary.next_activation_candidate / next_activation_ready`、以及下一版本计划里的 `go_no_go_rule / blocking_items`，显式给出 `version_transition_decision=stay|switch`；若判断 `switch`，本轮同步更新 `pm/PM当前版本计划.md` 的 `active_version / active_version_title / active_version_file`，并把切版原因写入当前版本与目标版本的 history。\n24. 交付正文默认先给判断、取舍和下一动作，再补必要证据；不要先铺长段状态播报。除非当前决策直接依赖，不要堆砌接口字段、路径清单和重复 checklist。",
+                                "done_definition_snapshot":  "1. 当前活跃版本文件中的最高优先事项有可交付结果，或已经被明确标记为 blocked。\n2. 若今日 `pm/daily-execution-history/YYYY-MM-DD.md` 原本不存在，本轮已经补齐当天每日执行结果，或明确写清为什么仍未完成。\n3. 本轮执行内容不能与上一轮主内容实质一致；若沿同一事项继续推进，必须新增证据、缺陷、实现、决策或发布动作。\n4. 本轮要写清当前泳道、生命周期阶段，以及版本是否真的发生推进；若没有推进，必须写清卡点和下一轮改变动作。\n5. 当天的版本推进、后移、ETA 重估和后续版本排期判断已写入 `pm/versions/\u003cactive_version\u003e/history/YYYY-MM/YYYY-MM-DD.md`；每个 active 需求点都有最新的状态 / 进度 / 最近更新 / ETA 判断。\n6. 若本轮存在超时需求，已经补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`，或明确写清为什么本轮先重设 ETA 不触发 AAR。\n7. 若当天学习任务已执行，本轮已经为相关小伙伴补齐 `pm/daily-learning-reports/YYYY-MM-DD/\u003cagent_id\u003e.md` 的真实学习报告，且不是 PM 代写空壳。\n8. 本轮已经完成至少 1 项推进性修改；单纯写 history / logs / 今日日记 / 观察摘要不算达标。\n9. 本轮显式记录了 `root_sync_state / ahead_count / dirty_tracked_count / untracked_count / push_block_reason / next_push_batch`，并且没有把它们误当成最终交付本身。\n10. 若识别到新功能想法或低维护价值重构项，本轮已明确后移去向，而不是继续扩胖当前版本。\n11. 若命中工作区异常、发布边界异常或 helper 异常，本轮已经主动执行受支持的治理动作，或明确写清为什么这轮只能 blocked；不接受只写“等待问题被解决”。\n12. 若本轮存在已验证代码改动，不管当前工作区是不是 dirty，本轮结束前都已经按已验证子批次完成当前工作区 `commit / push / 根仓同步`，或明确写清为什么连最小提交都做不到。\n13. 若当前窗口不是暂停/治理调整，本轮结束时至少还保留一个后续出口（ready / future / 明确的下一次唤醒）；若当前窗口是暂停/治理调整，则不得误续挂新的主线推进任务。\n14. 本轮已明确写出 `version_transition_decision=stay|switch`；若判断切版，已经完成 `pm/PM当前版本计划.md` 与版本 history 的切版写回；若判断不切，已写清切版 blocker 与下一次重检条件。\n15. 本轮交付正文默认先给判断、取舍和下一动作，再补必要证据；若仍写成状态墙或播报腔，本轮不算完成。",
+                                "expected_artifact_snapshot":  "continuous-improvement-report.md",
+                                "delivery_mode_snapshot":  "none",
+                                "delivery_receiver_agent_id_snapshot":  "",
+                                "created_at":  "2026-04-26T06:28:05+08:00",
+                                "updated_at":  "2026-04-26T06:31:07+08:00",
+                                "result_status":  "succeeded",
+                                "result_status_text":  "已成功",
+                                "assignment_status":  "succeeded",
+                                "assignment_status_text":  "已完成",
+                                "assignment_graph_name":  "任务中心全局主图",
+                                "assignment_node_name":  "[持续迭代] workflow / 2026-04-26 06:28:00"
+                            },
+                            {
+                                "trigger_instance_id":  "sti-20260426-d93c99e2",
+                                "schedule_id":  "sch-20260405-56eee156",
+                                "planned_trigger_at":  "2026-04-26T05:50:00+08:00",
+                                "trigger_rule_summary":  "定时 2026-04-26 05:50",
+                                "trigger_rule_keys":  [
+                                                          "once:2026-04-26T05:50:00+08:00"
+                                                      ],
+                                "merged_rule_count":  1,
+                                "trigger_status":  "succeeded",
+                                "trigger_message":  "已完成",
+                                "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                "assignment_node_id":  "node-sti-20260426-d93c99e2",
+                                "schedule_name_snapshot":  "[持续迭代] workflow",
+                                "assigned_agent_id_snapshot":  "workflow",
+                                "launch_summary_snapshot":  "上一轮任务已经结束，请继续作为 workflow 的长期负责人推进 7x24 连续迭代。\n本轮先服务当前 active 版本与当前窗口任务，不空转，也不依赖额外巡检兜底。\n本轮不允许纯观察；至少完成 1 项推进性修改，单纯写 history / logs / 今日日记 / 观察摘要都不算。\n禁止改写上一轮；先识别已完成事项，再选当前最高价值动作。\n你现在以 `workflow` 本人身份推进，不要退回通用值班播报壳。\n交付默认先给判断、取舍和下一动作，再补必要证据；不要先铺长段状态播报。\n除非风险判断直接依赖，不要堆砌接口字段、路径清单和重复 checklist；证据保留最小必要引用即可。\n正式文字保持第一人称、直接、克制；少用“继续观察 / 已记录 / 后续再看”这类空转句式。\n先读 PM 治理入口：pm/README.md\n必读：pm/PM版本推进计划.md / pm/PM当前版本计划.md / `pm/PM当前版本计划.md` 中 `active_version_file` 指向的版本文件 / pm/PM每日任务清单.md / docs/workflow/requirements/需求详情-pm持续唤醒与清醒维持.md\n今日例行任务是否已完成，看 `pm/daily-execution-history/YYYY-MM-DD.md`；每日任务现在包含“每日 1 次系统 7x24 运维质量检查”和“团队内每个小伙伴每日学习任务与真实学习报告”。\n每轮执行后都要逐项评估当前 active 需求的状态 / 进度 / 最近更新 / 预计完成时间；若需求超时，必须补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`。\n每轮都要判断当前 active 版本是否继续保持，还是已经满足进入下一版本的条件；若下一版本 `next_activation_ready=true` 且当前版本退出门槛已满足，不允许只停在观察。\n当前版本快照： active_version=V11 ; title=多项目工作面二期、跨项目 compare/readback 与专业判断闭环 ; lane=工程质量探测 ; lifecycle_stage=post-apply NO-GO 发布边界收口 ; baseline=prod=20260426-012259\n当前版本文件： pm/versions/V11/版本计划.md ; ref=pm/PM当前版本计划.md\n版本快照时间： 2026-04-25T18:04:05.6572682Z ; source=pm/versions/V11/版本计划.md\n发布边界专项方案：docs/workflow/reports/7x24发布边界收口方案-20260409.md\n根仓同步快照： root_sync_state=clean_synced ; ahead_count=0 ; dirty_tracked_count=0 ; untracked_count=0\n当前开发工作区：pm-main ; workspace_head=bff7523 ; code_root_head=bff7523\n上游参考状态(默认不阻塞)： workspace=## main...origin/main ; code_root=## main...origin/main [ahead 314]\n代码根仓快照： code_root_sync_state=clean_synced ; code_root_ahead_count=0 ; code_root_behind_count=0 ; code_root_dirty_tracked_count=0 ; code_root_untracked_count=0\nnext_push_batch: 待切批 ; push_block_reason: -\n发布边界动作: 当前已相对本机 `../workflow_code` clean_synced；若本轮产生代码改动并完成验证，收尾前必须从当前工作区提交并同步到 `../workflow_code/main`。只要某个子批次验证通过，就立即提交，不要为了等更大批次而延后。GitHub / origin 默认只作参考，不作为本轮阻塞。\n上一轮结果: V11-R1 已从等待 apply/focused rerun 更新为 completed；本轮完成 test 部署并刷新 prod candidate=当前候选，版本判断保持 stay(V11)，阻塞点转为 V12 activation gate 未 ready 与候选待空窗 apply。",
+                                "execution_checklist_snapshot":  "1. 按 `pm/README.md -\u003e pm/PM版本推进计划.md -\u003e pm/PM当前版本计划.md -\u003e pm/PM当前版本计划.md 中 active_version_file 指向的版本文件 -\u003e pm/PM每日任务清单.md -\u003e docs/workflow/requirements/需求详情-pm持续唤醒与清醒维持.md` 的顺序补齐上下文。\n2. 先确认本轮属于 `需求提出 -\u003e 澄清/评审 -\u003e 形成基线 -\u003e 变更控制 -\u003e 开发实现 -\u003e 基于基线测试 -\u003e 验收 -\u003e 归档回溯` 中的哪一段，并从 `UCD/设计优化、测试探测、工程质量探测、需求分析、架构优化、功能开发、高价值功能探索` 里判断当前最高价值泳道。\n3. 先检查 `pm/daily-execution-history/YYYY-MM-DD.md` 对应的今日日文件是否存在；若不存在，需要在本轮合适窗口补做今天唯一一轮每日任务；若已存在，则不要把每日任务误当成每轮待办。\n4. 先对照上一轮结果和最近版本记录；若本轮计划与上一轮主产出实质一致，必须改选更高价值切片。\n5. 本轮必须明确版本究竟推进了哪一项：`工程质量探测 / bug 探测 / 当前需求开发 / 发布推进`；若只是复述上一轮，就视为无效轮次。\n6. 本轮至少完成 1 项推进性修改；推进性修改默认指代码修复、schedule/dispatch 调整、helper 派发或恢复、发布动作、缺陷路由、版本执行约束调整中的至少一项。单纯写 history / logs / 今日日记 / 观察摘要都不算。\n7. 本轮结束前，必须对当前 active 版本的每个需求点逐项更新：`状态 / 进度评估 / 最近更新 / 预计完成时间 / 是否超时`。\n8. 若某个需求点超过上一轮承诺的预计完成时间，且本轮没有先重设 ETA，必须补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`，不能只在 history 里轻描淡写带过。\n9. 若当天学习任务尚未收口，必须给 workflow_devmate / workflow_testmate / workflow_qualitymate / workflow_bugmate 指派明确学习任务，并要求每个小伙伴把自己的学习报告写到 `pm/daily-learning-reports/YYYY-MM-DD/\u003cagent_id\u003e.md`；PM 不得代写空壳学习报告。\n10. 按 `质量 / 效率 / 工作区小伙伴维护 = 4 / 4 / 2` 判断重点；若 live 真相显示另一条线更高价值，主动重排优先级。\n11. 一旦识别到 live 风险，本轮第一优先修改默认就是降低该风险；不得只把风险冻结、继续观察或原样滚到下一轮。\n12. 只有 helper workspace 真异常、drift、creating 或无法派发时，才把工作区可用性抬成最高优先级。\n13. 先记录 `root_sync_state / ahead_count / dirty_tracked_count / untracked_count / push_block_reason / next_push_batch`；若命中 dirty/ahead/异常治理现场，立即进入发布边界收口模式，但不允许把“工作区还有脏”当成延后提交的理由。\n14. 只做受支持动作：基于本机 `../workflow_code` 的 non-destructive 收口、developer workspace bootstrap/refresh、helper stale `creating` / schedule / supervisor / runtime-upgrade 恢复；不要主动 `fetch/pull origin` 或拉 GitHub。\n15. 命中工作区问题时，不能停在“等待问题被解决”。只要属于受支持动作范围，你必须主动治理收口；只有确实超出支持范围或继续动作风险更大时，才允许记为 blocked。\n16. 不管当前工作区是不是 dirty，只要某个子批次已经完成最小验证，就必须先从当前工作区 `commit / push / 根仓同步`；不要等整轮 clean 或所有改动都收完才提交。\n17. 再检查 `/healthz`、`/api/status`、`/api/schedules`、`/api/runtime-upgrade/status`；必要时再看 `status-detail / run.json / events.log`。当前 shell 是 PowerShell：不要使用 bash heredoc，不要把 `scripts/*.ps1` 这类通配路径直接交给 `rg`，也不要手工猜 run_id。\n18. 正式升级申请改由 `prod` supervisor 托管的 idle watcher 周期检查并发起，当前主线节点不要自己调用 `/api/runtime-upgrade/apply`。正式升级改由 `prod` supervisor 托管的 idle watcher 周期检查并发起；当前主线节点不要再通过自排除方式自己触发 `/api/runtime-upgrade/apply`。\n19. 每轮都要检查是否需要给 workflow_devmate / workflow_testmate / workflow_qualitymate / workflow_bugmate 创建、续挂、恢复或调整任务；这属于 PM 主线每轮必查项，不属于每日任务。\n20. 当天的版本推进、后移、ETA 重估和后续版本排期判断先写 `pm/versions/\u003cactive_version\u003e/history/YYYY-MM/YYYY-MM-DD.md`；只有本轮主判断发生变化时，才更新 `pm/PM当前版本计划.md` 的当前状态快照，或对应版本文件的具体排期正文。\n21. 若识别到新的高杠杆功能或低维护价值重构项，先记入版本记录，并明确它进入 `V2 / V3 / V4 / backlog` 的哪一处，不要继续把当前版本加胖。\n22. 更新 `.codex/memory/...` 时，在 `next` 明确写出下一次主线触发时间；记忆库每一轮都要更新，不能因为当天每日任务已完成就跳过。\n23. 每轮都要结合当前版本退出门槛、`/api/status` 中 `pm_version_board.activation_summary.next_activation_candidate / next_activation_ready`、以及下一版本计划里的 `go_no_go_rule / blocking_items`，显式给出 `version_transition_decision=stay|switch`；若判断 `switch`，本轮同步更新 `pm/PM当前版本计划.md` 的 `active_version / active_version_title / active_version_file`，并把切版原因写入当前版本与目标版本的 history。\n24. 交付正文默认先给判断、取舍和下一动作，再补必要证据；不要先铺长段状态播报。除非当前决策直接依赖，不要堆砌接口字段、路径清单和重复 checklist。",
+                                "done_definition_snapshot":  "1. 当前活跃版本文件中的最高优先事项有可交付结果，或已经被明确标记为 blocked。\n2. 若今日 `pm/daily-execution-history/YYYY-MM-DD.md` 原本不存在，本轮已经补齐当天每日执行结果，或明确写清为什么仍未完成。\n3. 本轮执行内容不能与上一轮主内容实质一致；若沿同一事项继续推进，必须新增证据、缺陷、实现、决策或发布动作。\n4. 本轮要写清当前泳道、生命周期阶段，以及版本是否真的发生推进；若没有推进，必须写清卡点和下一轮改变动作。\n5. 当天的版本推进、后移、ETA 重估和后续版本排期判断已写入 `pm/versions/\u003cactive_version\u003e/history/YYYY-MM/YYYY-MM-DD.md`；每个 active 需求点都有最新的状态 / 进度 / 最近更新 / ETA 判断。\n6. 若本轮存在超时需求，已经补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`，或明确写清为什么本轮先重设 ETA 不触发 AAR。\n7. 若当天学习任务已执行，本轮已经为相关小伙伴补齐 `pm/daily-learning-reports/YYYY-MM-DD/\u003cagent_id\u003e.md` 的真实学习报告，且不是 PM 代写空壳。\n8. 本轮已经完成至少 1 项推进性修改；单纯写 history / logs / 今日日记 / 观察摘要不算达标。\n9. 本轮显式记录了 `root_sync_state / ahead_count / dirty_tracked_count / untracked_count / push_block_reason / next_push_batch`，并且没有把它们误当成最终交付本身。\n10. 若识别到新功能想法或低维护价值重构项，本轮已明确后移去向，而不是继续扩胖当前版本。\n11. 若命中工作区异常、发布边界异常或 helper 异常，本轮已经主动执行受支持的治理动作，或明确写清为什么这轮只能 blocked；不接受只写“等待问题被解决”。\n12. 若本轮存在已验证代码改动，不管当前工作区是不是 dirty，本轮结束前都已经按已验证子批次完成当前工作区 `commit / push / 根仓同步`，或明确写清为什么连最小提交都做不到。\n13. 若当前窗口不是暂停/治理调整，本轮结束时至少还保留一个后续出口（ready / future / 明确的下一次唤醒）；若当前窗口是暂停/治理调整，则不得误续挂新的主线推进任务。\n14. 本轮已明确写出 `version_transition_decision=stay|switch`；若判断切版，已经完成 `pm/PM当前版本计划.md` 与版本 history 的切版写回；若判断不切，已写清切版 blocker 与下一次重检条件。\n15. 本轮交付正文默认先给判断、取舍和下一动作，再补必要证据；若仍写成状态墙或播报腔，本轮不算完成。",
+                                "expected_artifact_snapshot":  "continuous-improvement-report.md",
+                                "delivery_mode_snapshot":  "none",
+                                "delivery_receiver_agent_id_snapshot":  "",
+                                "created_at":  "2026-04-26T05:49:56+08:00",
+                                "updated_at":  "2026-04-26T06:02:05+08:00",
+                                "result_status":  "succeeded",
+                                "result_status_text":  "已成功",
+                                "assignment_status":  "succeeded",
+                                "assignment_status_text":  "已完成",
+                                "assignment_graph_name":  "任务中心全局主图",
+                                "assignment_node_name":  "[持续迭代] workflow / 2026-04-26 05:50:00"
+                            },
+                            {
+                                "trigger_instance_id":  "sti-20260426-bb4a8b73",
+                                "schedule_id":  "sch-20260405-56eee156",
+                                "planned_trigger_at":  "2026-04-26T05:34:00+08:00",
+                                "trigger_rule_summary":  "定时 2026-04-26 05:34",
+                                "trigger_rule_keys":  [
+                                                          "once:2026-04-26T05:34:00+08:00"
+                                                      ],
+                                "merged_rule_count":  1,
+                                "trigger_status":  "failed",
+                                "trigger_message":  "失败",
+                                "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                "assignment_node_id":  "node-sti-20260426-bb4a8b73",
+                                "schedule_name_snapshot":  "[持续迭代] workflow",
+                                "assigned_agent_id_snapshot":  "workflow",
+                                "launch_summary_snapshot":  "上一轮任务已经结束，请继续作为 workflow 的长期负责人推进 7x24 连续迭代。\n本轮先服务当前 active 版本与当前窗口任务，不空转，也不依赖额外巡检兜底。\n本轮不允许纯观察；至少完成 1 项推进性修改，单纯写 history / logs / 今日日记 / 观察摘要都不算。\n禁止改写上一轮；先识别已完成事项，再选当前最高价值动作。\n你现在以 `workflow` 本人身份推进，不要退回通用值班播报壳。\n交付默认先给判断、取舍和下一动作，再补必要证据；不要先铺长段状态播报。\n除非风险判断直接依赖，不要堆砌接口字段、路径清单和重复 checklist；证据保留最小必要引用即可。\n正式文字保持第一人称、直接、克制；少用“继续观察 / 已记录 / 后续再看”这类空转句式。\n先读 PM 治理入口：pm/README.md\n必读：pm/PM版本推进计划.md / pm/PM当前版本计划.md / `pm/PM当前版本计划.md` 中 `active_version_file` 指向的版本文件 / pm/PM每日任务清单.md / docs/workflow/requirements/需求详情-pm持续唤醒与清醒维持.md\n今日例行任务是否已完成，看 `pm/daily-execution-history/YYYY-MM-DD.md`；每日任务现在包含“每日 1 次系统 7x24 运维质量检查”和“团队内每个小伙伴每日学习任务与真实学习报告”。\n每轮执行后都要逐项评估当前 active 需求的状态 / 进度 / 最近更新 / 预计完成时间；若需求超时，必须补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`。\n每轮都要判断当前 active 版本是否继续保持，还是已经满足进入下一版本的条件；若下一版本 `next_activation_ready=true` 且当前版本退出门槛已满足，不允许只停在观察。\n当前版本快照： active_version=V11 ; title=多项目工作面二期、跨项目 compare/readback 与专业判断闭环 ; lane=工程质量探测 ; lifecycle_stage=post-apply NO-GO 发布边界收口 ; baseline=prod=20260426-012259\n当前版本文件： pm/versions/V11/版本计划.md ; ref=pm/PM当前版本计划.md\n版本快照时间： 2026-04-25T18:04:05.6572682Z ; source=pm/versions/V11/版本计划.md\n发布边界专项方案：docs/workflow/reports/7x24发布边界收口方案-20260409.md\n根仓同步快照： root_sync_state=clean_synced ; ahead_count=0 ; dirty_tracked_count=0 ; untracked_count=0\n当前开发工作区：pm-main ; workspace_head=bff7523 ; code_root_head=bff7523\n上游参考状态(默认不阻塞)： workspace=## main...origin/main ; code_root=## main...origin/main [ahead 314]\n代码根仓快照： code_root_sync_state=clean_synced ; code_root_ahead_count=0 ; code_root_behind_count=0 ; code_root_dirty_tracked_count=0 ; code_root_untracked_count=0\nnext_push_batch: 待切批 ; push_block_reason: -\n发布边界动作: 当前已相对本机 `../workflow_code` clean_synced；若本轮产生代码改动并完成验证，收尾前必须从当前工作区提交并同步到 `../workflow_code/main`。只要某个子批次验证通过，就立即提交，不要为了等更大批次而延后。GitHub / origin 默认只作参考，不作为本轮阻塞。\n上一轮结果: V11-R1 已从等待 apply/focused rerun 更新为 completed；本轮完成 test 部署并刷新 prod candidate=当前候选，版本判断保持 stay(V11)，阻塞点转为 V12 activation gate 未 ready 与候选待空窗 apply。",
+                                "execution_checklist_snapshot":  "1. 按 `pm/README.md -\u003e pm/PM版本推进计划.md -\u003e pm/PM当前版本计划.md -\u003e pm/PM当前版本计划.md 中 active_version_file 指向的版本文件 -\u003e pm/PM每日任务清单.md -\u003e docs/workflow/requirements/需求详情-pm持续唤醒与清醒维持.md` 的顺序补齐上下文。\n2. 先确认本轮属于 `需求提出 -\u003e 澄清/评审 -\u003e 形成基线 -\u003e 变更控制 -\u003e 开发实现 -\u003e 基于基线测试 -\u003e 验收 -\u003e 归档回溯` 中的哪一段，并从 `UCD/设计优化、测试探测、工程质量探测、需求分析、架构优化、功能开发、高价值功能探索` 里判断当前最高价值泳道。\n3. 先检查 `pm/daily-execution-history/YYYY-MM-DD.md` 对应的今日日文件是否存在；若不存在，需要在本轮合适窗口补做今天唯一一轮每日任务；若已存在，则不要把每日任务误当成每轮待办。\n4. 先对照上一轮结果和最近版本记录；若本轮计划与上一轮主产出实质一致，必须改选更高价值切片。\n5. 本轮必须明确版本究竟推进了哪一项：`工程质量探测 / bug 探测 / 当前需求开发 / 发布推进`；若只是复述上一轮，就视为无效轮次。\n6. 本轮至少完成 1 项推进性修改；推进性修改默认指代码修复、schedule/dispatch 调整、helper 派发或恢复、发布动作、缺陷路由、版本执行约束调整中的至少一项。单纯写 history / logs / 今日日记 / 观察摘要都不算。\n7. 本轮结束前，必须对当前 active 版本的每个需求点逐项更新：`状态 / 进度评估 / 最近更新 / 预计完成时间 / 是否超时`。\n8. 若某个需求点超过上一轮承诺的预计完成时间，且本轮没有先重设 ETA，必须补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`，不能只在 history 里轻描淡写带过。\n9. 若当天学习任务尚未收口，必须给 workflow_devmate / workflow_testmate / workflow_qualitymate / workflow_bugmate 指派明确学习任务，并要求每个小伙伴把自己的学习报告写到 `pm/daily-learning-reports/YYYY-MM-DD/\u003cagent_id\u003e.md`；PM 不得代写空壳学习报告。\n10. 按 `质量 / 效率 / 工作区小伙伴维护 = 4 / 4 / 2` 判断重点；若 live 真相显示另一条线更高价值，主动重排优先级。\n11. 一旦识别到 live 风险，本轮第一优先修改默认就是降低该风险；不得只把风险冻结、继续观察或原样滚到下一轮。\n12. 只有 helper workspace 真异常、drift、creating 或无法派发时，才把工作区可用性抬成最高优先级。\n13. 先记录 `root_sync_state / ahead_count / dirty_tracked_count / untracked_count / push_block_reason / next_push_batch`；若命中 dirty/ahead/异常治理现场，立即进入发布边界收口模式，但不允许把“工作区还有脏”当成延后提交的理由。\n14. 只做受支持动作：基于本机 `../workflow_code` 的 non-destructive 收口、developer workspace bootstrap/refresh、helper stale `creating` / schedule / supervisor / runtime-upgrade 恢复；不要主动 `fetch/pull origin` 或拉 GitHub。\n15. 命中工作区问题时，不能停在“等待问题被解决”。只要属于受支持动作范围，你必须主动治理收口；只有确实超出支持范围或继续动作风险更大时，才允许记为 blocked。\n16. 不管当前工作区是不是 dirty，只要某个子批次已经完成最小验证，就必须先从当前工作区 `commit / push / 根仓同步`；不要等整轮 clean 或所有改动都收完才提交。\n17. 再检查 `/healthz`、`/api/status`、`/api/schedules`、`/api/runtime-upgrade/status`；必要时再看 `status-detail / run.json / events.log`。当前 shell 是 PowerShell：不要使用 bash heredoc，不要把 `scripts/*.ps1` 这类通配路径直接交给 `rg`，也不要手工猜 run_id。\n18. 正式升级申请改由 `prod` supervisor 托管的 idle watcher 周期检查并发起，当前主线节点不要自己调用 `/api/runtime-upgrade/apply`。正式升级改由 `prod` supervisor 托管的 idle watcher 周期检查并发起；当前主线节点不要再通过自排除方式自己触发 `/api/runtime-upgrade/apply`。\n19. 每轮都要检查是否需要给 workflow_devmate / workflow_testmate / workflow_qualitymate / workflow_bugmate 创建、续挂、恢复或调整任务；这属于 PM 主线每轮必查项，不属于每日任务。\n20. 当天的版本推进、后移、ETA 重估和后续版本排期判断先写 `pm/versions/\u003cactive_version\u003e/history/YYYY-MM/YYYY-MM-DD.md`；只有本轮主判断发生变化时，才更新 `pm/PM当前版本计划.md` 的当前状态快照，或对应版本文件的具体排期正文。\n21. 若识别到新的高杠杆功能或低维护价值重构项，先记入版本记录，并明确它进入 `V2 / V3 / V4 / backlog` 的哪一处，不要继续把当前版本加胖。\n22. 更新 `.codex/memory/...` 时，在 `next` 明确写出下一次主线触发时间；记忆库每一轮都要更新，不能因为当天每日任务已完成就跳过。\n23. 每轮都要结合当前版本退出门槛、`/api/status` 中 `pm_version_board.activation_summary.next_activation_candidate / next_activation_ready`、以及下一版本计划里的 `go_no_go_rule / blocking_items`，显式给出 `version_transition_decision=stay|switch`；若判断 `switch`，本轮同步更新 `pm/PM当前版本计划.md` 的 `active_version / active_version_title / active_version_file`，并把切版原因写入当前版本与目标版本的 history。\n24. 交付正文默认先给判断、取舍和下一动作，再补必要证据；不要先铺长段状态播报。除非当前决策直接依赖，不要堆砌接口字段、路径清单和重复 checklist。",
+                                "done_definition_snapshot":  "1. 当前活跃版本文件中的最高优先事项有可交付结果，或已经被明确标记为 blocked。\n2. 若今日 `pm/daily-execution-history/YYYY-MM-DD.md` 原本不存在，本轮已经补齐当天每日执行结果，或明确写清为什么仍未完成。\n3. 本轮执行内容不能与上一轮主内容实质一致；若沿同一事项继续推进，必须新增证据、缺陷、实现、决策或发布动作。\n4. 本轮要写清当前泳道、生命周期阶段，以及版本是否真的发生推进；若没有推进，必须写清卡点和下一轮改变动作。\n5. 当天的版本推进、后移、ETA 重估和后续版本排期判断已写入 `pm/versions/\u003cactive_version\u003e/history/YYYY-MM/YYYY-MM-DD.md`；每个 active 需求点都有最新的状态 / 进度 / 最近更新 / ETA 判断。\n6. 若本轮存在超时需求，已经补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`，或明确写清为什么本轮先重设 ETA 不触发 AAR。\n7. 若当天学习任务已执行，本轮已经为相关小伙伴补齐 `pm/daily-learning-reports/YYYY-MM-DD/\u003cagent_id\u003e.md` 的真实学习报告，且不是 PM 代写空壳。\n8. 本轮已经完成至少 1 项推进性修改；单纯写 history / logs / 今日日记 / 观察摘要不算达标。\n9. 本轮显式记录了 `root_sync_state / ahead_count / dirty_tracked_count / untracked_count / push_block_reason / next_push_batch`，并且没有把它们误当成最终交付本身。\n10. 若识别到新功能想法或低维护价值重构项，本轮已明确后移去向，而不是继续扩胖当前版本。\n11. 若命中工作区异常、发布边界异常或 helper 异常，本轮已经主动执行受支持的治理动作，或明确写清为什么这轮只能 blocked；不接受只写“等待问题被解决”。\n12. 若本轮存在已验证代码改动，不管当前工作区是不是 dirty，本轮结束前都已经按已验证子批次完成当前工作区 `commit / push / 根仓同步`，或明确写清为什么连最小提交都做不到。\n13. 若当前窗口不是暂停/治理调整，本轮结束时至少还保留一个后续出口（ready / future / 明确的下一次唤醒）；若当前窗口是暂停/治理调整，则不得误续挂新的主线推进任务。\n14. 本轮已明确写出 `version_transition_decision=stay|switch`；若判断切版，已经完成 `pm/PM当前版本计划.md` 与版本 history 的切版写回；若判断不切，已写清切版 blocker 与下一次重检条件。\n15. 本轮交付正文默认先给判断、取舍和下一动作，再补必要证据；若仍写成状态墙或播报腔，本轮不算完成。",
+                                "expected_artifact_snapshot":  "continuous-improvement-report.md",
+                                "delivery_mode_snapshot":  "none",
+                                "delivery_receiver_agent_id_snapshot":  "",
+                                "created_at":  "2026-04-26T05:33:22+08:00",
+                                "updated_at":  "2026-04-26T05:53:08+08:00",
+                                "result_status":  "failed",
+                                "result_status_text":  "已失败",
+                                "assignment_status":  "failed",
+                                "assignment_status_text":  "失败",
+                                "assignment_graph_name":  "任务中心全局主图",
+                                "assignment_node_name":  "[持续迭代] workflow / 2026-04-26 05:34:00"
+                            },
+                            {
+                                "trigger_instance_id":  "sti-20260426-2d9e6444",
+                                "schedule_id":  "sch-20260405-56eee156",
+                                "planned_trigger_at":  "2026-04-26T01:08:00+08:00",
+                                "trigger_rule_summary":  "定时 2026-04-26 01:08",
+                                "trigger_rule_keys":  [
+                                                          "once:2026-04-26T01:08:00+08:00"
+                                                      ],
+                                "merged_rule_count":  1,
+                                "trigger_status":  "succeeded",
+                                "trigger_message":  "已完成",
+                                "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                "assignment_node_id":  "node-sti-20260426-2d9e6444",
+                                "schedule_name_snapshot":  "[持续迭代] workflow",
+                                "assigned_agent_id_snapshot":  "workflow",
+                                "launch_summary_snapshot":  "上一轮任务已经结束，请继续作为 workflow 的长期负责人推进 7x24 连续迭代。\n本轮先服务当前 active 版本与当前窗口任务，不空转，也不依赖额外巡检兜底。\n本轮不允许纯观察；至少完成 1 项推进性修改，单纯写 history / logs / 今日日记 / 观察摘要都不算。\n禁止改写上一轮；先识别已完成事项，再选当前最高价值动作。\n你现在以 `workflow` 本人身份推进，不要退回通用值班播报壳。\n交付默认先给判断、取舍和下一动作，再补必要证据；不要先铺长段状态播报。\n除非风险判断直接依赖，不要堆砌接口字段、路径清单和重复 checklist；证据保留最小必要引用即可。\n正式文字保持第一人称、直接、克制；少用“继续观察 / 已记录 / 后续再看”这类空转句式。\n先读 PM 治理入口：pm/README.md\n必读：pm/PM版本推进计划.md / pm/PM当前版本计划.md / `pm/PM当前版本计划.md` 中 `active_version_file` 指向的版本文件 / pm/PM每日任务清单.md / docs/workflow/requirements/需求详情-pm持续唤醒与清醒维持.md\n今日例行任务是否已完成，看 `pm/daily-execution-history/YYYY-MM-DD.md`；每日任务现在包含“每日 1 次系统 7x24 运维质量检查”和“团队内每个小伙伴每日学习任务与真实学习报告”。\n每轮执行后都要逐项评估当前 active 需求的状态 / 进度 / 最近更新 / 预计完成时间；若需求超时，必须补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`。\n每轮都要判断当前 active 版本是否继续保持，还是已经满足进入下一版本的条件；若下一版本 `next_activation_ready=true` 且当前版本退出门槛已满足，不允许只停在观察。\n当前版本快照： active_version=V11 ; title=多项目工作面二期、跨项目 compare/readback 与专业判断闭环 ; lane=工程质量探测 ; lifecycle_stage=post-apply NO-GO 发布边界收口 ; baseline=prod=20260426-003541\n当前版本文件： pm/versions/V11/版本计划.md ; ref=pm/PM当前版本计划.md\n版本快照时间： 2026-04-25T16:47:27.3552868Z ; source=pm/versions/V11/版本计划.md\n发布边界专项方案：docs/workflow/reports/7x24发布边界收口方案-20260409.md\n根仓同步快照： root_sync_state=ahead_dirty ; ahead_count=0 ; dirty_tracked_count=15 ; untracked_count=0\n当前开发工作区：pm-main ; workspace_head=d722943 ; code_root_head=d722943\n上游参考状态(默认不阻塞)： workspace=## main...origin/main ; code_root=## main...origin/main [ahead 313]\n代码根仓快照： code_root_sync_state=clean_synced ; code_root_ahead_count=0 ; code_root_behind_count=0 ; code_root_dirty_tracked_count=0 ; code_root_untracked_count=0\nnext_push_batch: gate/acceptance 收口 ; push_block_reason: workspace_dirty_changes_present\n发布边界动作: 当前尚未相对本机 `../workflow_code` 收口；若这是上轮留下的 dirty/ahead，本轮第一优先级先处理历史批次，但不管工作区有没有脏，只要某个子批次已经完成最小验证，就必须先从当前工作区提交并同步到 `../workflow_code/main`，不要等整轮 clean 才提交。GitHub / origin 默认只作参考，不作为本轮阻塞。\nsuggested_push_batches: gate/acceptance 收口 | backend 真相收口 | frontend UCD 切片\nchanged_paths_preview: scripts/acceptance/verify_assignment_center_mainline_visibility.js | scripts/acceptance/verify_assignment_detail_surface_runtime_split.js | scripts/acceptance/verify_assignment_graph_node_surface_split.py | scripts/acceptance/verify_assignment_mainline_visibility.py | scripts/acceptance/verify_schedule_admin_runtime_split.py | src/workflow_app/server/api/dashboard.py | src/workflow_app/server/services/assignment_service_parts/assignment_node_surface_runtime.py | src/workflow_app/server/services/assignment_service_parts/graph_model_and_payloads.py",
+                                "execution_checklist_snapshot":  "1. 按 `pm/README.md -\u003e pm/PM版本推进计划.md -\u003e pm/PM当前版本计划.md -\u003e pm/PM当前版本计划.md 中 active_version_file 指向的版本文件 -\u003e pm/PM每日任务清单.md -\u003e docs/workflow/requirements/需求详情-pm持续唤醒与清醒维持.md` 的顺序补齐上下文。\n2. 先确认本轮属于 `需求提出 -\u003e 澄清/评审 -\u003e 形成基线 -\u003e 变更控制 -\u003e 开发实现 -\u003e 基于基线测试 -\u003e 验收 -\u003e 归档回溯` 中的哪一段，并从 `UCD/设计优化、测试探测、工程质量探测、需求分析、架构优化、功能开发、高价值功能探索` 里判断当前最高价值泳道。\n3. 先检查 `pm/daily-execution-history/YYYY-MM-DD.md` 对应的今日日文件是否存在；若不存在，需要在本轮合适窗口补做今天唯一一轮每日任务；若已存在，则不要把每日任务误当成每轮待办。\n4. 先对照上一轮结果和最近版本记录；若本轮计划与上一轮主产出实质一致，必须改选更高价值切片。\n5. 本轮必须明确版本究竟推进了哪一项：`工程质量探测 / bug 探测 / 当前需求开发 / 发布推进`；若只是复述上一轮，就视为无效轮次。\n6. 本轮至少完成 1 项推进性修改；推进性修改默认指代码修复、schedule/dispatch 调整、helper 派发或恢复、发布动作、缺陷路由、版本执行约束调整中的至少一项。单纯写 history / logs / 今日日记 / 观察摘要都不算。\n7. 本轮结束前，必须对当前 active 版本的每个需求点逐项更新：`状态 / 进度评估 / 最近更新 / 预计完成时间 / 是否超时`。\n8. 若某个需求点超过上一轮承诺的预计完成时间，且本轮没有先重设 ETA，必须补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`，不能只在 history 里轻描淡写带过。\n9. 若当天学习任务尚未收口，必须给 workflow_devmate / workflow_testmate / workflow_qualitymate / workflow_bugmate 指派明确学习任务，并要求每个小伙伴把自己的学习报告写到 `pm/daily-learning-reports/YYYY-MM-DD/\u003cagent_id\u003e.md`；PM 不得代写空壳学习报告。\n10. 按 `质量 / 效率 / 工作区小伙伴维护 = 4 / 4 / 2` 判断重点；若 live 真相显示另一条线更高价值，主动重排优先级。\n11. 一旦识别到 live 风险，本轮第一优先修改默认就是降低该风险；不得只把风险冻结、继续观察或原样滚到下一轮。\n12. 只有 helper workspace 真异常、drift、creating 或无法派发时，才把工作区可用性抬成最高优先级。\n13. 先记录 `root_sync_state / ahead_count / dirty_tracked_count / untracked_count / push_block_reason / next_push_batch`；若命中 dirty/ahead/异常治理现场，立即进入发布边界收口模式，但不允许把“工作区还有脏”当成延后提交的理由。\n14. 只做受支持动作：基于本机 `../workflow_code` 的 non-destructive 收口、developer workspace bootstrap/refresh、helper stale `creating` / schedule / supervisor / runtime-upgrade 恢复；不要主动 `fetch/pull origin` 或拉 GitHub。\n15. 命中工作区问题时，不能停在“等待问题被解决”。只要属于受支持动作范围，你必须主动治理收口；只有确实超出支持范围或继续动作风险更大时，才允许记为 blocked。\n16. 不管当前工作区是不是 dirty，只要某个子批次已经完成最小验证，就必须先从当前工作区 `commit / push / 根仓同步`；不要等整轮 clean 或所有改动都收完才提交。\n17. 再检查 `/healthz`、`/api/status`、`/api/schedules`、`/api/runtime-upgrade/status`；必要时再看 `status-detail / run.json / events.log`。当前 shell 是 PowerShell：不要使用 bash heredoc，不要把 `scripts/*.ps1` 这类通配路径直接交给 `rg`，也不要手工猜 run_id。\n18. 正式升级申请改由 `prod` supervisor 托管的 idle watcher 周期检查并发起，当前主线节点不要自己调用 `/api/runtime-upgrade/apply`。正式升级改由 `prod` supervisor 托管的 idle watcher 周期检查并发起；当前主线节点不要再通过自排除方式自己触发 `/api/runtime-upgrade/apply`。\n19. 每轮都要检查是否需要给 workflow_devmate / workflow_testmate / workflow_qualitymate / workflow_bugmate 创建、续挂、恢复或调整任务；这属于 PM 主线每轮必查项，不属于每日任务。\n20. 当天的版本推进、后移、ETA 重估和后续版本排期判断先写 `pm/versions/\u003cactive_version\u003e/history/YYYY-MM/YYYY-MM-DD.md`；只有本轮主判断发生变化时，才更新 `pm/PM当前版本计划.md` 的当前状态快照，或对应版本文件的具体排期正文。\n21. 若识别到新的高杠杆功能或低维护价值重构项，先记入版本记录，并明确它进入 `V2 / V3 / V4 / backlog` 的哪一处，不要继续把当前版本加胖。\n22. 更新 `.codex/memory/...` 时，在 `next` 明确写出下一次主线触发时间；记忆库每一轮都要更新，不能因为当天每日任务已完成就跳过。\n23. 每轮都要结合当前版本退出门槛、`/api/status` 中 `pm_version_board.activation_summary.next_activation_candidate / next_activation_ready`、以及下一版本计划里的 `go_no_go_rule / blocking_items`，显式给出 `version_transition_decision=stay|switch`；若判断 `switch`，本轮同步更新 `pm/PM当前版本计划.md` 的 `active_version / active_version_title / active_version_file`，并把切版原因写入当前版本与目标版本的 history。\n24. 交付正文默认先给判断、取舍和下一动作，再补必要证据；不要先铺长段状态播报。除非当前决策直接依赖，不要堆砌接口字段、路径清单和重复 checklist。",
+                                "done_definition_snapshot":  "1. 当前活跃版本文件中的最高优先事项有可交付结果，或已经被明确标记为 blocked。\n2. 若今日 `pm/daily-execution-history/YYYY-MM-DD.md` 原本不存在，本轮已经补齐当天每日执行结果，或明确写清为什么仍未完成。\n3. 本轮执行内容不能与上一轮主内容实质一致；若沿同一事项继续推进，必须新增证据、缺陷、实现、决策或发布动作。\n4. 本轮要写清当前泳道、生命周期阶段，以及版本是否真的发生推进；若没有推进，必须写清卡点和下一轮改变动作。\n5. 当天的版本推进、后移、ETA 重估和后续版本排期判断已写入 `pm/versions/\u003cactive_version\u003e/history/YYYY-MM/YYYY-MM-DD.md`；每个 active 需求点都有最新的状态 / 进度 / 最近更新 / ETA 判断。\n6. 若本轮存在超时需求，已经补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`，或明确写清为什么本轮先重设 ETA 不触发 AAR。\n7. 若当天学习任务已执行，本轮已经为相关小伙伴补齐 `pm/daily-learning-reports/YYYY-MM-DD/\u003cagent_id\u003e.md` 的真实学习报告，且不是 PM 代写空壳。\n8. 本轮已经完成至少 1 项推进性修改；单纯写 history / logs / 今日日记 / 观察摘要不算达标。\n9. 本轮显式记录了 `root_sync_state / ahead_count / dirty_tracked_count / untracked_count / push_block_reason / next_push_batch`，并且没有把它们误当成最终交付本身。\n10. 若识别到新功能想法或低维护价值重构项，本轮已明确后移去向，而不是继续扩胖当前版本。\n11. 若命中工作区异常、发布边界异常或 helper 异常，本轮已经主动执行受支持的治理动作，或明确写清为什么这轮只能 blocked；不接受只写“等待问题被解决”。\n12. 若本轮存在已验证代码改动，不管当前工作区是不是 dirty，本轮结束前都已经按已验证子批次完成当前工作区 `commit / push / 根仓同步`，或明确写清为什么连最小提交都做不到。\n13. 若当前窗口不是暂停/治理调整，本轮结束时至少还保留一个后续出口（ready / future / 明确的下一次唤醒）；若当前窗口是暂停/治理调整，则不得误续挂新的主线推进任务。\n14. 本轮已明确写出 `version_transition_decision=stay|switch`；若判断切版，已经完成 `pm/PM当前版本计划.md` 与版本 history 的切版写回；若判断不切，已写清切版 blocker 与下一次重检条件。\n15. 本轮交付正文默认先给判断、取舍和下一动作，再补必要证据；若仍写成状态墙或播报腔，本轮不算完成。",
+                                "expected_artifact_snapshot":  "continuous-improvement-report.md",
+                                "delivery_mode_snapshot":  "none",
+                                "delivery_receiver_agent_id_snapshot":  "",
+                                "created_at":  "2026-04-26T01:08:12+08:00",
+                                "updated_at":  "2026-04-26T01:11:02+08:00",
+                                "result_status":  "succeeded",
+                                "result_status_text":  "已成功",
+                                "assignment_status":  "succeeded",
+                                "assignment_status_text":  "已完成",
+                                "assignment_graph_name":  "任务中心全局主图",
+                                "assignment_node_name":  "[持续迭代] workflow / 2026-04-26 01:08:00"
+                            },
+                            {
+                                "trigger_instance_id":  "sti-20260425-e73e073c",
+                                "schedule_id":  "sch-20260405-56eee156",
+                                "planned_trigger_at":  "2026-04-25T23:59:00+08:00",
+                                "trigger_rule_summary":  "定时 2026-04-25 23:59",
+                                "trigger_rule_keys":  [
+                                                          "once:2026-04-25T23:59:00+08:00"
+                                                      ],
+                                "merged_rule_count":  1,
+                                "trigger_status":  "failed",
+                                "trigger_message":  "失败",
+                                "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                "assignment_node_id":  "node-sti-20260425-e73e073c",
+                                "schedule_name_snapshot":  "[持续迭代] workflow",
+                                "assigned_agent_id_snapshot":  "workflow",
+                                "launch_summary_snapshot":  "上一轮任务已经结束，请继续作为 workflow 的长期负责人推进 7x24 连续迭代。\n本轮先服务当前 active 版本与当前窗口任务，不空转，也不依赖额外巡检兜底。\n本轮不允许纯观察；至少完成 1 项推进性修改，单纯写 history / logs / 今日日记 / 观察摘要都不算。\n禁止改写上一轮；先识别已完成事项，再选当前最高价值动作。\n你现在以 `workflow` 本人身份推进，不要退回通用值班播报壳。\n交付默认先给判断、取舍和下一动作，再补必要证据；不要先铺长段状态播报。\n除非风险判断直接依赖，不要堆砌接口字段、路径清单和重复 checklist；证据保留最小必要引用即可。\n正式文字保持第一人称、直接、克制；少用“继续观察 / 已记录 / 后续再看”这类空转句式。\n先读 PM 治理入口：pm/README.md\n必读：pm/PM版本推进计划.md / pm/PM当前版本计划.md / `pm/PM当前版本计划.md` 中 `active_version_file` 指向的版本文件 / pm/PM每日任务清单.md / docs/workflow/requirements/需求详情-pm持续唤醒与清醒维持.md\n今日例行任务是否已完成，看 `pm/daily-execution-history/YYYY-MM-DD.md`；每日任务现在包含“每日 1 次系统 7x24 运维质量检查”和“团队内每个小伙伴每日学习任务与真实学习报告”。\n每轮执行后都要逐项评估当前 active 需求的状态 / 进度 / 最近更新 / 预计完成时间；若需求超时，必须补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`。\n每轮都要判断当前 active 版本是否继续保持，还是已经满足进入下一版本的条件；若下一版本 `next_activation_ready=true` 且当前版本退出门槛已满足，不允许只停在观察。\n当前版本快照： active_version=V11 ; title=多项目工作面二期、跨项目 compare/readback 与专业判断闭环 ; lane=工程质量探测 ; lifecycle_stage=post-apply NO-GO 缺陷路由 ; baseline=prod=20260425-181610\n当前版本文件： pm/versions/V11/版本计划.md ; ref=pm/PM当前版本计划.md\n版本快照时间： 2026-04-25T10:17:44.4658436Z ; source=pm/versions/V11/版本计划.md\n发布边界专项方案：docs/workflow/reports/7x24发布边界收口方案-20260409.md\n根仓同步快照： root_sync_state=ahead_dirty ; ahead_count=0 ; dirty_tracked_count=13 ; untracked_count=2\n当前开发工作区：pm-main ; workspace_head=c4a0f27 ; code_root_head=741d66e\n上游参考状态(默认不阻塞)： workspace=## main...origin/main ; code_root=## main...origin/main [ahead 311]\n代码根仓快照： code_root_sync_state=clean_synced ; code_root_ahead_count=0 ; code_root_behind_count=0 ; code_root_dirty_tracked_count=0 ; code_root_untracked_count=0\nnext_push_batch: gate/acceptance 收口 ; push_block_reason: workspace_dirty_changes_present\n发布边界动作: 当前尚未相对本机 `../workflow_code` 收口；若这是上轮留下的 dirty/ahead，本轮第一优先级先处理历史批次，但不管工作区有没有脏，只要某个子批次已经完成最小验证，就必须先从当前工作区提交并同步到 `../workflow_code/main`，不要等整轮 clean 才提交。GitHub / origin 默认只作参考，不作为本轮阻塞。\nsuggested_push_batches: gate/acceptance 收口 | backend 真相收口 | scripts 杂项确认\nchanged_paths_preview: scripts/acceptance/verify_api_catalog_live_regression.py | scripts/acceptance/verify_api_catalog_live_regression_host_root_fallback.py | scripts/acceptance/verify_pm_current_version_snapshot_alignment.py | scripts/acceptance/workflow_gate_probe_registry.py | scripts/bin/refresh_pm_current_version_snapshot.py | src/workflow_app/server/services/assignment_service_parts/assignment_settings_runtime.py | src/workflow_app/server/services/assignment_service_parts/manifest.json | src/workflow_app/server/services/assignment_service_parts/task_artifact_store_run_finalize_runtime.py",
+                                "execution_checklist_snapshot":  "1. 按 `pm/README.md -\u003e pm/PM版本推进计划.md -\u003e pm/PM当前版本计划.md -\u003e pm/PM当前版本计划.md 中 active_version_file 指向的版本文件 -\u003e pm/PM每日任务清单.md -\u003e docs/workflow/requirements/需求详情-pm持续唤醒与清醒维持.md` 的顺序补齐上下文。\n2. 先确认本轮属于 `需求提出 -\u003e 澄清/评审 -\u003e 形成基线 -\u003e 变更控制 -\u003e 开发实现 -\u003e 基于基线测试 -\u003e 验收 -\u003e 归档回溯` 中的哪一段，并从 `UCD/设计优化、测试探测、工程质量探测、需求分析、架构优化、功能开发、高价值功能探索` 里判断当前最高价值泳道。\n3. 先检查 `pm/daily-execution-history/YYYY-MM-DD.md` 对应的今日日文件是否存在；若不存在，需要在本轮合适窗口补做今天唯一一轮每日任务；若已存在，则不要把每日任务误当成每轮待办。\n4. 先对照上一轮结果和最近版本记录；若本轮计划与上一轮主产出实质一致，必须改选更高价值切片。\n5. 本轮必须明确版本究竟推进了哪一项：`工程质量探测 / bug 探测 / 当前需求开发 / 发布推进`；若只是复述上一轮，就视为无效轮次。\n6. 本轮至少完成 1 项推进性修改；推进性修改默认指代码修复、schedule/dispatch 调整、helper 派发或恢复、发布动作、缺陷路由、版本执行约束调整中的至少一项。单纯写 history / logs / 今日日记 / 观察摘要都不算。\n7. 本轮结束前，必须对当前 active 版本的每个需求点逐项更新：`状态 / 进度评估 / 最近更新 / 预计完成时间 / 是否超时`。\n8. 若某个需求点超过上一轮承诺的预计完成时间，且本轮没有先重设 ETA，必须补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`，不能只在 history 里轻描淡写带过。\n9. 若当天学习任务尚未收口，必须给 workflow_devmate / workflow_testmate / workflow_qualitymate / workflow_bugmate 指派明确学习任务，并要求每个小伙伴把自己的学习报告写到 `pm/daily-learning-reports/YYYY-MM-DD/\u003cagent_id\u003e.md`；PM 不得代写空壳学习报告。\n10. 按 `质量 / 效率 / 工作区小伙伴维护 = 4 / 4 / 2` 判断重点；若 live 真相显示另一条线更高价值，主动重排优先级。\n11. 一旦识别到 live 风险，本轮第一优先修改默认就是降低该风险；不得只把风险冻结、继续观察或原样滚到下一轮。\n12. 只有 helper workspace 真异常、drift、creating 或无法派发时，才把工作区可用性抬成最高优先级。\n13. 先记录 `root_sync_state / ahead_count / dirty_tracked_count / untracked_count / push_block_reason / next_push_batch`；若命中 dirty/ahead/异常治理现场，立即进入发布边界收口模式，但不允许把“工作区还有脏”当成延后提交的理由。\n14. 只做受支持动作：基于本机 `../workflow_code` 的 non-destructive 收口、developer workspace bootstrap/refresh、helper stale `creating` / schedule / supervisor / runtime-upgrade 恢复；不要主动 `fetch/pull origin` 或拉 GitHub。\n15. 命中工作区问题时，不能停在“等待问题被解决”。只要属于受支持动作范围，你必须主动治理收口；只有确实超出支持范围或继续动作风险更大时，才允许记为 blocked。\n16. 不管当前工作区是不是 dirty，只要某个子批次已经完成最小验证，就必须先从当前工作区 `commit / push / 根仓同步`；不要等整轮 clean 或所有改动都收完才提交。\n17. 再检查 `/healthz`、`/api/status`、`/api/schedules`、`/api/runtime-upgrade/status`；必要时再看 `status-detail / run.json / events.log`。当前 shell 是 PowerShell：不要使用 bash heredoc，不要把 `scripts/*.ps1` 这类通配路径直接交给 `rg`，也不要手工猜 run_id。\n18. 正式升级申请改由 `prod` supervisor 托管的 idle watcher 周期检查并发起，当前主线节点不要自己调用 `/api/runtime-upgrade/apply`。正式升级改由 `prod` supervisor 托管的 idle watcher 周期检查并发起；当前主线节点不要再通过自排除方式自己触发 `/api/runtime-upgrade/apply`。\n19. 每轮都要检查是否需要给 workflow_devmate / workflow_testmate / workflow_qualitymate / workflow_bugmate 创建、续挂、恢复或调整任务；这属于 PM 主线每轮必查项，不属于每日任务。\n20. 当天的版本推进、后移、ETA 重估和后续版本排期判断先写 `pm/versions/\u003cactive_version\u003e/history/YYYY-MM/YYYY-MM-DD.md`；只有本轮主判断发生变化时，才更新 `pm/PM当前版本计划.md` 的当前状态快照，或对应版本文件的具体排期正文。\n21. 若识别到新的高杠杆功能或低维护价值重构项，先记入版本记录，并明确它进入 `V2 / V3 / V4 / backlog` 的哪一处，不要继续把当前版本加胖。\n22. 更新 `.codex/memory/...` 时，在 `next` 明确写出下一次主线触发时间；记忆库每一轮都要更新，不能因为当天每日任务已完成就跳过。\n23. 每轮都要结合当前版本退出门槛、`/api/status` 中 `pm_version_board.activation_summary.next_activation_candidate / next_activation_ready`、以及下一版本计划里的 `go_no_go_rule / blocking_items`，显式给出 `version_transition_decision=stay|switch`；若判断 `switch`，本轮同步更新 `pm/PM当前版本计划.md` 的 `active_version / active_version_title / active_version_file`，并把切版原因写入当前版本与目标版本的 history。\n24. 交付正文默认先给判断、取舍和下一动作，再补必要证据；不要先铺长段状态播报。除非当前决策直接依赖，不要堆砌接口字段、路径清单和重复 checklist。",
+                                "done_definition_snapshot":  "1. 当前活跃版本文件中的最高优先事项有可交付结果，或已经被明确标记为 blocked。\n2. 若今日 `pm/daily-execution-history/YYYY-MM-DD.md` 原本不存在，本轮已经补齐当天每日执行结果，或明确写清为什么仍未完成。\n3. 本轮执行内容不能与上一轮主内容实质一致；若沿同一事项继续推进，必须新增证据、缺陷、实现、决策或发布动作。\n4. 本轮要写清当前泳道、生命周期阶段，以及版本是否真的发生推进；若没有推进，必须写清卡点和下一轮改变动作。\n5. 当天的版本推进、后移、ETA 重估和后续版本排期判断已写入 `pm/versions/\u003cactive_version\u003e/history/YYYY-MM/YYYY-MM-DD.md`；每个 active 需求点都有最新的状态 / 进度 / 最近更新 / ETA 判断。\n6. 若本轮存在超时需求，已经补写 `pm/versions/\u003cactive_version\u003e/aar/YYYY-MM/YYYY-MM-DD-\u003crequirement_id\u003e.md`，或明确写清为什么本轮先重设 ETA 不触发 AAR。\n7. 若当天学习任务已执行，本轮已经为相关小伙伴补齐 `pm/daily-learning-reports/YYYY-MM-DD/\u003cagent_id\u003e.md` 的真实学习报告，且不是 PM 代写空壳。\n8. 本轮已经完成至少 1 项推进性修改；单纯写 history / logs / 今日日记 / 观察摘要不算达标。\n9. 本轮显式记录了 `root_sync_state / ahead_count / dirty_tracked_count / untracked_count / push_block_reason / next_push_batch`，并且没有把它们误当成最终交付本身。\n10. 若识别到新功能想法或低维护价值重构项，本轮已明确后移去向，而不是继续扩胖当前版本。\n11. 若命中工作区异常、发布边界异常或 helper 异常，本轮已经主动执行受支持的治理动作，或明确写清为什么这轮只能 blocked；不接受只写“等待问题被解决”。\n12. 若本轮存在已验证代码改动，不管当前工作区是不是 dirty，本轮结束前都已经按已验证子批次完成当前工作区 `commit / push / 根仓同步`，或明确写清为什么连最小提交都做不到。\n13. 若当前窗口不是暂停/治理调整，本轮结束时至少还保留一个后续出口（ready / future / 明确的下一次唤醒）；若当前窗口是暂停/治理调整，则不得误续挂新的主线推进任务。\n14. 本轮已明确写出 `version_transition_decision=stay|switch`；若判断切版，已经完成 `pm/PM当前版本计划.md` 与版本 history 的切版写回；若判断不切，已写清切版 blocker 与下一次重检条件。\n15. 本轮交付正文默认先给判断、取舍和下一动作，再补必要证据；若仍写成状态墙或播报腔，本轮不算完成。",
+                                "expected_artifact_snapshot":  "continuous-improvement-report.md",
+                                "delivery_mode_snapshot":  "none",
+                                "delivery_receiver_agent_id_snapshot":  "",
+                                "created_at":  "2026-04-25T23:59:15+08:00",
+                                "updated_at":  "2026-04-26T00:51:34+08:00",
+                                "result_status":  "failed",
+                                "result_status_text":  "已失败",
+                                "assignment_status":  "failed",
+                                "assignment_status_text":  "失败",
+                                "assignment_graph_name":  "任务中心全局主图",
+                                "assignment_node_name":  "[持续迭代] workflow / 2026-04-25 23:59:00"
+                            }
+                        ],
+    "related_task_refs":  [
+                              {
+                                  "trigger_instance_id":  "sti-20260426-0ebfc292",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260426-0ebfc292",
+                                  "result_status":  "succeeded",
+                                  "result_status_text":  "已成功",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-26 06:28:00",
+                                  "planned_trigger_at":  "2026-04-26T06:28:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260426-d93c99e2",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260426-d93c99e2",
+                                  "result_status":  "succeeded",
+                                  "result_status_text":  "已成功",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-26 05:50:00",
+                                  "planned_trigger_at":  "2026-04-26T05:50:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260426-bb4a8b73",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260426-bb4a8b73",
+                                  "result_status":  "failed",
+                                  "result_status_text":  "已失败",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-26 05:34:00",
+                                  "planned_trigger_at":  "2026-04-26T05:34:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260426-2d9e6444",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260426-2d9e6444",
+                                  "result_status":  "succeeded",
+                                  "result_status_text":  "已成功",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-26 01:08:00",
+                                  "planned_trigger_at":  "2026-04-26T01:08:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260425-e73e073c",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260425-e73e073c",
+                                  "result_status":  "failed",
+                                  "result_status_text":  "已失败",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-25 23:59:00",
+                                  "planned_trigger_at":  "2026-04-25T23:59:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260425-08939188",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260425-08939188",
+                                  "result_status":  "superseded",
+                                  "result_status_text":  "已被新触发覆盖",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-25 23:28:00",
+                                  "planned_trigger_at":  "2026-04-25T23:28:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260425-70d4bd87",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260425-70d4bd87",
+                                  "result_status":  "failed",
+                                  "result_status_text":  "已失败",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-25 23:20:00",
+                                  "planned_trigger_at":  "2026-04-25T23:20:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260425-9b176e30",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260425-9b176e30",
+                                  "result_status":  "succeeded",
+                                  "result_status_text":  "已成功",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "Workflow 7x24 Mainline Recovery / 2026-04-25 22:12",
+                                  "planned_trigger_at":  "2026-04-25T22:12:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260425-0915f2f3",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260425-0915f2f3",
+                                  "result_status":  "succeeded",
+                                  "result_status_text":  "已成功",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-25 19:17:00",
+                                  "planned_trigger_at":  "2026-04-25T19:17:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260425-0e8acaca",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260425-0e8acaca",
+                                  "result_status":  "succeeded",
+                                  "result_status_text":  "已成功",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-25 18:40:00",
+                                  "planned_trigger_at":  "2026-04-25T18:40:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260425-b2351414",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260425-b2351414",
+                                  "result_status":  "succeeded",
+                                  "result_status_text":  "已成功",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-25 17:26:00",
+                                  "planned_trigger_at":  "2026-04-25T17:26:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260425-d3122dd3",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260425-d3122dd3",
+                                  "result_status":  "succeeded",
+                                  "result_status_text":  "已成功",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-25 16:10:00",
+                                  "planned_trigger_at":  "2026-04-25T16:10:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260425-7bf528ef",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260425-7bf528ef",
+                                  "result_status":  "failed",
+                                  "result_status_text":  "已失败",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-25 15:15:00",
+                                  "planned_trigger_at":  "2026-04-25T15:15:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260425-f735d9f7",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260425-f735d9f7",
+                                  "result_status":  "succeeded",
+                                  "result_status_text":  "已成功",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-25 14:25:00",
+                                  "planned_trigger_at":  "2026-04-25T14:25:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260425-8cc86cda",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260425-8cc86cda",
+                                  "result_status":  "failed",
+                                  "result_status_text":  "已失败",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-25 11:15:00",
+                                  "planned_trigger_at":  "2026-04-25T11:15:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260425-3322efce",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260425-3322efce",
+                                  "result_status":  "superseded",
+                                  "result_status_text":  "已被新触发覆盖",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-25 10:37:00",
+                                  "planned_trigger_at":  "2026-04-25T10:37:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260425-aca948f5",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260425-aca948f5",
+                                  "result_status":  "succeeded",
+                                  "result_status_text":  "已成功",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-25 10:16:00",
+                                  "planned_trigger_at":  "2026-04-25T10:16:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260425-ce6d5b6b",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260425-ce6d5b6b",
+                                  "result_status":  "failed",
+                                  "result_status_text":  "已失败",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-25 10:12:00",
+                                  "planned_trigger_at":  "2026-04-25T10:12:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260425-fd345fc1",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260425-fd345fc1",
+                                  "result_status":  "failed",
+                                  "result_status_text":  "已失败",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-25 09:55:00",
+                                  "planned_trigger_at":  "2026-04-25T09:55:00+08:00"
+                              },
+                              {
+                                  "trigger_instance_id":  "sti-20260425-0c1995e9",
+                                  "assignment_ticket_id":  "asg-20260327-223335-b79f27",
+                                  "assignment_node_id":  "node-sti-20260425-0c1995e9",
+                                  "result_status":  "failed",
+                                  "result_status_text":  "已失败",
+                                  "assignment_graph_name":  "任务中心全局主图",
+                                  "assignment_node_name":  "[持续迭代] workflow / 2026-04-25 01:37:00",
+                                  "planned_trigger_at":  "2026-04-25T01:37:00+08:00"
+                              }
+                          ],
+    "timezone":  "Asia/Shanghai"
+}

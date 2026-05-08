@@ -1,0 +1,21 @@
+# continuous-improvement-report 2026-04-22 03:30:55+08:00
+
+- ticket: `asg-20260327-223335-b79f27`
+- node: `node-sti-20260422-40cb6918`
+- version_transition_decision: `stay(V7)`
+- lane: `UCD/设计优化`
+- lifecycle_stage: `开发实现`
+- root_sync_snapshot: `pm-main/workflow_devmate/workflow_testmate/workflow_qualitymate/workflow_bugmate/workflow_ucdmate = clean_synced@165f8e3`
+- release_snapshot: `prod=current=20260422-020751 / candidate=20260422-020751 / candidate_is_newer=false / drain_active=false / running_task_count=1`
+- summary:
+  - 我先把 `V7-R5` 正式关掉了：`workflow_qualitymate node-20260422-023913-r5life / arun-20260422-024212-c912ee` 已在 `2026-04-22T03:04:14+08:00` 成功收尾，prod 上的 builtin `workflow` delete fail-closed、临时项目 create/delete clean、active-task guard 先挡后放都已经被结构化读回，所以旧的 lifecycle blocker 已退出。
+  - 我又把 `V7-R2` 的 stale compare blocker 真正关掉了：`workflow_testmate node-20260422-031749-7a93d8 / arun-20260422-031849-79eac3` 已在 `2026-04-22T03:30:55+08:00` 成功交付 canonical `v6-r2-interface-center-live-regression.md`，现网 `platform.interfaces.list/detail.compare.status` 现已都是 `ready`。
+  - 当前版本因此不该再占在测试探测上。`V7-R2` 与 `V7-R5` 都已转 completed，当前最高价值已切到 `V7-R4` 的 flat-surface brief 和 `V7-R7` 的 platform ownership freeze。
+- next:
+  - 先切并派发 `V7-R4` 的 flat-surface brief，不再让界面扁平化继续停在占位
+  - 同步冻结 `V7-R7` 的平台职责/小伙伴前置计划，收掉当前切版 blocker
+  - `next_push_batch=无代码待推；下一批直接切 V7-R4 / V7-R7`
+- preference_ref: `state/user-preferences.md`
+- delta_observation: `V7-R2` compare 与 `V7-R5` lifecycle 两条 live blocker 都已关闭，当前 active 版本价值中心已经从测试收口切到 UCD/职责冻结。
+- delta_validation: 下一轮优先创建或派发 `V7-R4` brief；随后回写 `V7-R7` 的 ownership freeze 与切版判断。
+- memory_ref: `.codex/memory/2026-04/2026-04-22.md`

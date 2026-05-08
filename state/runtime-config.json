@@ -1,7 +1,7 @@
 {
   "show_test_data": false,
   "artifact_root": "C:/work/J-Agents/.output",
-  "agent_search_root": "C:/work/J-Agents",
+  "agent_search_root": "D:/code/AI/J-Agents",
   "development_workspace_root": "C:/work/J-Agents/workflow/.repository",
   "agent_runtime_root": "C:/work/J-Agents/.output/agent-runtime"
 }
