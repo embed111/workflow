@@ -30,14 +30,14 @@
    - `active_version_file`
    - `version_history_root`
 ## 5. 当前状态快照
-1. snapshot_updated_at: `2026-05-21T01:52:00+08:00`
+1. snapshot_updated_at: `2026-05-21T05:20:00+08:00`
 2. active 版本仍是 `V13`
 3. 当前版本标题为 `全仓逻辑边界与冗余实现根治`
 4. 当前最高价值泳道为 `7x24 连续性 / 发布边界 / 工程质量探测`
 5. 生命周期阶段为 `开发实现 -> 基于基线测试 -> 验收 -> 发布候选刷新 -> 发布边界阻塞复核`
 6. baseline 继续对齐为 `prod=20260520-233627`
-7. runtime_upgrade: `current=20260520-233627 / candidate=20260521-014548 / candidate_is_newer=true / running_task_count=2 / can_upgrade=false / ghost=false / continuous_gap=false`
-8. 当前版本判断: `version_transition_decision=stay / switch_blockers=V14 next_activation_ready=false；V13 exit gates 未关闭；CODE_QUALITY_PIPELINE 仍 warn；candidate=20260521-014548 尚未正式 apply；runtime running_task_count=2；R6/R8 未完成`
-9. 当前恢复优先级: `live 无 ghost/continuous gap，candidate/apply 边界仍受 running_task_count=2 限制；本轮连续消费质量 warn rank1=verify_schedule_upgrade_drain_recovery.py:11(main) 与 src/workflow_app/server/api/defects.py:80(try_handle_post)，提交 pm-main=c991ed9，同步 workflow_code=a39af1d，质量流水线变为 warn / failure_count=0 / warning_count=74，新 rank1=src/workflow_app/server/services/training_workflow_execution_service.py:785(execute_training_workflow_plan)。test=20260521-014548 gate passed 并刷新 prod candidate；下一动作先回读 idle apply，再继续质量队列或 continuity 修复。`
+7. runtime_upgrade: `current=20260520-233627 / candidate=20260521-040405 / candidate_is_newer=true / running_task_count=1 / can_upgrade=false / ghost=false / continuous_gap=true / gap_trigger=sti-20260521-f068889d / gap_reason=trigger_hit_without_assignment_node`
+8. 当前版本判断: `version_transition_decision=stay / switch_blockers=V14 next_activation_ready=false；V13 exit gates 未关闭；CODE_QUALITY_PIPELINE 仍 warn；candidate=20260521-040405 尚未正式 apply；runtime running_task_count=1；continuous gap 未清；R6/R8 未完成`
+9. 当前恢复优先级: `live 无 ghost 但出现 continuous gap，候选 apply 边界仍未释放；本轮先执行 runtime-upgrade repair-ghost-running 与 schedule scan，scan 被 dedupe 且未创建 assignment node，随后消费质量 warn rank1=scripts/acceptance/verify_assignment_provider_start_long_grace.py:11(main)，提交 pm-main=acabc61，同步 workflow_code=5474d35，质量流水线变为 warn / failure_count=0 / warning_count=72，新 rank1=src/workflow_app/server/services/release_boundary_service.py:194(collect_release_boundary_snapshot)。下一动作优先定位 sti-20260521-f068889d trigger_hit 后未生成 assignment node 的原因；若 continuity gap 清除，再继续 release boundary snapshot 质量切片或回读 idle apply。`
 10. history_ref: `pm/versions/V13/history/2026-05/2026-05-21.md`
 
