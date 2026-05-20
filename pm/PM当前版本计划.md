@@ -30,14 +30,14 @@
    - `active_version_file`
    - `version_history_root`
 ## 5. 当前状态快照
-1. snapshot_updated_at: `2026-05-20T06:30:00+08:00`
+1. snapshot_updated_at: `2026-05-21T01:52:00+08:00`
 2. active 版本仍是 `V13`
 3. 当前版本标题为 `全仓逻辑边界与冗余实现根治`
-4. 当前最高价值泳道为 `工程质量探测 / 架构优化 / 发布推进 / 生产可用性`
+4. 当前最高价值泳道为 `7x24 连续性 / 发布边界 / 工程质量探测`
 5. 生命周期阶段为 `开发实现 -> 基于基线测试 -> 验收 -> 发布候选刷新 -> 发布边界阻塞复核`
-6. baseline 继续对齐为 `prod=20260520-053759`
-7. runtime_upgrade: `candidate=20260520-062233 / candidate_is_newer=true / running_task_count=2 / can_upgrade=false / ghost=false / continuous_gap=false`
-8. 当前版本判断: `version_transition_decision=stay / switch_blockers=V14 next_activation_ready=false；V13 exit gates 未关闭；CODE_QUALITY_PIPELINE 仍 warn；candidate=20260520-062233 尚未正式 apply；当前 workflow 与 novel_project_pm 节点仍 running；R6/R8 未完成`
-9. 当前恢复优先级: `本轮已消费质量 warn rank1=verify_assignment_terminal_result_recovery_without_finalize.py:31(main)，pm-main=a0c45c9 / workflow_code=d3236dc，test/prod candidate 刷新到 20260520-062233；prod current 已确认追到 20260520-053759，live ghost=false / continuous_gap=false；正式 apply 继续交给 prod supervisor idle watcher；下一轮优先确认 candidate 是否 idle apply，再处理新 rank1=verify_legacy_task_crud_route_dispatch.py:24(main) 或恢复 V13-R6/R8`
-10. history_ref: `pm/versions/V13/history/2026-05/2026-05-20.md`
+6. baseline 继续对齐为 `prod=20260520-233627`
+7. runtime_upgrade: `current=20260520-233627 / candidate=20260521-014548 / candidate_is_newer=true / running_task_count=2 / can_upgrade=false / ghost=false / continuous_gap=false`
+8. 当前版本判断: `version_transition_decision=stay / switch_blockers=V14 next_activation_ready=false；V13 exit gates 未关闭；CODE_QUALITY_PIPELINE 仍 warn；candidate=20260521-014548 尚未正式 apply；runtime running_task_count=2；R6/R8 未完成`
+9. 当前恢复优先级: `live 无 ghost/continuous gap，candidate/apply 边界仍受 running_task_count=2 限制；本轮连续消费质量 warn rank1=verify_schedule_upgrade_drain_recovery.py:11(main) 与 src/workflow_app/server/api/defects.py:80(try_handle_post)，提交 pm-main=c991ed9，同步 workflow_code=a39af1d，质量流水线变为 warn / failure_count=0 / warning_count=74，新 rank1=src/workflow_app/server/services/training_workflow_execution_service.py:785(execute_training_workflow_plan)。test=20260521-014548 gate passed 并刷新 prod candidate；下一动作先回读 idle apply，再继续质量队列或 continuity 修复。`
+10. history_ref: `pm/versions/V13/history/2026-05/2026-05-21.md`
 
